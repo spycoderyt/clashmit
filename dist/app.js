@@ -1,3 +1,4 @@
+import {setupLobbyScene} from './lobby-scene.js?v=1';
 import {createGameConnection} from './connection.js?v=hosting1';
 import {createTargetOverlay} from './target-overlay.js?v=smooth1';
 import {SPELLS,MANA,manaAt,castSpell,launchProjectile,impactProjectile,FLIGHT_MS} from './rules.js?v=combat1';
@@ -13,6 +14,7 @@ import {createFlight} from './projectile-flight.js?v=face1';
 import {createPersonTracker} from './detection.js?v=smooth1';
 import {setupShirtCamera} from './shirt-camera.js?v=face1';
 const $=id=>document.getElementById(id);
+setupLobbyScene({canvas:$('lobby-background'),lobby:$('lobby'),button:$('background-toggle')});
 const targetOverlay=createTargetOverlay($('arena'),$('boxes'));
 const audio=createSpellAudio();document.addEventListener('pointerdown',()=>{void audio.unlock();},{passive:true});
 $('sound-toggle').onclick=()=>{const muted=audio.toggle();$('sound-toggle').textContent=muted?'Sound off':'Sound on';$('sound-toggle').setAttribute('aria-pressed',String(muted));$('sound-toggle').setAttribute('aria-label',muted?'Enable spell sounds':'Mute spell sounds');};
