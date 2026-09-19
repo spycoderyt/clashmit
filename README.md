@@ -47,3 +47,7 @@ Solo practice opens the rear camera, with a permission prompt if needed, and pla
 ## Field acceptance checks still required
 
 Test on two iPhones before assembling six players: compass alignment in all four cardinal directions, GPS label drift at 10/25/50m, crossing and overlapping players, permission denial, spoken spell reliability, interrupted connectivity and resume. Measure observed cast delay and compare the displayed connection round-trip time. This project has not yet been tested with physical phones in a park.
+
+## 3D fireball visual
+
+Fireballs use a locally bundled Three.js perspective scene over the camera: a near launch, receding glowing projectile, particle trail, and impact burst. This is visual depth only, with compressed distances and an estimated endpoint fixed at cast time. It does not provide AR world tracking, real occlusion, or physically dodgeable projectile collisions; server hit timing remains immediate. Browsers without WebGL fall back to 2D feedback. Reduced Motion uses a static spell label instead of moving or flashing effects.

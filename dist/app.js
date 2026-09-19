@@ -11,8 +11,28 @@ const now=()=>Date.now()+offset;
 $('name').value=safeRead('fieldspell-name');$('server-url').value=safeRead('fieldspell-server');
 const notify=text=>{$('toast').textContent=text;clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('toast').textContent='',4000);};
 function send(message){if(socket?.readyState===WebSocket.OPEN)socket.send(JSON.stringify(message));}
-function effect(spell){$('fx').className='';void $('fx').offsetWidth;$('fx').className=spell;}
+let effectTimer,fireScene,graphicsLoading;
+function loadGraphics(){
+ if(graphicsLoading)return;
+ graphicsLoading=import('./fireball.js').then(m=>{fireScene=m.createFireballRenderer($('arena'));}).catch(()=>{fireScene=null;});
+}
+function effect(spell,{target,projectile=true}={}){
+ if(!Object.hasOwn(SPELLS,spell))return;
+ clearTimeout(effectTimer);
+ const layer=$('fx');
+ layer.className='';layer.replaceChildren();
+ const burst=document.createElement('div');burst.className='spell-burst';
+ const core=document.createElement('div');core.className='spell-core';
+ const ring=document.createElement('div');ring.className='spell-ring';
+ const label=document.createElement('div');label.className='spell-feedback';label.textContent=spell.toUpperCase();
+ burst.append(core,ring,label);layer.append(burst);
+ // New elements restart each effect, including consecutive casts of the same spell.
+ const hasDepth=spell==='fireball'&&projectile&&fireScene?.fire({x:.5+(target?.delta||0)/96,y:.4,distance:target?.distance||30});
+ layer.className='cast-effect '+spell+(hasDepth?' has-depth':'');
+ effectTimer=setTimeout(()=>{layer.className='';layer.replaceChildren();},2200);
+}
 function showArena(){
+ loadGraphics();
  $('lobby').hidden=true;$('arena').hidden=false;
  $('compass').hidden=practice;$('location').hidden=practice;
  $('camera-instructions').textContent=practice?'Practice spells with a simulated target over your camera view.':'Camera + location + compass. Hold your phone upright.';
@@ -30,7 +50,7 @@ function connect(){
  socket.onmessage=e=>{let m;try{m=JSON.parse(e.data);}catch{return;}
   if(m.type==='welcome'){clearTimeout(timer);joined=true;myId=m.id;sessionStorage.setItem('fieldspell-token',m.token);showArena();$('join').disabled=false;$('connection').textContent='Connected';}
   if(m.type==='state'){room=m.room;offset=room.serverTime-Date.now();renderState();}
-  if(m.type==='spell'){effect(m.spell);const actor=room?.players.find(p=>p.id===m.actorId)?.name||'A mage';notify(`${actor}: ${m.spell}${m.blocked?' · blocked':''}`);}
+  if(m.type==='spell'){if(m.actorId===myId||m.targetId===myId)effect(m.spell,{target:candidates().find(p=>p.id===m.targetId),projectile:m.actorId===myId});const actor=room?.players.find(p=>p.id===m.actorId)?.name||'A mage';notify(`${actor}: ${m.spell}${m.blocked?' · blocked':''}`);}
   if(m.type==='round-start')notify('Round started. Spread out and aim.');
   if(m.type==='error'){setError(m.message);if(!joined){clearTimeout(timer);leaving=true;socket.close();}}
   if(m.type==='pong')$('connection').textContent=`Live · ${Date.now()-m.at}ms`;
@@ -46,7 +66,7 @@ $('settings-open').onclick=()=>$('settings').showModal();
 $('settings-save').onclick=e=>{const raw=$('server-url').value.trim();if(raw){try{const u=new URL(raw);if(!['http:','https:'].includes(u.protocol))throw Error();}catch{e.preventDefault();$('server-url').setCustomValidity('Enter an http:// or https:// URL.');$('server-url').reportValidity();return;}}safeWrite('fieldspell-server',raw);sessionStorage.removeItem('fieldspell-token');};
 $('server-url').oninput=()=>$('server-url').setCustomValidity('');
 $('practice').onclick=()=>{practice=true;leaving=true;socket?.close();myId='self';offset=0;const make=(id,name)=>({id,name,health:100,shieldUntil:0,cooldowns:{},connected:true,location:null});room={phase:'playing',hostId:myId,endsAt:Date.now()+180000,winners:[],players:[make(myId,$('name').value.trim()||'You'),make('dummy','Practice target')]};showArena();$('connection').textContent='Solo practice · simulated target';renderState();if(!stream?.active)startCamera();};
-function stopSensors(){stream?.getTracks().forEach(t=>t.stop());stream=null;$('camera').srcObject=null;if(watchId!==null)navigator.geolocation.clearWatch(watchId);watchId=null;position=null;heading=null;headingAt=0;window.removeEventListener('deviceorientation',onOrientation);window.removeEventListener('deviceorientationabsolute',onOrientation);orientationActive=false;voice.stop();}
+function stopSensors(){fireScene?.clear();clearTimeout(effectTimer);$('fx').className='';$('fx').replaceChildren();stream?.getTracks().forEach(t=>t.stop());stream=null;$('camera').srcObject=null;if(watchId!==null)navigator.geolocation.clearWatch(watchId);watchId=null;position=null;heading=null;headingAt=0;window.removeEventListener('deviceorientation',onOrientation);window.removeEventListener('deviceorientationabsolute',onOrientation);orientationActive=false;voice.stop();}
 $('leave').onclick=()=>{leaving=true;clearTimeout(reconnectTimer);if(!practice)send({type:'leave'});socket?.close();sessionStorage.removeItem('fieldspell-token');stopSensors();room=null;myId=null;practice=false;joined=false;selected=null;rosterSignature='';$('arena').hidden=true;$('lobby').hidden=false;$('camera-prompt').hidden=false;$('boxes').replaceChildren();$('location').textContent='Share location';$('join-status').textContent='One shared arena · 2–12 players';};
 let cameraStarting=false;
 async function startCamera(){
@@ -83,7 +103,7 @@ function renderAim(){if(!room)return;const cs=candidates().filter(p=>p.fresh);co
  $('boxes').replaceChildren(...visible.map((p,i)=>{const el=document.createElement('div');el.className='geo-label'+(locked&&p.id===selected?' aimed':'');el.style.left=(50+p.delta/96*100)+'%';el.style.top=(31+(i%3)*7)+'%';const name=document.createElement('b');name.textContent=p.name;const details=document.createElement('small');details.textContent=`${Math.round(p.distance)}m · ±${Math.round(p.error)}m`;const meter=document.createElement('meter');meter.min=0;meter.max=100;meter.value=p.health;meter.setAttribute('aria-label',p.name+' health');el.append(name,meter,details);return el;}));
  $('fireball').disabled=!locked||room.phase!=='playing'||room.players.find(p=>p.id===myId)?.health<=0;
 }
-function cast(spell){if(!room)return;if(room.phase!=='playing'){notify('The round has not started. Use solo practice to test spells alone.');return;}if(spell==='fireball'&&(!selected||Date.now()-lockSince<350)){notify('Aim at a separated GPS label first.');return;}if(practice){const event=castSpell(room,myId,spell,selected);if(event.error){notify(event.error);return;}effect(spell);notify(`You cast ${spell}${event.blocked?' · blocked':''}`);if(room.players[1].health<=0){room.phase='finished';room.winners=[myId];}renderState();}else if(socket?.readyState===WebSocket.OPEN)send({type:'cast',spell,targetId:selected});else notify('Reconnecting. Casting is paused.');}
+function cast(spell){if(!room)return;if(room.phase!=='playing'){notify('The round has not started. Use solo practice to test spells alone.');return;}if(spell==='fireball'&&(!selected||Date.now()-lockSince<350)){notify('Aim at a separated GPS label first.');return;}if(practice){const target=candidates().find(p=>p.id===selected);const event=castSpell(room,myId,spell,selected);if(event.error){notify(event.error);return;}effect(spell,{target});notify(`You cast ${spell}${event.blocked?' · blocked':''}`);if(room.players[1].health<=0){room.phase='finished';room.winners=[myId];}renderState();}else if(socket?.readyState===WebSocket.OPEN)send({type:'cast',spell,targetId:selected});else notify('Reconnecting. Casting is paused.');}
 for(const spell of Object.keys(SPELLS))$(spell).onclick=()=>cast(spell);
 $('start-round').onclick=()=>{if(practice){$('practice').click();return;}send({type:'start'});};
 const voice=setupVoice({Recognition:window.SpeechRecognition||window.webkitSpeechRecognition,button:$('voice'),status:$('voice-status'),onSpell:cast});
