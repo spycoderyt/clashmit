@@ -4,7 +4,7 @@ For remote hosting, costs, deployment from `main`, and step-by-step Porkbun DNS 
 
 ## Team setup
 
-Repository: [spycoderyt/clashmit](https://github.com/spycoderyt/clashmit). The app currently displays the original Fieldspell name.
+Repository: [spycoderyt/clashmit](https://github.com/spycoderyt/clashmit). The app is branded ClashMIT.
 
 The repository is private. The owner invites teammates through [Settings → Collaborators](https://github.com/spycoderyt/clashmit/settings/access) with write access. Each teammate must accept the invitation and authenticate Git with their own GitHub account before cloning. Do not share account credentials.
 
@@ -52,7 +52,7 @@ cloudflared tunnel --url http://127.0.0.1:3000 --protocol http2 --edge-ip-versio
 
 Wait for the tunnel to report a registered connection, then copy its `https://…trycloudflare.com` URL. Leave Terminal 2 running as well.
 
-**On your phone:** open that exact HTTPS URL in Safari or Chrome, allow camera/microphone access when prompted, and enter your name. In **Connection settings**, clear any saved Game server URL and save before joining; an empty override connects to this same tunnel. For a one-person tracking test, open `/?test=headband` on your tunnel URL or tap **Test my headband · 1 person**.
+**On your phone:** open that exact HTTPS URL in Safari or Chrome, allow camera/microphone access when prompted, and enter your name. The game automatically connects to the server at this same URL; old saved server overrides are ignored. For a one-person tracking test, open `/?test=headband` on your tunnel URL or tap **Test my headband · 1 person**.
 
 All phones testing the same multiplayer session must use the **same developer’s URL**. Different developers’ URLs lead to separate games. Do not use the shared demo or another teammate’s tunnel to test your branch. Camera and microphone access require HTTPS on phones; phone `localhost` refers to the phone, not the laptop.
 
@@ -70,7 +70,7 @@ In our MIT Guest tests, the game worked locally but Cloudflare connections timed
 | Cloudflare error 1033, or repeated TLS resets/timeouts while local `/health` works | Switch the **host laptop** from MIT Guest to a phone hotspot. Keep the tunnel running while it retries; if it does not recover, restart it and share its new URL. |
 | Cloudflare 502 / connection refused to the origin | The tunnel cannot reach the local game. Check that the server is running on the same port used by `--url`. |
 | “Origin DNS error” or an old link fails | Verify both local `/health` and the current tunnel URL. Use the URL from your current tunnel terminal; do not assume an earlier shared address still works. |
-| Page opens but players are in different games | Everyone must use the same tunnel URL. Clear saved Connection settings overrides and rejoin. |
+| Page opens but players are in different games | Everyone must use the same tunnel URL. Rejoin through that same URL; the server is selected automatically. |
 | Phone still shows an older change | Verify `git branch --show-current`, restart the server if needed, then reload the phone page on your own tunnel URL. |
 | Port 3000 is already in use | Stop your previous game server, or run on another port and update the tunnel to match. |
 
@@ -141,7 +141,7 @@ Railway can provide this once the owner connects the repository:
 1. Create a Railway service from `spycoderyt/clashmit`, grant repository access, and select `main` as its deployment branch.
 2. Use the existing root `Dockerfile`, which serves both the frontend and WebSocket game server. The included `railway.json` configures `/health`, restart retries, one replica, and no sleeping. Configure public networking to the app’s listening port and keep exactly **one running instance in one region**. Multiple instances would create separate in-memory arenas.
 3. Enable automatic deployments. To require passing tests before deploying, enable Railway’s **Wait for CI** for the included GitHub Actions **Tests** workflow. The workflow is checked in; the Railway connection and setting still need to be enabled.
-4. Verify a real deployment and multiplayer session at the Railway HTTPS URL before sharing it. Once the custom domain is configured, point `clashmit.lol` to this same service using the DNS values supplied by the host. Phones should leave Connection settings empty so both the frontend and game use that domain.
+4. Verify a real deployment and multiplayer session at the Railway HTTPS URL before sharing it. Once the custom domain is configured, point `clashmit.lol` to this same service using the DNS values supplied by the host. Both the frontend and game automatically use that domain.
 
 See [Railway’s GitHub autodeploy instructions](https://docs.railway.com/deployments/github-autodeploys). Once configured, deployments run remotely and no laptop or Cloudflare tunnel is needed for the shared game. Deployments still restart the in-memory arena, so coordinate merges outside demo rounds. The included `fly.toml` is an alternative manual deployment template, not an active GitHub deployment workflow.
 
@@ -190,7 +190,7 @@ The server enforces player slots, round state, cooldowns, impact timing, shields
 
 ## Hosting
 
-One Node process serves the frontend and `/ws` multiplayer. Fly configuration is included: `fly launch --no-deploy`, `fly deploy --ha=false`, `fly scale count 1`. Choose the closest region. No database or Apple developer membership is needed. Use the same HTTPS link on both phones; Connection settings can override the backend for a separately hosted frontend. The existing owner-private Sites preview defaults to the temporary shared testing backend; update this URL when replacing the tunnel.
+One Node process serves the frontend and `/ws` multiplayer. Fly configuration is included: `fly launch --no-deploy`, `fly deploy --ha=false`, `fly scale count 1`. Choose the closest region. No database or Apple developer membership is needed. Use the same HTTPS link on both phones; The game connects to the same origin automatically. The legacy Sites preview uses the Railway production backend.
 
 Optional `ALLOWED_ORIGINS` is a comma-separated browser origin allowlist; same origin is always allowed. Anyone with the public game URL can occupy a slot. This is for a small friends-only test. Deploy only one instance; multiple independent processes would create separate arenas.
 

@@ -26,7 +26,7 @@ An always-on Render web service is a reasonable alternative if the team already 
 4. Select a US East region available to your account. Keep exactly one replica in one region. Do not enable sleeping/serverless mode. Set the service variable `PORT=3000` and use port 3000 for public networking. No database is required for the current game.
 5. Enable **Wait for CI** so future deployments wait for the GitHub **Tests** workflow. Confirm that workflow succeeds for the commit being deployed. [Railway autodeploy documentation](https://docs.railway.com/deployments/github-autodeploys).
 6. Under **Settings → Public Networking**, choose **Generate Domain**. Wait for the deployment and health check to succeed, then open the generated HTTPS URL and its `/health` endpoint. The latter should show `{"ok":true}`.
-7. Test two phones on that same URL, leaving the in-game Connection settings server URL empty. Confirm names, scan registration, a round, a spell hit, and reconnecting after a brief network interruption.
+7. Test two phones on that same URL, using the automatic same-origin game connection. Confirm names, scan registration, a round, a spell hit, and reconnecting after a brief network interruption.
 
 After this setup, the path is **PR merged into main → GitHub Tests passes → Railway builds and deploys → shared URL serves the new version**. Developers continue testing feature branches with their own laptop tunnels. Updating the remote game does not update anyone’s local checkout.
 

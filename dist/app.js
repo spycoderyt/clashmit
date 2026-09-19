@@ -24,7 +24,7 @@ let detection={people:[],width:0,height:0,at:0},trackingStatus='Camera off',fire
 const simulated=()=>practice&&!trackingPractice;
 const serverClock=createServerClock();
 const now=()=>practice?Date.now():serverClock.now(),me=()=>room?.players.find(p=>p.id===myId),opponent=()=>room?.players.find(p=>p.id!==myId);
-$('name').value=safeRead('fieldspell-name');$('server-url').value=safeRead('fieldspell-server');
+$('name').value=safeRead('fieldspell-name');
 const notify=text=>{$('toast').textContent=text;clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('toast').textContent='',4000);};
 function send(message){return connection.send(message);}
 const identityTrack=createHeadbandMotion(),flights=new Map(),completedShots=new Set();
@@ -69,7 +69,7 @@ function handleImpact(m){
 }
 function showArena(){loadGraphics();$('lobby').hidden=true;$('arena').hidden=false;$('shirt-open').hidden=simulated();$('tracking-retry').hidden=simulated();$('camera-instructions').textContent=trackingPractice?'Use the front camera to track your own registered headband.':practice?'Practice a 3D fireball over your camera with a simulated target.':'Scan your headband, then point the camera at your opponent.';$('camera-privacy').textContent='Camera frames stay on your phone. No location permissions needed.';$('camera-prompt').hidden=!!stream?.active;}
 function setError(text){$('join-status').textContent=text;$('join').disabled=false;notify(text);}
-function endpoint(){const raw=safeRead('fieldspell-server');const fallback=location.hostname.endsWith('.chatgpt.site')?'https://psi-possibly-drain-upgrade.trycloudflare.com':location.origin;const url=new URL(raw||fallback);if(!['https:','http:'].includes(url.protocol))throw Error('Enter an HTTPS game server URL.');if(location.protocol==='https:'&&url.protocol!=='https:')throw Error('The game server needs HTTPS.');url.protocol=url.protocol==='https:'?'wss:':'ws:';url.pathname='/ws';url.search='';url.hash='';return url.href;}
+function endpoint(){const url=new URL(location.hostname.endsWith('.chatgpt.site')?'https://clashmit-production.up.railway.app':location.origin);url.protocol=url.protocol==='https:'?'wss:':'ws:';url.pathname='/ws';url.search='';url.hash='';return url.href;}
 const connection=createGameConnection({
  url:endpoint,
  join:()=>({type:'join',name:$('name').value.trim(),token:sessionStorage.getItem('fieldspell-token')}),
@@ -88,11 +88,7 @@ const connection=createGameConnection({
 });
 function connect(){connection.start();}
 $('join-form').onsubmit=e=>{e.preventDefault();if(!$('name').value.trim())return;practice=false;trackingPractice=false;joined=false;$('join').disabled=true;safeWrite('fieldspell-name',$('name').value.trim());connect();};
-$('settings-open').onclick=()=>$('settings').showModal();
-$('settings-save').onclick=e=>{const raw=$('server-url').value.trim();if(raw){try{const u=new URL(raw);if(!['http:','https:'].includes(u.protocol))throw Error();}catch{e.preventDefault();$('server-url').setCustomValidity('Enter an HTTPS URL.');$('server-url').reportValidity();return;}}safeWrite('fieldspell-server',raw);sessionStorage.removeItem('fieldspell-token');};
-$('server-url').oninput=()=>$('server-url').setCustomValidity('');
 function beginPractice(realTracking=false){clearFlights();trackingPractice=realTracking;practice=true;connection.stop();myId='self';const make=(id,name)=>({id,name,health:100,mana:MANA.max,manaUpdatedAt:Date.now(),shieldUntil:0,cooldowns:{},connected:true});room={phase:'playing',hostId:myId,endsAt:Date.now()+180000,winners:[],players:[make(myId,$('name').value.trim()||'You'),make('dummy','Practice target')]};showArena();$('connection').textContent=trackingPractice?'Local headband test · no server':'Solo · simulated target';renderState();if(trackingPractice){room.players[1].name='Your headband';shirtCamera.open();}else startCamera();}
-$('practice').onclick=()=>beginPractice(false);
 $('shirt-test').onclick=()=>beginPractice(true);
 function stopCamera(){cameraEpoch++;identityTrack.reset();tracker.stop();stream?.getTracks().forEach(t=>t.stop());stream=null;$('camera').srcObject=null;trackingStatus='Camera off';selected=null;lockId=null;targetOverlay.hide();}
 function stopSensors(){clearFlights();stopCamera();shirtCamera.stop();fireScene?.clear();clearTimeout(effectTimer);$('fx').className='';$('fx').replaceChildren();voice.stop();}
