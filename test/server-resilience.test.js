@@ -17,8 +17,7 @@ const pause=ms=>new Promise(r=>setTimeout(r,ms));
 async function until(predicate){for(let i=0;i<200;i++){if(predicate())return;await pause(10);}throw Error('Timed out');}
 
 test('30 synthetic clients receive snapshots and all 600 ping replies under concurrent traffic',async t=>{
- // Capacity override is for infrastructure testing; production remains 12 until identity is implemented.
- const{url,game}=await start(t,{maxPlayers:30});const clients=Array.from({length:30},(_,i)=>client(url,'Load '+i));
+ const{url,game}=await start(t);const clients=Array.from({length:30},(_,i)=>client(url,'Load '+i));
  await Promise.all(clients.map(c=>c.welcome));await until(()=>clients.every(c=>c.messages.some(m=>m.type==='state'&&m.room.players.length===30)));
  const rtts=[];for(const c of clients)c.ws.on('message',raw=>{const m=JSON.parse(raw);if(m.type==='pong')rtts.push(performance.now()-m.at);});
  for(let round=0;round<20;round++){for(const c of clients)c.ws.send(JSON.stringify({type:'ping',at:performance.now()}));await pause(60);}

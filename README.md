@@ -149,7 +149,7 @@ See [Railway’s GitHub autodeploy instructions](https://docs.railway.com/deploy
 
 The updated plan is for everyone to play at one venue wearing **ordered two-color headbands** (one top stripe, one bottom stripe). See [Two-stripe marker design](docs/two-stripe-headbands.md) for ID capacity, registration, tracking, and field-test requirements. This design is not implemented in the current single-color tracker yet.
 
-The lobby now accepts up to 12 connections, with a regression test for the limit. This is capacity plumbing only: camera targeting still selects one opponent, and red/blue bands cannot distinguish multiple individual players wearing the same color. Keep gameplay tests to two players until team health or unique player colors and multi-target tracking are implemented. The 12-player UI labels do not indicate complete multiplayer support.
+The lobby has no fixed player-count cap, with regression coverage for 31 players joining. Removing the cap does not finish multiplayer recognition: camera targeting still selects one opponent, and red/blue bands cannot distinguish multiple individual players wearing the same color. Keep gameplay tests to two players until ordered two-stripe identities and multi-target tracking are implemented.
 
 One shared arena, exactly two players, no room codes. The first connected player controls three-minute rounds. Everyone enters their own name and scans a red or blue headband using the selfie camera. No GPS, compass, badges, or manual identity pairing.
 
@@ -196,6 +196,6 @@ Optional `ALLOWED_ORIGINS` is a comma-separated browser origin allowlist; same o
 
 ## Verification
 
-`npm test` covers color matching/ambiguity, connected regions, headband/person association helpers, fast headband motion/scale changes and ambiguity, screen crop coordinates, spell rules, tracking-loss misses, delayed impacts, shields at impact, replay/early-impact rejection, two-client WebSocket state, required headband registration, 12-player capacity, a test-only 30-client infrastructure check, reconnection deadlines and silent sockets, slow-client backpressure, graceful server restarts, host control, and streaming voice behavior.
+`npm test` covers color matching/ambiguity, connected regions, headband/person association helpers, fast headband motion/scale changes and ambiguity, screen crop coordinates, spell rules, tracking-loss misses, delayed impacts, shields at impact, replay/early-impact rejection, two-client WebSocket state, required headband registration, 31-player lobby admission, a 30-client infrastructure check, reconnection deadlines and silent sockets, slow-client backpressure, graceful server restarts, host control, and streaming voice behavior.
 
 Third-party assets: Three.js (MIT), MediaPipe Tasks Vision (Apache-2.0), Google's EfficientDet Lite0 and BlazeFace short-range models. See `dist/vendor/THREE-LICENSE.txt` and `dist/vendor/mediapipe/NOTICE.txt`.

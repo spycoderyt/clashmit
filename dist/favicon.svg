@@ -1,1 +1,21 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="15" fill="#101217"/><path d="M32 6 38 25 58 32 38 39 32 58 25 39 6 32 25 25Z" fill="#ff8c46"/></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 112" fill="none">
+  <defs>
+    <linearGradient id="rim" x1="18" y1="4" x2="76" y2="103" gradientUnits="userSpaceOnUse"><stop stop-color="#fff2a9"/><stop offset=".28" stop-color="#ffc953"/><stop offset=".62" stop-color="#eea125"/><stop offset="1" stop-color="#a85111"/></linearGradient>
+    <linearGradient id="blue" x1="25" y1="19" x2="73" y2="91" gradientUnits="userSpaceOnUse"><stop stop-color="#429eea"/><stop offset=".48" stop-color="#2160ae"/><stop offset="1" stop-color="#102d62"/></linearGradient>
+    <linearGradient id="gold" x1="31" y1="32" x2="65" y2="77" gradientUnits="userSpaceOnUse"><stop stop-color="#fff2ab"/><stop offset=".32" stop-color="#ffdb68"/><stop offset=".65" stop-color="#f6b52e"/><stop offset="1" stop-color="#c77716"/></linearGradient>
+  </defs>
+  <path d="M48 5 64 18H89V71C89 85 72 99 48 108 24 99 7 85 7 71V18H32L48 5Z" fill="#080e1b" stroke="#080e1b" stroke-width="5" stroke-linejoin="round"/>
+  <path d="M48 3 64 16H89V69C89 83 72 97 48 106 24 97 7 83 7 69V16H32L48 3Z" fill="url(#rim)" stroke="#ffe598" stroke-width="2" stroke-linejoin="round"/>
+  <path d="m48 14 13 11h19v44c0 10-13 21-32 29-19-8-32-19-32-29V25h19l13-11Z" fill="url(#blue)" stroke="#9d5b16" stroke-width="3"/>
+  <path d="M48 17v78M27 28v51M69 28v51" stroke="#0c2b59" stroke-opacity=".35" stroke-width="3"/>
+  <path d="m19 28 16 0 12-10v75C30 85 19 77 19 69V28Z" fill="#83cfff" fill-opacity=".1"/>
+  <path d="m23 46 8 5 9-15h16l9 15 8-5-5 30c-12 6-28 6-40 0l-5-30Z" fill="#071b39" fill-opacity=".55" transform="translate(0 6)"/>
+  <path d="m22 37 13 12 7-21h12l7 21 13-12-6 33c-12 5-28 5-40 0l-6-33Z" fill="url(#gold)" stroke="#b86b17" stroke-width="2" stroke-linejoin="round"/>
+  <path d="m24 38 11 11 7-21h12" stroke="#fff5bc" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M28 59c13-4 27-4 40 0v14c-13 5-27 5-40 0V59Z" fill="url(#gold)" stroke="#c6821a" stroke-width="2"/>
+  <path d="M30 60c11-3 25-3 36 0" stroke="#ffec95" stroke-width="2" stroke-linecap="round"/>
+  <path d="m48 60 7 7-7 7-7-7 7-7Z" fill="#c77c18"/>
+  <path d="m48 60 7 7h-7v-7Z" fill="#ffe68d"/>
+  <path d="m48 60-7 7h7v-7Z" fill="#fff3bc"/>
+  <path d="M11 19h22L48 7" stroke="#fff5ba" stroke-width="2" stroke-linecap="round"/>
+</svg>

@@ -10,10 +10,9 @@ import {bandColor} from '../dist/headband.js';
 
 const root=fileURLToPath(new URL('../dist/',import.meta.url));
 const mime={'.html':'text/html; charset=utf-8','.css':'text/css','.js':'text/javascript','.svg':'image/svg+xml','.wasm':'application/wasm'};
-export const MAX_PLAYERS=12;
 const allowedOrigins=(process.env.ALLOWED_ORIGINS||'').split(',').filter(Boolean);
-export function createGameServer({maxPlayers=MAX_PLAYERS,maxBufferedBytes=256*1024}={}){
- if(!Number.isInteger(maxPlayers)||maxPlayers<2||maxPlayers>100)throw new Error('Invalid player capacity');
+export function createGameServer({maxPlayers=null,maxBufferedBytes=256*1024}={}){
+ if(maxPlayers!==null&&(!Number.isInteger(maxPlayers)||maxPlayers<2))throw new Error('Invalid player capacity');
  let closing=false,closePromise;
  const rooms=new Map(), clients=new Map();
  const server=http.createServer(async(req,res)=>{
@@ -61,7 +60,7 @@ export function createGameServer({maxPlayers=MAX_PLAYERS,maxBufferedBytes=256*10
      if(player){if(player.socket!==ws){clients.delete(player.socket);player.socket.close(4000,'Opened on another connection');}player.socket=ws;player.connected=true;player.disconnectedAt=null;}
      else{
       if(room.phase==='playing')return send(ws,{type:'error',message:'A round is running. Join when it finishes.'});
-      if(room.players.length>=maxPlayers)return send(ws,{type:'error',message:`The arena is full (${maxPlayers} players).`});
+      if(maxPlayers!==null&&room.players.length>=maxPlayers)return send(ws,{type:'error',message:`The arena is full (${maxPlayers} players).`});
       if(room.players.some(p=>p.name.toLowerCase()===name.toLowerCase()))return send(ws,{type:'error',message:'That mage name is taken. Choose another.'});
       player={id:randomUUID(),token:randomBytes(24).toString('hex'),name,health:100,mana:MANA.max,manaUpdatedAt:Date.now(),shieldUntil:0,cooldowns:{},connected:true,shirt:null,socket:ws};room.players.push(player);if(!room.players.some(p=>p.id===room.hostId&&p.connected))room.hostId=player.id;
      }

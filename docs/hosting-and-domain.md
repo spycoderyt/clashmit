@@ -65,8 +65,8 @@ Do not use URL forwarding or a guessed A-record IP as a replacement for these re
 
 ## Capacity and verification limits
 
-The automated infrastructure test connects 30 synthetic clients to an isolated server with a test-only capacity override, checks snapshots, and receives 600 ping replies. On the development Mac, one run measured p50 1.0 ms and p95 1.4 ms over loopback. This does not measure cellular latency, tunnel performance, rendering, sustained load, or 30-person recognition.
+The automated infrastructure test connects 30 synthetic clients to an isolated server using the default uncapped lobby, checks snapshots, and receives 600 ping replies. On the development Mac, one run measured p50 1.0 ms and p95 1.4 ms over loopback. This does not measure cellular latency, tunnel performance, rendering, sustained load, or 30-person recognition.
 
-The shipped lobby limit remains 12 and camera targeting still selects one opponent. The updated plan is one venue and [ordered two-color headbands](two-stripe-headbands.md) for individual identity: six distinct colors can encode 30 different-color ordered pairs. That registration and multi-marker tracking pipeline is not implemented yet. Do not advertise a 30-player game based on the server test; identification must be finished and field-tested first.
+The fixed lobby cap has been removed, but camera targeting still selects one opponent. The updated plan is one venue and [ordered two-color headbands](two-stripe-headbands.md) for individual identity: six distinct colors can encode 30 different-color ordered pairs. That registration and multi-marker tracking pipeline is not implemented yet. Do not advertise a 30-player game based on the server test; identification must be finished and field-tested first.
 
 Before the event, test the actual remote URL with the intended phones and network, check for reconnects and latency spikes, and confirm the deployed commit matches `main`. For rollback, restore a known-good deployment in Railway or revert the bad commit through a PR; either path restarts in-memory game state.
