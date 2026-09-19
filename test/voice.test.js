@@ -17,7 +17,7 @@ test('a complete interim spell casts immediately and final results do not double
  const interim=Object.assign([{transcript:'fire ball'}],{isFinal:false});instance.onresult({resultIndex:0,results:[interim]});assert.deepEqual(spells,['fireball']);assert.match(status.textContent,/casting early/);
  instance.onresult({resultIndex:0,results:[interim]});assert.deepEqual(spells,['fireball']);
  instance.onresult({resultIndex:0,results:[Object.assign([{transcript:'Fireball'}],{isFinal:true})]});assert.deepEqual(spells,['fireball']);
- assert.equal(spellFromText('shield'),'shield');assert.equal(spellFromText('healing'),null);voice.stop();
+ assert.equal(spellFromText('shield'),'shield');assert.equal(spellFromText('cast lightning'),'lightning');assert.equal(spellFromText('lightningbolt'),null);assert.equal(spellFromText('healing'),null);voice.stop();
 });
 test('revisions do not double-cast; later commands and utterances can still cast',()=>{
  let instance;class Speech{constructor(){instance=this;}start(){}abort(){}}

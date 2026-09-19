@@ -38,3 +38,24 @@ test('reused color buffers cannot preserve a vanished headband',()=>{
  const buffers={};assert.equal(findHeadbands(frame([[35,25,22,5,red.rgb]]),red,blue,buffers).length,1);
  assert.equal(findHeadbands(frame(),red,blue,buffers).length,0);
 });
+
+test('face confirms a headband without needing a body, with body fallback',async()=>{
+ const {confirmHeadbands}=await import('../dist/headband.js');
+ const band={box:{originX:35,originY:25,width:22,height:5},area:100,match:.95,self:0},face={box:{originX:36,originY:32,width:20,height:24},score:.9};
+ const result=confirmHeadbands([band],[face,{...face}],[]);assert.equal(result.length,1);assert.equal(result[0].validation,'face');
+ assert.equal(confirmHeadbands([band],[],[person])[0].validation,'person');
+ assert.equal(confirmHeadbands([{...band,box:{...band.box,originY:65}}],[face],[]).length,0);
+ assert.equal(confirmHeadbands([band],[face],[person]).length,1);
+});
+test('close-up color tracking requires initial validation and resets on loss or ambiguity',async()=>{
+ const {createBandContinuity}=await import('../dist/headband.js'),track=createBandContinuity(),band={box:{originX:35,originY:25,width:22,height:5},area:100,match:.95,self:0},confirmed={...person,band,match:.95,self:0,validation:'face'};
+ assert.equal(track.update([band],[],0).length,0);
+ track.update([band],[confirmed],100);assert.equal(track.update([band],[],200)[0].validation,'tracked band');
+ assert.equal(track.update([band,band],[],300).length,0);assert.equal(track.update([band],[],400).length,0);
+ track.update([band],[confirmed],500);assert.equal(track.update([band],[],1300).length,0);
+ track.update([band],[confirmed],1400);assert.equal(track.update([],[],1500).length,0);assert.equal(track.update([band],[],1600).length,0);
+});
+
+test('a close-up headband can occupy more than twelve percent of the frame',()=>{
+ const bands=findHeadbands(frame([[10,30,80,35,blue.rgb]]),blue,red);assert.equal(bands.length,1);assert.ok(bands[0].area>100*160*.12);
+});

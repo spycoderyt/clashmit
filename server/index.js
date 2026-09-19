@@ -4,7 +4,7 @@ import {fileURLToPath} from 'node:url';
 import {resolve,extname} from 'node:path';
 import {randomBytes,randomUUID} from 'node:crypto';
 import {WebSocketServer,WebSocket} from 'ws';
-import {castSpell,launchFireball,impactFireball} from '../dist/rules.js';
+import {castSpell,launchProjectile,impactProjectile,expireProjectiles,replenishMana,MANA,SPELLS} from '../dist/rules.js';
 import {validProfile} from '../dist/shirt.js';
 import {bandColor} from '../dist/headband.js';
 
@@ -25,7 +25,7 @@ export function createGameServer(){
  });
  const wss=new WebSocketServer({server,path:'/ws',maxPayload:8192,verifyClient:({origin,req})=>!allowedOrigins.length||allowedOrigins.includes(origin)||origin===`https://${req.headers.host}`||origin===`http://${req.headers.host}`});
  const send=(ws,msg)=>{if(ws.readyState===WebSocket.OPEN)ws.send(JSON.stringify(msg));};
- function view(room){return {code:room.code,hostId:room.hostId,phase:room.phase,endsAt:room.endsAt,winners:room.winners,players:room.players.map(({token,socket,disconnectedAt,...p})=>p),serverTime:Date.now()};}
+ function view(room){const now=Date.now();for(const p of room.players)replenishMana(p,now);return {code:room.code,hostId:room.hostId,phase:room.phase,endsAt:room.endsAt,winners:room.winners,players:room.players.map(({token,socket,disconnectedAt,...p})=>p),shots:room.shots||[],combat:{mana:MANA,spells:SPELLS},serverTime:now};}
  function broadcast(room,event){for(const p of room.players){if(event)send(p.socket,event);send(p.socket,{type:'state',room:view(room)});}}
  function finish(room){if(room.phase!=='playing')return;const alive=room.players.filter(p=>p.health>0);if(alive.length<=1||Date.now()>=room.endsAt){room.phase='finished';const best=Math.max(...alive.map(p=>p.health),0);room.winners=alive.filter(p=>p.health===best).map(p=>p.id);}}
  wss.on('connection',ws=>{
@@ -52,7 +52,7 @@ export function createGameServer(){
       if(room.phase==='playing')return send(ws,{type:'error',message:'A round is running. Join when it finishes.'});
       if(room.players.length>=2)return send(ws,{type:'error',message:'This test has exactly two player slots.'});
       if(room.players.some(p=>p.name.toLowerCase()===name.toLowerCase()))return send(ws,{type:'error',message:'That mage name is taken. Choose another.'});
-      player={id:randomUUID(),token:randomBytes(24).toString('hex'),name,health:100,shieldUntil:0,cooldowns:{},connected:true,shirt:null,socket:ws};room.players.push(player);if(!room.players.some(p=>p.id===room.hostId&&p.connected))room.hostId=player.id;
+      player={id:randomUUID(),token:randomBytes(24).toString('hex'),name,health:100,mana:MANA.max,manaUpdatedAt:Date.now(),shieldUntil:0,cooldowns:{},connected:true,shirt:null,socket:ws};room.players.push(player);if(!room.players.some(p=>p.id===room.hostId&&p.connected))room.hostId=player.id;
      }
      clients.set(ws,{room,player});clearTimeout(timeout);send(ws,{type:'welcome',id:player.id,token:player.token,code:room.code});broadcast(room);return;
     }
@@ -65,13 +65,13 @@ export function createGameServer(){
      if(room.players.some(p=>!p.shirt||!bandColor(p.shirt.rgb)))return send(ws,{type:'error',message:'Both players must register their red or blue headband first.'});
      if(bandColor(room.players[0].shirt.rgb)===bandColor(room.players[1].shirt.rgb))return send(ws,{type:'error',message:'Headband colors are too similar. Use one red and one blue.'});
      room.shots=[];
-     for(const p of room.players){p.health=100;p.cooldowns={};p.shieldUntil=0;}
+     for(const p of room.players){p.health=100;p.mana=MANA.max;p.manaUpdatedAt=Date.now();p.cooldowns={};p.shieldUntil=0;}
      room.phase='playing';room.endsAt=Date.now()+180000;room.winners=[];broadcast(room,{type:'round-start'});
     }else if(m.type==='cast'){
-     const event=m.spell==='fireball'?launchFireball(room,player.id,m.targetId,randomUUID()):castSpell(room,player.id,m.spell,m.targetId);
+     const event=(m.spell==='fireball'||m.spell==='lightning')?launchProjectile(room,player.id,m.spell,m.targetId,randomUUID()):castSpell(room,player.id,m.spell,m.targetId);
      if(event.error)send(ws,{type:'error',message:event.error});else{finish(room);broadcast(room,event);}
     }else if(m.type==='impact'){
-     const event=impactFireball(room,player.id,m.shotId,m.tracked===true);if(!event.error){finish(room);broadcast(room,event);}
+     const event=impactProjectile(room,player.id,m.shotId,m.tracked===true);if(!event.error){finish(room);broadcast(room,event);}
     }else if(m.type==='shirt'){
      if(room.phase==='playing')return send(ws,{type:'error',message:'Scan headbands before the round starts.'});
      if(!validProfile(m.profile)||!bandColor(m.profile.rgb))return send(ws,{type:'error',message:'Invalid headband sample. Scan red or blue fabric.'});
@@ -81,7 +81,7 @@ export function createGameServer(){
   });
   ws.on('close',()=>{clearTimeout(timeout);const current=clients.get(ws);if(!current)return;const{room,player}=current;player.connected=false;player.disconnectedAt=Date.now();clients.delete(ws);if(room.hostId===player.id)room.hostId=room.players.find(p=>p.connected)?.id||player.id;broadcast(room);});
  });
- const tick=setInterval(()=>{for(const [code,room]of rooms){for(const p of room.players)if(!p.connected&&Date.now()-p.disconnectedAt>60000){p.health=0;p.expired=true;}room.players=room.players.filter(p=>!p.expired);if(!room.players.some(p=>p.id===room.hostId&&p.connected))room.hostId=room.players.find(p=>p.connected)?.id||room.players[0]?.id;if(!room.players.length){rooms.delete(code);continue;}room.shots=(room.shots||[]).filter(s=>Date.now()-s.at<4000);finish(room);broadcast(room);}},500);tick.unref();
+ const tick=setInterval(()=>{for(const [code,room]of rooms){for(const p of room.players)if(!p.connected&&Date.now()-p.disconnectedAt>60000){p.health=0;p.expired=true;}room.players=room.players.filter(p=>!p.expired);if(!room.players.some(p=>p.id===room.hostId&&p.connected))room.hostId=room.players.find(p=>p.connected)?.id||room.players[0]?.id;if(!room.players.length){rooms.delete(code);continue;}finish(room);for(const event of expireProjectiles(room))broadcast(room,event);broadcast(room);}},500);tick.unref();
  const heartbeat=setInterval(()=>{for(const ws of wss.clients){if(!ws.isAlive){ws.terminate();continue;}ws.isAlive=false;ws.ping();}},15000);heartbeat.unref();
  return {server,rooms,close:()=>{clearInterval(tick);clearInterval(heartbeat);for(const ws of wss.clients)ws.terminate();wss.close();return new Promise(r=>server.close(r));}};
 }

@@ -1,0 +1,52 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {MANA,SPELLS,manaAt,castSpell,launchProjectile,impactProjectile,expireProjectiles} from '../dist/rules.js';
+const player=id=>({id,health:100,connected:true,cooldowns:{},shieldUntil:0,mana:MANA.max,manaUpdatedAt:1000});
+const arena=()=>({phase:'playing',players:[player('a'),player('b')],shots:[]});
+test('fractional mana fills continuously, caps at ten, and spends whole costs',()=>{
+ const room=arena(),a=room.players[0];
+ castSpell(room,'a','shield',null,1000);assert.equal(a.mana,7);
+ assert.equal(manaAt(a,1750),7.5);assert.equal(a.mana,7,'projection does not mutate state');
+ assert.equal(manaAt(a,16000),10);assert.equal(manaAt(a,0),7,'clock rollback never subtracts mana');
+ launchProjectile(room,'a','lightning','b','one',2500);assert.equal(a.mana,4);
+ castSpell(room,'a','heal',null,2500);assert.equal(a.mana,0);
+ assert.match(launchProjectile(room,'a','fireball','b','empty',2500).error,/mana/);
+ assert.equal(room.shots.length,1);assert.equal(a.cooldowns.fireball,undefined);
+ assert.equal(launchProjectile(room,'a','fireball','b','still-empty',6999).error?.includes('mana'),true);
+ assert.equal(launchProjectile(room,'a','fireball','b','refilled',7000).spell,'fireball');
+ assert.equal(a.mana,0);
+});
+test('invalid targets and recharging spells do not spend mana',()=>{
+ const room=arena(),a=room.players[0];
+ assert.ok(launchProjectile(room,'a','lightning','a','self',1000).error);assert.equal(a.mana,10);
+ const shot=launchProjectile(room,'a','fireball','b','valid',1000);assert.equal(a.mana,7);
+ assert.ok(launchProjectile(room,'a','fireball','b','early',1100).error);assert.equal(a.mana,7);
+ assert.ok(launchProjectile(room,'a','lightning','b',shot.shotId,1200).error);assert.equal(a.mana,7);
+ assert.ok(launchProjectile(room,'a','constructor','b','bad',1000).error);
+});
+test('lightning arrives faster, bypasses an active shield, and applies once at impact',()=>{
+ const room=arena(),target=room.players[1];
+ castSpell(room,'b','shield',null,1000);
+ const lightning=launchProjectile(room,'a','lightning','b','bolt',1000);
+ assert.equal(lightning.impactAt,1250);assert.ok(lightning.flightMs<SPELLS.fireball.flightMs);
+ assert.equal(target.health,100);assert.ok(impactProjectile(room,'a','bolt',true,1100).error);
+ assert.equal(room.shots.length,1);assert.ok(impactProjectile(room,'b','bolt',true,1250).error);
+ const hit=impactProjectile(room,'a','bolt',true,1250);assert.equal(hit.blocked,false);assert.equal(hit.missed,false);assert.equal(target.health,80);
+ assert.ok(impactProjectile(room,'a','bolt',true,1251).error);assert.equal(target.health,80);
+ const fire=launchProjectile(room,'a','fireball','b','fire',1300);
+ assert.equal(impactProjectile(room,'a','fire',true,fire.impactAt).blocked,true);assert.equal(target.health,80);
+ assert.equal(castSpell(room,'b','heal',null,2800).spell,'heal');assert.equal(target.health,100);
+});
+test('shield is evaluated at impact, tracking losses miss and stale shots resolve for both clients',()=>{
+ const room=arena(),b=room.players[1];
+ const shot=launchProjectile(room,'a','fireball','b','fire',1000);
+ castSpell(room,'b','shield',null,2000);assert.equal(impactProjectile(room,'a','fire',true,shot.impactAt).blocked,true);
+ const bolt=launchProjectile(room,'a','lightning','b','bolt',2600);
+ assert.equal(impactProjectile(room,'a','bolt',false,bolt.impactAt).missed,true);assert.equal(b.health,100);
+ const abandoned=launchProjectile(room,'a','fireball','b','abandoned',5000);
+ assert.deepEqual(expireProjectiles(room,abandoned.expiresAt-1),[]);
+ const [expired]=expireProjectiles(room,abandoned.expiresAt);assert.equal(expired.shotId,'abandoned');assert.equal(expired.missed,true);assert.equal(room.shots.length,0);
+ assert.deepEqual(expireProjectiles(room,abandoned.expiresAt+1),[]);
+ const ending=launchProjectile(room,'a','fireball','b','ending',10000);room.phase='finished';
+ assert.equal(expireProjectiles(room,10001)[0].shotId,ending.shotId);assert.equal(b.health,100);
+});

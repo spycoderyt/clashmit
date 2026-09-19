@@ -21,15 +21,21 @@ export function createFireballRenderer(container){
   frame=0;resize();
   for(let i=shots.length-1;i>=0;i--){
    const shot=shots[i],age=(time-shot.started)/1000,t=age/shot.flight;
-   if(age>shot.flight+.7){remove(shot);shots.splice(i,1);continue;}
+   if(age>shot.flight+.7||(shot.incoming&&t>=1)){remove(shot);shots.splice(i,1);continue;}
    if(t<1){
     canvas.dataset.phase='flight';shot.ball.visible=true;shot.blast.visible=false;
     // Ease the world-space advance to keep the near-to-far travel legible.
-    if(shot.getTarget){const target=shot.getTarget();if(target){shot.lastSeen=time;shot.end.lerp(screenPoint(target.x,target.y,shot.depth),.22);shot.path.v1.copy(shot.path.v0).lerp(shot.end,.45);shot.path.v1.y+=.45;shot.blast.position.copy(shot.end);}else if(time-shot.lastSeen>700){shot.lost=true;}}
+    if(shot.incoming){
+     const source=shot.getSource?.();
+     if(source&&(!shot.hiddenSource||t<.8)){shot.lastSeen=time;shot.hiddenSource=false;shot.path.v0.lerp(screenPoint(source.x,source.y,shot.depth),.22);}
+     const fade=THREE.MathUtils.clamp(1-(time-shot.lastSeen-100)/200,0,1);if(!fade)shot.hiddenSource=true;
+     shot.visibility=fade;shot.group.visible=fade>0;shot.path.v1.copy(shot.path.v0).lerp(shot.end,.45);shot.path.v1.y+=.25;
+    }else if(shot.getTarget){const target=shot.getTarget();if(target){shot.lastSeen=time;shot.end.lerp(screenPoint(target.x,target.y,shot.depth),.22);shot.path.v1.copy(shot.path.v0).lerp(shot.end,.45);shot.path.v1.y+=.45;shot.blast.position.copy(shot.end);}else if(time-shot.lastSeen>700){shot.lost=true;}}
     const travel=t*t;shot.path.getPoint(travel,shot.ball.position);shot.ball.rotation.z=time*.008;
     shot.halo.scale.setScalar(.95+Math.sin(time*.027)*.11);
     shot.trail.forEach((p,j)=>{const u=travel-j*.014;p.visible=u>0;if(!p.visible)return;shot.path.getPoint(Math.max(0,u),p.position);p.position.x+=Math.sin(j*2+time*.009)*.035;p.position.y+=Math.cos(j+time*.005)*.03;p.scale.setScalar(.42*(1-j/shot.trail.length)+.08);p.material.opacity=(1-j/shot.trail.length)*.85;});
     shot.sparks.forEach(p=>p.visible=false);
+    if(shot.incoming){shot.core.material.opacity=shot.visibility;shot.shell.material.opacity=.85*shot.visibility;shot.halo.material.opacity=shot.visibility;shot.trail.forEach(p=>p.material.opacity*=shot.visibility);}
    }else{
     if(!shot.reported){shot.reported=true;shot.onImpact?.(!shot.lost&&(!shot.getTarget||!!shot.getTarget()));}if(shot.lost){remove(shot);shots.splice(i,1);continue;}
     canvas.dataset.phase='impact';shot.ball.visible=false;shot.trail.forEach(p=>p.visible=false);
@@ -40,25 +46,26 @@ export function createFireballRenderer(container){
   renderer.render(scene,camera);
   if(shots.length)frame=requestAnimationFrame(animate);else{renderer.clear();canvas.dataset.phase='idle';}
  }
- function fire({x=.5,y=.4,distance=30,getTarget,onImpact,flightMs=1400}={}){
+ function fire({x=.5,y=.4,distance=30,getTarget,onImpact,flightMs=1400,elapsedMs=0,incoming=false,getSource,shotId}={}){
   if(document.hidden||matchMedia('(prefers-reduced-motion: reduce)').matches||renderer.getContext().isContextLost())return false;
   resize();if(!width||!height)return false;
   while(shots.length>=4)remove(shots.shift());
   // Visual depth is compressed for readability; it is not a surveyed world coordinate.
   const depth=THREE.MathUtils.clamp(distance*.35,8,25);
-  const start=screenPoint(.68,.68,1.3),end=screenPoint(x,y,depth);
+  const start=incoming?screenPoint(x,y,depth):screenPoint(.68,.68,1.3),end=incoming?screenPoint(.5,.53,.65):screenPoint(x,y,depth);
   const bend=start.clone().lerp(end,.45);bend.y+=.45;
   const path=new THREE.QuadraticBezierCurve3(start,bend,end),group=new THREE.Group(),ball=new THREE.Group();
-  const core=new THREE.Mesh(sphere,new THREE.MeshBasicMaterial({color:0xffeb9c}));
+  const core=new THREE.Mesh(sphere,new THREE.MeshBasicMaterial({color:0xffeb9c,transparent:incoming,depthWrite:!incoming}));
   const shell=new THREE.Mesh(sphere,new THREE.MeshBasicMaterial({color:0xff7100,wireframe:true,transparent:true,opacity:.85}));shell.scale.setScalar(1.35);
   const halo=sprite(1.05);ball.add(core,shell,halo);group.add(ball);
   const trail=Array.from({length:26},()=>{const p=sprite(.4);group.add(p);return p;});
   const blast=new THREE.Mesh(torus,new THREE.MeshBasicMaterial({color:0xffc46b,transparent:true,depthWrite:false,blending:THREE.AdditiveBlending}));blast.position.copy(end);group.add(blast);
   const directions=[],sparks=Array.from({length:36},(_,j)=>{const p=sprite(.2,j%3?0xffa329:0xffedbb);group.add(p);const a=j*2.39996,z=1-2*(j+.5)/36,r=Math.sqrt(1-z*z);directions.push(new THREE.Vector3(Math.cos(a)*r,Math.sin(a)*r,z));return p;});
-  scene.add(group);shots.push({group,ball,halo,trail,blast,sparks,directions,path,end,started:performance.now(),flight:flightMs/1000,depth,getTarget,onImpact,lastSeen:performance.now(),lost:false,reported:false});
+  scene.add(group);shots.push({group,ball,core,shell,halo,trail,blast,sparks,directions,path,end,started:performance.now()-Math.max(0,elapsedMs),flight:Math.max(1,flightMs)/1000,depth,getTarget,getSource,onImpact,incoming,shotId,visibility:1,hiddenSource:false,lastSeen:performance.now(),lost:false,reported:false});
   if(!frame)frame=requestAnimationFrame(animate);return true;
  }
  document.addEventListener('visibilitychange',()=>{if(document.hidden)clear();});
  canvas.addEventListener('webglcontextlost',e=>{e.preventDefault();clear();canvas.dataset.renderer='unavailable';});
- return{fire,clear};
+ function cancelIncoming(shotId){for(let i=shots.length-1;i>=0;i--)if(shots[i].incoming&&shots[i].shotId===shotId){remove(shots[i]);shots.splice(i,1);}}
+ return{fire,incoming:options=>fire({...options,incoming:true}),cancelIncoming,clear};
 }

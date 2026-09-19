@@ -1,4 +1,4 @@
-export function spellsFromText(text){return [...text.toLowerCase().matchAll(/\b(?:fire\s*ball|shield|heal)\b/g)].map(m=>m[0].replace(/\s/g,''));}
+export function spellsFromText(text){return [...text.toLowerCase().matchAll(/\b(?:fire\s*ball|lightning|shield|heal)\b/g)].map(m=>m[0].replace(/\s/g,''));}
 export function spellFromText(text){return spellsFromText(text)[0]||null;}
 const messages={
  'not-allowed':'Microphone or speech access was denied. Allow it in Safari’s website settings.',
@@ -6,7 +6,7 @@ const messages={
  'audio-capture':'No microphone is available. Check your microphone access.',
  'network':'The browser’s speech service could not connect. Check your internet connection and Siri settings.',
  'language-not-supported':'English speech recognition is unavailable on this device.',
- 'no-speech':'No speech heard yet. Say “Fireball”, “Shield” or “Heal”.'
+ 'no-speech':'No speech heard yet. Say “Fireball”, “Lightning”, “Shield” or “Heal”.'
 };
 export function setupVoice({Recognition,button,status,onSpell}){
  let active=false,recognition=null,restartTimer,startTimer;
@@ -16,7 +16,7 @@ export function setupVoice({Recognition,button,status,onSpell}){
   if(!active)return;
   const session=new Recognition(),handled=new Map();recognition=session;
   session.lang='en-US';session.interimResults=true;session.continuous=true;
-  session.onstart=()=>{if(!active||recognition!==session)return;clearTimeout(startTimer);button.textContent='◉ Voice on · tap to stop';button.classList.add('listening');show('Fast casting: listening for Fireball, Shield or Heal…');};
+  session.onstart=()=>{if(!active||recognition!==session)return;clearTimeout(startTimer);button.textContent='◉ Voice on · tap to stop';button.classList.add('listening');show('Fast casting: listening for Fireball, Lightning, Shield or Heal…');};
   session.onresult=e=>{
    if(!active||recognition!==session)return;
    for(let i=e.resultIndex;i<e.results.length;i++){
@@ -28,7 +28,7 @@ export function setupVoice({Recognition,button,status,onSpell}){
     const fresh=spells.slice(previous);
     show(`Heard: “${text}”${fresh.length&&!result.isFinal?' · casting early':result.isFinal?'':'…'}`);
     for(const spell of fresh)onSpell(spell);
-    if(result.isFinal&&!spells.length)show(`Heard “${text}”. Try Fireball, Shield or Heal.`);
+    if(result.isFinal&&!spells.length)show(`Heard “${text}”. Try Fireball, Lightning, Shield or Heal.`);
    }
   };
   session.onerror=e=>{if(!active||recognition!==session||e.error==='aborted')return;const message=messages[e.error]||`Speech stopped (${e.error}). Try again or use spell buttons.`;if(e.error!=='no-speech')stop();show(message);};

@@ -1,5 +1,5 @@
-import {colorProfile} from './shirt.js?v=headband1';
-import {bandColor} from './headband.js?v=headband1';
+import {colorProfile} from './shirt.js?v=face1';
+import {bandColor} from './headband.js?v=face1';
 export function setupShirtCamera({beforeOpen,onSave,onClose,onError}){
  const $=id=>document.getElementById(id),dialog=$('shirt-dialog'),video=$('shirt-camera');let stream,profile,opening=false,epoch=0;
  function stop(){epoch++;stream?.getTracks().forEach(t=>t.stop());stream=null;video.srcObject=null;}
