@@ -51,3 +51,7 @@ Test on two iPhones before assembling six players: compass alignment in all four
 ## 3D fireball visual
 
 Fireballs use a locally bundled Three.js perspective scene over the camera: a near launch, receding glowing projectile, particle trail, and impact burst. This is visual depth only, with compressed distances and an estimated endpoint fixed at cast time. It does not provide AR world tracking, real occlusion, or physically dodgeable projectile collisions; server hit timing remains immediate. Browsers without WebGL fall back to 2D feedback. Reduced Motion uses a static spell label instead of moving or flashing effects.
+
+## Early voice casting
+
+The browser now casts when a complete spell name first appears in an interim transcript, without waiting for the final transcript or the end of an utterance. Duplicate interim updates, corrected spell names in the same command slot, and finalization do not re-cast that slot. Additional spell names in a growing utterance can cast separately, subject to normal game cooldowns. This is speculative: a recognition error can trigger a spell before the transcript is corrected. It cannot bypass the browser speech engine’s time to first partial result; no device latency improvement is claimed until measured on a phone. The listener remains active between casts.

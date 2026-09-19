@@ -1,5 +1,5 @@
 import {SPELLS,castSpell} from './rules.js';
-import {setupVoice} from './voice.js';
+import {setupVoice} from './voice.js?v=early1';
 import {wrap,relativePosition,cameraHeading,chooseTarget} from './geo.js';
 const $=id=>document.getElementById(id);
 const safeRead=(key)=>{try{return localStorage.getItem(key)||'';}catch{return '';}};
