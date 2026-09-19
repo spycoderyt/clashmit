@@ -1,8 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {WebSocket} from 'ws';
-import {castSpell} from '../dist/rules.js';
-import {relativePosition,wrap,chooseTarget,cameraHeading} from '../dist/geo.js';
+import {castSpell,launchFireball,impactFireball} from '../dist/rules.js';
+import {colorProfile,similarity,chooseShirt,validProfile,coverRect} from '../dist/shirt.js';
+const profile=rgb=>colorProfile(new Uint8ClampedArray(Array.from({length:64},()=>[...rgb,255]).flat()));
+const red=profile([220,30,30]),blue=profile([30,30,220]);
 import {createGameServer} from '../server/index.js';
 const player=id=>({id,health:100,connected:true,cooldowns:{},shieldUntil:0});
 test('spells enforce phase, cooldown, shield and health bounds',()=>{
@@ -14,24 +16,45 @@ test('spells enforce phase, cooldown, shield and health bounds',()=>{
  castSpell(room,'b','heal',null,5100);assert.equal(room.players[1].health,70);
  room.phase='finished';assert.ok(castSpell(room,'a','heal',null,6000).error);
 });
-test('bearings cross north correctly, and uncertain overlaps do not select a player',()=>{
- const origin={latitude:0,longitude:0,accuracy:3};const east=relativePosition(origin,{latitude:0,longitude:.001,accuracy:4});assert.ok(Math.abs(east.distance-111.195)<.01);assert.equal(east.bearing,90);assert.equal(east.error,5);assert.equal(wrap(359-1),-2);
- assert.equal(cameraHeading({absolute:true,alpha:0,beta:90,gamma:0}),0);assert.equal(cameraHeading({absolute:true,alpha:270,beta:90,gamma:0}),90);
- const p={id:'a',name:'A',fresh:true,distance:30,error:5,accuracy:3,ownAccuracy:4,delta:0};assert.equal(chooseTarget([p]).id,'a');assert.equal(chooseTarget([p,{...p,id:'b',delta:5}]).id,null);assert.equal(chooseTarget([{...p,fresh:false}]).id,null);
+test('shirt profiles reject ambiguity and tolerate moderate brightness differences',()=>{
+ assert.ok(validProfile(red));assert.equal(validProfile({bins:[1],rgb:[0,0,0]}),false);
+ assert.ok(similarity(red,profile([160,22,22]))>.9);assert.ok(similarity(red,blue)<.1);
+ assert.equal(chooseShirt([{id:'red',profile:red},{id:'blue',profile:blue}],red,blue).id,'red');
+ assert.equal(chooseShirt([{profile:red},{profile:red}],red,blue),null);
+ assert.equal(chooseShirt([{profile:red}],red,red),null);
+ const rect=coverRect({originX:320,originY:180,width:640,height:360},1280,720,400,800);
+ assert.ok(Math.abs(rect.x+rect.width/2-.5)<.001);assert.equal(rect.y,.25);
 });
-test('one shared arena, authoritative controller, location gating, reconnect and round outcome',async t=>{
+test('fireball damage occurs at impact, expires, and respects tracking loss and shields',()=>{
+ const room={phase:'playing',players:[player('a'),player('b')]};
+ launchFireball(room,'a','b','one',1000);assert.equal(room.players[1].health,100);
+ assert.ok(impactFireball(room,'a','one',true,1100).error);
+ assert.equal(impactFireball(room,'a','one',false,2400).missed,true);assert.equal(room.players[1].health,100);
+ launchFireball(room,'a','b','two',3000);castSpell(room,'b','shield',null,4000);
+ assert.equal(impactFireball(room,'a','two',true,4400).blocked,true);
+ launchFireball(room,'a','b','three',8000);assert.equal(impactFireball(room,'b','three',true,9400).error,'Projectile expired.');
+ impactFireball(room,'a','three',true,9400);assert.equal(room.players[1].health,75);
+ assert.ok(impactFireball(room,'a','three',true,9401).error);
+ launchFireball(room,'a','b','four',10000);assert.equal(impactFireball(room,'a','four',true,14000).missed,true);
+});
+test('one shared arena, authoritative controller, shirt registration and delayed impact, reconnect and round outcome',async t=>{
  const game=createGameServer();await new Promise(r=>game.server.listen(0,'127.0.0.1',r));t.after(()=>game.close());const url=`ws://127.0.0.1:${game.server.address().port}/ws`;
  async function client(name,token){const ws=new WebSocket(url),messages=[];ws.on('message',b=>messages.push(JSON.parse(b)));await new Promise(r=>ws.on('open',r));const send=m=>ws.send(JSON.stringify(m));const next=async(type,predicate=()=>true)=>{const end=Date.now()+2500;while(Date.now()<end){const i=messages.findIndex(m=>m.type===type&&predicate(m));if(i>=0)return messages.splice(i,1)[0];await new Promise(r=>setTimeout(r,10));}throw Error('Timed out waiting for '+type);};send({type:'join',name,token});return {ws,send,next,messages};}
  const a=await client('Merlin'),aw=await a.next('welcome');const b=await client('Morgana'),bw=await b.next('welcome');assert.equal(aw.code,bw.code);
  b.send({type:'start'});assert.match((await b.next('error')).message,/host/);
+ const third=await client('Third');assert.match((await third.next('error')).message,/two player/);third.ws.close();
+ a.send({type:'start'});assert.match((await a.next('error')).message,/register/);
+ a.send({type:'shirt',profile:{}});assert.match((await a.next('error')).message,/Invalid shirt/);
+ a.send({type:'shirt',profile:red});b.send({type:'shirt',profile:red});await a.next('state',m=>m.room.players.every(p=>p.shirt));
+ a.send({type:'start'});assert.match((await a.next('error')).message,/too similar/);
+ b.send({type:'shirt',profile:blue});await a.next('state',m=>similarity(m.room.players.find(p=>p.id===bw.id)?.shirt,blue)>.9);
  a.send({type:'start'});await a.next('state',m=>m.room.phase==='playing');
- a.send({type:'cast',spell:'fireball',targetId:bw.id});assert.match((await a.next('error')).message,/locations/);
- a.send({type:'location',location:{latitude:40,longitude:-74,accuracy:4}});b.send({type:'location',location:{latitude:40.0003,longitude:-74,accuracy:4}});
- await a.next('state',m=>m.room.players.every(p=>p.location));
- a.send({type:'cast',spell:'fireball',targetId:bw.id});await b.next('state',m=>m.room.players.find(p=>p.id===bw.id).health===75);
+ a.send({type:'cast',spell:'fireball',targetId:bw.id});const shot=await a.next('spell');
+ await new Promise(r=>setTimeout(r,1400));a.send({type:'impact',shotId:shot.shotId,tracked:true});await b.next('state',m=>m.room.players.find(p=>p.id===bw.id).health===75);
  a.send({type:'cast',spell:'fireball',targetId:bw.id});assert.match((await a.next('error')).message,/recharging/);
  b.ws.close();await a.next('state',m=>m.room.players.find(p=>p.id===bw.id)?.connected===false);
  const resumed=await client('Morgana',bw.token);assert.equal((await resumed.next('welcome')).id,bw.id);assert.equal((await resumed.next('state')).room.players.find(p=>p.id===bw.id).health,75);
+ assert.ok(!('location' in (await resumed.next('state')).room.players[0]));
  const state=game.rooms.get('ARENA');state.endsAt=Date.now()-1;
  const final=await a.next('state',m=>m.room.phase==='finished');assert.deepEqual(final.room.winners,[aw.id]);
  a.send({type:'leave'});await resumed.next('state',m=>m.room.hostId===bw.id);

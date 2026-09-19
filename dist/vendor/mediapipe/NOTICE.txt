@@ -1,0 +1,10 @@
+MediaPipe Tasks Vision 1.0.1
+Copyright Google LLC. Licensed under the Apache License, Version 2.0.
+Source: https://github.com/google-ai-edge/mediapipe
+Package: https://www.npmjs.com/package/@mediapipe/tasks-vision
+
+EfficientDet Lite0 uint8 object detector model supplied by Google MediaPipe:
+https://storage.googleapis.com/mediapipe-tasks/object_detector/efficientdet_lite0_uint8.tflite
+Documentation: https://ai.google.dev/edge/mediapipe/solutions/vision/object_detector
+
+License: https://www.apache.org/licenses/LICENSE-2.0
