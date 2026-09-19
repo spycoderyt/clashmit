@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {WebSocket} from 'ws';
 import {castSpell,launchFireball,impactFireball} from '../dist/rules.js';
-import {colorProfile,similarity,chooseShirt,validProfile,coverRect} from '../dist/shirt.js';
+import {colorProfile,similarity,validProfile,coverRect} from '../dist/shirt.js';
 const profile=rgb=>colorProfile(new Uint8ClampedArray(Array.from({length:64},()=>[...rgb,255]).flat()));
 const red=profile([220,30,30]),blue=profile([30,30,220]);
 import {createGameServer} from '../server/index.js';
@@ -19,9 +19,6 @@ test('spells enforce phase, cooldown, shield and health bounds',()=>{
 test('shirt profiles reject ambiguity and tolerate moderate brightness differences',()=>{
  assert.ok(validProfile(red));assert.equal(validProfile({bins:[1],rgb:[0,0,0]}),false);
  assert.ok(similarity(red,profile([160,22,22]))>.9);assert.ok(similarity(red,blue)<.1);
- assert.equal(chooseShirt([{id:'red',profile:red},{id:'blue',profile:blue}],red,blue).id,'red');
- assert.equal(chooseShirt([{profile:red},{profile:red}],red,blue),null);
- assert.equal(chooseShirt([{profile:red}],red,red),null);
  const rect=coverRect({originX:320,originY:180,width:640,height:360},1280,720,400,800);
  assert.ok(Math.abs(rect.x+rect.width/2-.5)<.001);assert.equal(rect.y,.25);
 });

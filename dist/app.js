@@ -1,10 +1,10 @@
 import {SPELLS,castSpell,launchFireball,impactFireball,FLIGHT_MS} from './rules.js';
 import {setupVoice} from './voice.js?v=early1';
-import {coverRect,similarity} from './shirt.js?v=tracking2';
-import {createTargetTrack,aimContains} from './target-track.js?v=tracking2';
-import {createFlight} from './projectile-flight.js?v=tracking2';
-import {createPersonTracker} from './detection.js?v=tracking2';
-import {setupShirtCamera} from './shirt-camera.js';
+import {coverRect,similarity} from './shirt.js?v=coverage1';
+import {createTargetTrack,aimContains} from './target-track.js?v=coverage1';
+import {createFlight} from './projectile-flight.js?v=coverage1';
+import {createPersonTracker} from './detection.js?v=coverage1';
+import {setupShirtCamera} from './shirt-camera.js?v=coverage1';
 const $=id=>document.getElementById(id);
 const safeRead=key=>{try{return localStorage.getItem(key)||'';}catch{return '';}};
 const safeWrite=(key,value)=>{try{localStorage.setItem(key,value);}catch{}};
@@ -16,9 +16,8 @@ $('name').value=safeRead('fieldspell-name');$('server-url').value=safeRead('fiel
 const notify=text=>{$('toast').textContent=text;clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('toast').textContent='',4000);};
 function send(message){if(socket?.readyState===WebSocket.OPEN)socket.send(JSON.stringify(message));}
 const identityTrack=createTargetTrack(),flights=new Map();
-let farMode=false;
 const tracker=createPersonTracker($('camera'),(people,width,height,at)=>{detection={people,width,height,at};identityTrack.update(people,opponent()?.shirt,me()?.shirt,at);},status=>{trackingStatus=status;});
-function loadGraphics(){graphicsLoading??=import('./fireball.js?v=tracking2').then(m=>{fireScene=m.createFireballRenderer($('arena'));}).catch(()=>{fireScene=null;});return graphicsLoading;}
+function loadGraphics(){graphicsLoading??=import('./fireball.js?v=coverage1').then(m=>{fireScene=m.createFireballRenderer($('arena'));}).catch(()=>{fireScene=null;});return graphicsLoading;}
 function matchedPerson(){
  if(document.hidden||!stream?.active||Date.now()-detection.at>1000||!opponent()?.shirt)return null;
  const match=identityTrack.get();if(!match)return null;
@@ -44,7 +43,7 @@ function effect(spell,{shot,projectile=true}={}){
  layer.className='cast-effect '+spell+(depth?' has-depth':'');effectTimer=setTimeout(()=>{layer.className='';layer.replaceChildren();},2200);
 }
 function handleImpact(m){if(m.actorId===myId)notify(m.missed?'Target lost · fireball fizzled':m.blocked?'Fireball blocked':'Fireball hit · 25 damage');if(m.targetId===myId&&!m.missed){effect('fireball',{projectile:false});notify(m.blocked?'Your shield blocked the fireball':'Hit by a fireball · −25 HP');}}
-function showArena(){loadGraphics();$('lobby').hidden=true;$('arena').hidden=false;$('shirt-open').hidden=practice;$('range-mode').hidden=practice;$('tracking-retry').hidden=practice;$('camera-instructions').textContent=practice?'Practice a 3D fireball over your camera with a simulated target.':'Register your shirt, then point the camera at your opponent.';$('camera-privacy').textContent='Camera frames stay on your phone. No location permissions needed.';$('camera-prompt').hidden=!!stream?.active;}
+function showArena(){loadGraphics();$('lobby').hidden=true;$('arena').hidden=false;$('shirt-open').hidden=practice;$('tracking-retry').hidden=practice;$('camera-instructions').textContent=practice?'Practice a 3D fireball over your camera with a simulated target.':'Register your shirt, then point the camera at your opponent.';$('camera-privacy').textContent='Camera frames stay on your phone. No location permissions needed.';$('camera-prompt').hidden=!!stream?.active;}
 function setError(text){$('join-status').textContent=text;$('join').disabled=false;notify(text);}
 function endpoint(){const raw=safeRead('fieldspell-server');const fallback=location.hostname.endsWith('.chatgpt.site')?'https://withdrawal-calgary-belle-minolta.trycloudflare.com':location.origin;const url=new URL(raw||fallback);if(!['https:','http:'].includes(url.protocol))throw Error('Enter an HTTPS game server URL.');if(location.protocol==='https:'&&url.protocol!=='https:')throw Error('The game server needs HTTPS.');url.protocol=url.protocol==='https:'?'wss:':'ws:';url.pathname='/ws';url.search='';url.hash='';return url.href;}
 function connect(){
@@ -80,7 +79,6 @@ async function startCamera(){
 const shirtCamera=setupShirtCamera({beforeOpen:()=>{voice.stop();stopCamera();fireScene?.clear();},onSave:profile=>send({type:'shirt',profile}),onClose:()=>{if(!$('arena').hidden)startCamera();}});
 $('shirt-open').onclick=()=>{if(room?.phase==='playing'){notify('Wait until the round ends to change your shirt.');return;}shirtCamera.open();};
 $('camera-start').onclick=()=>{if(!practice&&!me()?.shirt)shirtCamera.open();else startCamera();};
-$('range-mode').onclick=()=>{farMode=!farMode;tracker.setZoom(farMode);identityTrack.reset();$('range-mode').textContent=farMode?'Far mode: on':'Far mode: off';notify(farMode?'Keep the opponent near the reticle. Far mode checks a zoomed crop.':'Wide tracking enabled');};
 $('tracking-retry').onclick=()=>{if(stream?.active)tracker.start();else startCamera();};
 function renderState(){if(!me())return;$('arena').classList.toggle('round-live',room.phase==='playing');const p=me();$('health-value').innerHTML=`${p.health} <small>/ 100</small>`;$('health-fill').style.width=p.health+'%';$('room-label').textContent=practice?'SOLO PRACTICE':'TWO PLAYER ARENA';$('start-round').hidden=room.hostId!==myId;$('start-round').disabled=room.phase==='playing';$('start-round').textContent=room.phase==='finished'?'New round':'Start round';$('shirt-open').textContent=p.shirt?'Retake shirt':'Register shirt';$('shirt-open').disabled=room.phase==='playing';
  const signature=JSON.stringify(room.players.map(p=>[p.id,p.name,p.health,p.connected,!!p.shirt]));if(signature!==rosterSignature){rosterSignature=signature;$('players').replaceChildren(...room.players.filter(p=>p.id!==myId).map(p=>{const el=document.createElement('div');el.className='player'+(p.health<=0?' dead':'');const name=document.createElement('b');name.textContent=p.name;const status=document.createElement('small');status.textContent=!p.connected?'Reconnecting…':`${p.health} HP · ${practice?'simulated':p.shirt?'shirt ready':'needs shirt'}`;el.append(name,status);return el;}));}
@@ -95,7 +93,7 @@ function renderAim(){
  $('target-status').textContent=practice?'Simulated target':!me()?.shirt?'Tap Register shirt to get ready.':!opponent()?.shirt?'Waiting for your opponent’s shirt sample.':similarity(me().shirt,opponent().shirt)>.8?'Shirts too similar · use different colors.':!stream?.active?'Enable your camera.':match?(locked?`${opponent().name} locked · cast Fireball`:'Aim the reticle at your opponent'):'Find your opponent’s shirt · move closer if needed';
  $('vision-status').textContent=practice?'Simulated tracking':trackingStatus;
  const rect=$('arena').getBoundingClientRect(),people=practice?[match]:Date.now()-detection.at<1000?detection.people:[];
- $('boxes').replaceChildren(...people.map(p=>{const box=practice?p.box:coverRect(p.box,detection.width,detection.height,rect.width,rect.height);const isMatch=practice||!!match&&p.box===match.rawBox;const el=document.createElement('div');el.className='person-box'+(isMatch?' matched':'');Object.assign(el.style,{left:box.x*100+'%',top:box.y*100+'%',width:box.width*100+'%',height:box.height*100+'%'});const label=document.createElement('div');label.className='person-label';const title=document.createElement('b');title.textContent=isMatch?opponent()?.name||'Target':'Person';label.append(title);if(isMatch){const meter=document.createElement('meter');meter.min=0;meter.max=100;meter.value=opponent()?.health||0;meter.setAttribute('aria-label','Opponent health');const info=document.createElement('small');info.textContent=practice?'Simulated':`Shirt match · ${Math.round(match.match*100)}%`;label.append(meter,info);}el.append(label);return el;}));
+ $('boxes').replaceChildren(...people.map(p=>{const box=practice?p.box:coverRect(p.box,detection.width,detection.height,rect.width,rect.height);const isMatch=practice||!!match&&p.box===match.rawBox;const el=document.createElement('div');el.className='person-box'+(isMatch?' matched':'');Object.assign(el.style,{left:box.x*100+'%',top:box.y*100+'%',width:box.width*100+'%',height:box.height*100+'%'});const label=document.createElement('div');label.className='person-label';const title=document.createElement('b');title.textContent=isMatch?opponent()?.name||'Target':p.patches?.length<2?'Shirt too small':'Shirt uncertain';label.append(title);if(isMatch){const meter=document.createElement('meter');meter.min=0;meter.max=100;meter.value=opponent()?.health||0;meter.setAttribute('aria-label','Opponent health');const info=document.createElement('small');info.textContent=practice?'Simulated':`Color coverage · ${Math.round(match.match*100)}%`;label.append(meter,info);}el.append(label);return el;}));
  $('fireball').disabled=room.phase!=='playing'||me()?.health<=0||castPending||(!practice&&socket?.readyState!==WebSocket.OPEN);$('fireball').classList.toggle('target-ready',!!locked);
 }
 let castPending=false,castRequest=0;

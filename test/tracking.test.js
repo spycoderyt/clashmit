@@ -5,7 +5,7 @@ import {createFlight} from '../dist/projectile-flight.js';
 import {colorProfile} from '../dist/shirt.js';
 const color=rgb=>colorProfile(new Uint8ClampedArray([...rgb,255]));
 const red=color([220,20,20]),blue=color([20,20,220]);
-const person=(x=10)=>({box:{originX:x,originY:10,width:20,height:60},profile:red});
+const person=(x=10)=>({box:{originX:x,originY:10,width:20,height:60},patches:[{data:new Uint8ClampedArray([220,20,20,255])},{data:new Uint8ClampedArray([220,20,20,255])}]});
 test('small targets retain identity across one missed frame, but stale identities expire',()=>{
  const track=createTargetTrack();track.update([person()],red,blue,100,100);assert.equal(track.get(100).confirmed,false);
  track.update([person(11)],red,blue,300,300);assert.equal(track.get(300).confirmed,true);

@@ -1,4 +1,4 @@
-import {colorProfile} from './shirt.js';
+import {colorProfile} from './shirt.js?v=coverage1';
 export function setupShirtCamera({beforeOpen,onSave,onClose,onError}){
  const $=id=>document.getElementById(id),dialog=$('shirt-dialog'),video=$('shirt-camera');let stream,profile,opening=false,epoch=0;
  function stop(){epoch++;stream?.getTracks().forEach(t=>t.stop());stream=null;video.srcObject=null;}
@@ -6,9 +6,9 @@ export function setupShirtCamera({beforeOpen,onSave,onClose,onError}){
  $('shirt-enable').onclick=enable;
  $('shirt-capture').onclick=()=>{
   if(!video.videoWidth)return;
-  // Preview is object-fit:contain. Guide uses the same percentages of its image.
+  // Preview is stretched to its container. Guide uses the same percentages of its image.
   const canvas=document.createElement('canvas');canvas.width=canvas.height=96;const ctx=canvas.getContext('2d',{willReadFrequently:true});ctx.drawImage(video,video.videoWidth*.3,video.videoHeight*.4,video.videoWidth*.4,video.videoHeight*.3,0,0,96,96);profile=colorProfile(ctx.getImageData(0,0,96,96).data);
-  $('shirt-swatch').style.background=`rgb(${profile.rgb.join(',')})`;$('shirt-swatch').hidden=false;$('shirt-save').disabled=false;$('shirt-message').textContent='Check the color sample. Retake if it includes skin or background.';
+  $('shirt-swatch').style.background=`rgb(${profile.rgb.join(',')})`;$('shirt-swatch').hidden=false;$('shirt-save').disabled=false;$('shirt-message').textContent='Check the dominant shirt color below. Retake if it looks like skin or background.';
  };
  $('shirt-save').onclick=()=>{if(profile){onSave(profile);dialog.close();}};
  $('shirt-cancel').onclick=()=>dialog.close();dialog.addEventListener('close',()=>{stop();onClose();});
