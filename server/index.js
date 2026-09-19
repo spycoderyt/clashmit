@@ -5,7 +5,8 @@ import {resolve,extname} from 'node:path';
 import {randomBytes,randomUUID} from 'node:crypto';
 import {WebSocketServer,WebSocket} from 'ws';
 import {castSpell,launchFireball,impactFireball} from '../dist/rules.js';
-import {validProfile,similarity} from '../dist/shirt.js';
+import {validProfile} from '../dist/shirt.js';
+import {bandColor} from '../dist/headband.js';
 
 const root=fileURLToPath(new URL('../dist/',import.meta.url));
 const mime={'.html':'text/html; charset=utf-8','.css':'text/css','.js':'text/javascript','.svg':'image/svg+xml','.wasm':'application/wasm'};
@@ -61,8 +62,8 @@ export function createGameServer(){
      if(room.phase==='playing')return;
      room.players=room.players.filter(p=>p.connected);
      if(room.players.length<2)return send(ws,{type:'error',message:'Wait for at least one friend to join.'});
-     if(room.players.some(p=>!p.shirt))return send(ws,{type:'error',message:'Both players must register their shirt first.'});
-     if(similarity(room.players[0].shirt,room.players[1].shirt)>.8)return send(ws,{type:'error',message:'Shirt colors are too similar. Choose different colors and retake.'});
+     if(room.players.some(p=>!p.shirt||!bandColor(p.shirt.rgb)))return send(ws,{type:'error',message:'Both players must register their red or blue headband first.'});
+     if(bandColor(room.players[0].shirt.rgb)===bandColor(room.players[1].shirt.rgb))return send(ws,{type:'error',message:'Headband colors are too similar. Use one red and one blue.'});
      room.shots=[];
      for(const p of room.players){p.health=100;p.cooldowns={};p.shieldUntil=0;}
      room.phase='playing';room.endsAt=Date.now()+180000;room.winners=[];broadcast(room,{type:'round-start'});
@@ -72,8 +73,8 @@ export function createGameServer(){
     }else if(m.type==='impact'){
      const event=impactFireball(room,player.id,m.shotId,m.tracked===true);if(!event.error){finish(room);broadcast(room,event);}
     }else if(m.type==='shirt'){
-     if(room.phase==='playing')return send(ws,{type:'error',message:'Register shirts before the round starts.'});
-     if(!validProfile(m.profile))return send(ws,{type:'error',message:'Invalid shirt sample. Please retake.'});
+     if(room.phase==='playing')return send(ws,{type:'error',message:'Scan headbands before the round starts.'});
+     if(!validProfile(m.profile)||!bandColor(m.profile.rgb))return send(ws,{type:'error',message:'Invalid headband sample. Scan red or blue fabric.'});
      player.shirt={bins:[...m.profile.bins],rgb:[...m.profile.rgb]};broadcast(room);
     }else if(m.type==='leave'){room.players=room.players.filter(p=>p.id!==player.id);clients.delete(ws);if(room.hostId===player.id)room.hostId=room.players.find(p=>p.connected)?.id;finish(room);broadcast(room);ws.close(1000);}
    }catch{send(ws,{type:'error',message:'Invalid request.'});}

@@ -3,7 +3,9 @@ const clamp=x=>Math.max(0,Math.min(1,x));
 const fade=(distance,inner,outer)=>1-clamp((distance-inner)/(outer-inner));
 export function hsv(r,g,b){r/=255;g/=255;b/=255;const v=Math.max(r,g,b),d=v-Math.min(r,g,b);let h=0;if(d)h=(v===r?((g-b)/d+6)%6:v===g?(b-r)/d+2:(r-g)/d+4)/6;return{h,s:v?d/v:0,v};}
 export function pixelMatch(pixel,reference){
- const a=hsv(pixel[0],pixel[1],pixel[2]),b=reference;
+ return colorWeight(hsv(pixel[0],pixel[1],pixel[2]),reference);
+}
+export function colorWeight(a,b){
  if(b.s>=.25&&b.v>=.12){
   const delta=Math.abs(a.h-b.h),hue=Math.min(delta,1-delta)*360;
   return fade(hue,12,28)*fade(Math.abs(a.s-b.s),.28,.55)*clamp((a.s-.12)/.13)*clamp((a.v-.06)/.1);

@@ -41,7 +41,7 @@ test('one shared arena, authoritative controller, shirt registration and delayed
  b.send({type:'start'});assert.match((await b.next('error')).message,/host/);
  const third=await client('Third');assert.match((await third.next('error')).message,/two player/);third.ws.close();
  a.send({type:'start'});assert.match((await a.next('error')).message,/register/);
- a.send({type:'shirt',profile:{}});assert.match((await a.next('error')).message,/Invalid shirt/);
+ a.send({type:'shirt',profile:{}});assert.match((await a.next('error')).message,/Invalid headband/);
  a.send({type:'shirt',profile:red});b.send({type:'shirt',profile:red});await a.next('state',m=>m.room.players.every(p=>p.shirt));
  a.send({type:'start'});assert.match((await a.next('error')).message,/too similar/);
  b.send({type:'shirt',profile:blue});await a.next('state',m=>similarity(m.room.players.find(p=>p.id===bw.id)?.shirt,blue)>.9);
