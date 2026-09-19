@@ -42,7 +42,7 @@ Fireball uses a coarse directional selection within 10 degrees, maximum 150m, fr
 
 Keep the browser foregrounded and screen awake. Backgrounded iPhones can suspend the connection and sensors. Reconnection preserves identity for up to 60 seconds; stale positions are removed from aim selection. Player location stops sharing when Stop or Leave is tapped. Server-side location expires for targeting after 10 seconds, clears on disconnect, and match state exists only in memory. Browser session storage holds a reconnect token; local storage holds the chosen name/server address.
 
-Solo practice is explicitly simulated and tests controls without permission prompts. It does not validate real-world GPS, camera, microphone or network quality.
+Solo practice opens the rear camera, with a permission prompt if needed, and places a simulated target over the live view. It requires no location or compass access. Camera permission failures leave an Enable camera retry button. The target remains simulated: practice does not validate real-world GPS accuracy or multiplayer network quality.
 
 ## Field acceptance checks still required
 

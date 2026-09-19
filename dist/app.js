@@ -12,7 +12,13 @@ $('name').value=safeRead('fieldspell-name');$('server-url').value=safeRead('fiel
 const notify=text=>{$('toast').textContent=text;clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('toast').textContent='',4000);};
 function send(message){if(socket?.readyState===WebSocket.OPEN)socket.send(JSON.stringify(message));}
 function effect(spell){$('fx').className='';void $('fx').offsetWidth;$('fx').className=spell;}
-function showArena(){ $('lobby').hidden=true;$('arena').hidden=false; }
+function showArena(){
+ $('lobby').hidden=true;$('arena').hidden=false;
+ $('compass').hidden=practice;$('location').hidden=practice;
+ $('camera-instructions').textContent=practice?'Practice spells with a simulated target over your camera view.':'Camera + location + compass. Hold your phone upright.';
+ $('camera-privacy').textContent=practice?'Camera video stays on your phone. Location and compass are not needed for practice.':'Your location is shared with players in this arena. Camera video is not uploaded.';
+ $('camera-prompt').hidden=!!stream?.active;
+}
 function setError(text){$('join-status').textContent=text;$('join').disabled=false;notify(text);}
 function endpoint(){const raw=safeRead('fieldspell-server');const url=new URL(raw||location.origin);if(!['https:','http:'].includes(url.protocol))throw Error('Enter an https:// game server URL.');if(location.protocol==='https:'&&url.protocol!=='https:')throw Error('The game server needs HTTPS.');url.protocol=url.protocol==='https:'?'wss:':'ws:';url.pathname='/ws';url.search='';url.hash='';return url.href;}
 function connect(){
@@ -39,15 +45,28 @@ $('join-form').onsubmit=e=>{e.preventDefault();if(!$('name').value.trim())return
 $('settings-open').onclick=()=>$('settings').showModal();
 $('settings-save').onclick=e=>{const raw=$('server-url').value.trim();if(raw){try{const u=new URL(raw);if(!['http:','https:'].includes(u.protocol))throw Error();}catch{e.preventDefault();$('server-url').setCustomValidity('Enter an http:// or https:// URL.');$('server-url').reportValidity();return;}}safeWrite('fieldspell-server',raw);sessionStorage.removeItem('fieldspell-token');};
 $('server-url').oninput=()=>$('server-url').setCustomValidity('');
-$('practice').onclick=()=>{practice=true;leaving=true;socket?.close();myId='self';offset=0;const make=(id,name)=>({id,name,health:100,shieldUntil:0,cooldowns:{},connected:true,location:null});room={phase:'playing',hostId:myId,endsAt:Date.now()+180000,winners:[],players:[make(myId,$('name').value.trim()||'You'),make('dummy','Practice target')]};showArena();$('camera-prompt').hidden=true;$('connection').textContent='Solo practice · simulated target';$('vision-status').textContent='No live sensors';renderState();};
+$('practice').onclick=()=>{practice=true;leaving=true;socket?.close();myId='self';offset=0;const make=(id,name)=>({id,name,health:100,shieldUntil:0,cooldowns:{},connected:true,location:null});room={phase:'playing',hostId:myId,endsAt:Date.now()+180000,winners:[],players:[make(myId,$('name').value.trim()||'You'),make('dummy','Practice target')]};showArena();$('connection').textContent='Solo practice · simulated target';renderState();if(!stream?.active)startCamera();};
 function stopSensors(){stream?.getTracks().forEach(t=>t.stop());stream=null;$('camera').srcObject=null;if(watchId!==null)navigator.geolocation.clearWatch(watchId);watchId=null;position=null;heading=null;headingAt=0;window.removeEventListener('deviceorientation',onOrientation);window.removeEventListener('deviceorientationabsolute',onOrientation);orientationActive=false;voice.stop();}
 $('leave').onclick=()=>{leaving=true;clearTimeout(reconnectTimer);if(!practice)send({type:'leave'});socket?.close();sessionStorage.removeItem('fieldspell-token');stopSensors();room=null;myId=null;practice=false;joined=false;selected=null;rosterSignature='';$('arena').hidden=true;$('lobby').hidden=false;$('camera-prompt').hidden=false;$('boxes').replaceChildren();$('location').textContent='Share location';$('join-status').textContent='One shared arena · 2–12 players';};
-async function startCamera(){if(!navigator.mediaDevices?.getUserMedia){notify('Camera requires Safari or Chrome over HTTPS.');return;}try{stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720}},audio:false});$('camera').srcObject=stream;await $('camera').play();$('camera-prompt').hidden=true;}catch{notify('Camera access was denied. Enable it in your browser settings.');}}
+let cameraStarting=false;
+async function startCamera(){
+ if(cameraStarting||stream?.active)return;
+ if(!navigator.mediaDevices?.getUserMedia){notify('Camera requires Safari or Chrome over HTTPS.');return;}
+ cameraStarting=true;$('camera-start').disabled=true;$('camera-start').textContent='Opening camera…';
+ try{
+  const nextStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720}},audio:false});
+  if($('arena').hidden){nextStream.getTracks().forEach(t=>t.stop());return;}
+  stream=nextStream;$('camera').srcObject=stream;await $('camera').play();$('camera-prompt').hidden=true;
+ }catch(e){
+  stream?.getTracks().forEach(t=>t.stop());stream=null;$('camera').srcObject=null;$('camera-prompt').hidden=false;
+  notify(e.name==='NotAllowedError'?'Camera access was denied. Allow it in your browser settings, then tap Enable camera.':'Could not open the camera. Close other camera apps, then tap Enable camera to retry.');
+ }finally{cameraStarting=false;$('camera-start').disabled=false;$('camera-start').textContent='Enable camera';}
+}
 function shareLocation(){if(practice){notify('Practice uses a simulated target. Join the arena for GPS.');return;}if(watchId!==null){navigator.geolocation.clearWatch(watchId);watchId=null;position=null;send({type:'location',location:null});$('location').textContent='Share location';return;}if(!navigator.geolocation){notify('Location is unavailable in this browser.');return;}$('location').textContent='Locating…';watchId=navigator.geolocation.watchPosition(p=>{position={latitude:p.coords.latitude,longitude:p.coords.longitude,accuracy:p.coords.accuracy,at:Date.now()};$('location').textContent=`GPS ±${Math.round(position.accuracy)}m · Stop`;sendPosition();},e=>{notify(e.code===1?'Allow location in Safari settings, then try again.':'No fresh GPS fix. Move outdoors and retry.');if(e.code===1){navigator.geolocation.clearWatch(watchId);watchId=null;$('location').textContent='Share location';}},{enableHighAccuracy:true,maximumAge:0,timeout:15000});}
 function sendPosition(){if(position&&Date.now()-position.at<10000&&Date.now()-lastPositionSent>1200){send({type:'location',location:position});lastPositionSent=Date.now();}}
 function onOrientation(e){const h=cameraHeading(e);upright=e.beta==null||(e.beta>35&&e.beta<145&&Math.abs(e.gamma||0)<45);if(h!==null){heading=heading===null?h:(heading+wrap(h-heading)*.22+360)%360;headingAt=Date.now();}}
 async function enableCompass(){try{if(typeof DeviceOrientationEvent==='undefined')throw Error();if(typeof DeviceOrientationEvent.requestPermission==='function'){const granted=await DeviceOrientationEvent.requestPermission();if(granted!=='granted')throw Error();}if(!orientationActive){window.addEventListener('deviceorientation',onOrientation);window.addEventListener('deviceorientationabsolute',onOrientation);orientationActive=true;}notify('Hold your phone upright in portrait. Compass readings can drift.');}catch{notify('Compass unavailable. Allow Motion & Orientation in Safari.');}}
-$('camera-start').onclick=()=>{enableCompass();startCamera();if(watchId===null)shareLocation();};$('compass').onclick=enableCompass;$('location').onclick=shareLocation;
+$('camera-start').onclick=()=>{startCamera();if(!practice){enableCompass();if(watchId===null)shareLocation();}};$('compass').onclick=enableCompass;$('location').onclick=shareLocation;
 function renderState(){if(!room)return;const me=room.players.find(p=>p.id===myId);if(!me)return;$('health-value').innerHTML=`${me.health} <small>/ 100</small>`;$('health-fill').style.width=me.health+'%';$('room-label').textContent=practice?'SOLO PRACTICE':'SHARED ARENA';$('start-round').hidden=room.hostId!==myId;$('start-round').disabled=room.phase==='playing';$('start-round').textContent=room.phase==='finished'?'New round':'Start round';
  const signature=JSON.stringify(room.players.map(p=>[p.id,p.name,p.health,p.connected,p.location&&Math.round(p.location.accuracy)]));
  if(signature!==rosterSignature){rosterSignature=signature;$('players').replaceChildren(...room.players.filter(p=>p.id!==myId).map(p=>{const el=document.createElement('div');el.className='player'+(p.health<=0?' dead':'');const name=document.createElement('b');name.textContent=p.name;const status=document.createElement('small');status.textContent=!p.connected?'Reconnecting…':`${p.health} HP · ${p.location?'GPS ±'+Math.round(p.location.accuracy)+'m':'No location'}`;el.append(name,status);return el;}));}
@@ -58,7 +77,7 @@ function renderAim(){if(!room)return;const cs=candidates().filter(p=>p.fresh);co
  if(!practice&&socket?.readyState!==WebSocket.OPEN)selected=null;
  if(selected!==lockId){lockSince=Date.now();lockId=selected;}const locked=selected&&Date.now()-lockSince>350;
  $('reticle').classList.toggle('locked',!!locked);$('target-status').textContent=!practice&&!position?'Share location to see players.':!practice&&!upright?'Hold your phone upright in portrait.':!practice&&(heading===null||Date.now()-headingAt>2500)?'Enable compass to aim.':!cs.length?'Waiting for fresh player locations…':result.reason;
- $('vision-status').textContent=practice?'Simulated position':heading===null?'Compass off':`${Math.round(heading)}° · ${position?'GPS ±'+Math.round(position.accuracy)+'m':'GPS off'}`;
+ $('vision-status').textContent=practice?(stream?.active?'Camera on · simulated target':'Camera off · simulated target'):heading===null?'Compass off':`${Math.round(heading)}° · ${position?'GPS ±'+Math.round(position.accuracy)+'m':'GPS off'}`;
  // Fixed-height compass labels: deliberately not presented as tracked head positions.
  const visible=cs.filter(p=>Math.abs(p.delta)<48).sort((a,b)=>a.distance-b.distance);
  $('boxes').replaceChildren(...visible.map((p,i)=>{const el=document.createElement('div');el.className='geo-label'+(locked&&p.id===selected?' aimed':'');el.style.left=(50+p.delta/96*100)+'%';el.style.top=(31+(i%3)*7)+'%';const name=document.createElement('b');name.textContent=p.name;const details=document.createElement('small');details.textContent=`${Math.round(p.distance)}m · ±${Math.round(p.error)}m`;const meter=document.createElement('meter');meter.min=0;meter.max=100;meter.value=p.health;meter.setAttribute('aria-label',p.name+' health');el.append(name,meter,details);return el;}));
