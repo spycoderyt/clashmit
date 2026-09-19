@@ -39,7 +39,7 @@ test('one shared arena, authoritative controller, shirt registration and delayed
  async function client(name,token){const ws=new WebSocket(url),messages=[];ws.on('message',b=>messages.push(JSON.parse(b)));await new Promise(r=>ws.on('open',r));const send=m=>ws.send(JSON.stringify(m));const next=async(type,predicate=()=>true)=>{const end=Date.now()+2500;while(Date.now()<end){const i=messages.findIndex(m=>m.type===type&&predicate(m));if(i>=0)return messages.splice(i,1)[0];await new Promise(r=>setTimeout(r,10));}throw Error('Timed out waiting for '+type);};send({type:'join',name,token});return {ws,send,next,messages};}
  const a=await client('Merlin'),aw=await a.next('welcome');const b=await client('Morgana'),bw=await b.next('welcome');assert.equal(aw.code,bw.code);
  b.send({type:'start'});assert.match((await b.next('error')).message,/host/);
- const third=await client('Third');assert.match((await third.next('error')).message,/two player/);third.ws.close();
+ const third=await client('Third');await third.next('welcome');await a.next('state',m=>m.room.players.length===3);third.send({type:'leave'});await a.next('state',m=>m.room.players.length===2);
  a.send({type:'start'});assert.match((await a.next('error')).message,/register/);
  a.send({type:'shirt',profile:{}});assert.match((await a.next('error')).message,/Invalid headband/);
  a.send({type:'shirt',profile:red});b.send({type:'shirt',profile:red});await a.next('state',m=>m.room.players.every(p=>p.shirt));

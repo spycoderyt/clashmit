@@ -1,5 +1,9 @@
 # Fieldspell — two-player headband test
 
+## Multiplayer capacity work in progress
+
+The lobby now accepts up to 12 connections, with a regression test for the limit. This is capacity plumbing only: camera targeting still selects one opponent, and red/blue bands cannot distinguish multiple individual players wearing the same color. Keep gameplay tests to two players until team health or unique player colors and multi-target tracking are implemented. The 12-player UI labels do not indicate complete multiplayer support.
+
 One shared arena, exactly two players, no room codes. The first connected player controls three-minute rounds. Everyone enters their own name and scans a red or blue headband using the selfie camera. No GPS, compass, badges, or manual identity pairing.
 
 ## Run and play

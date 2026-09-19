@@ -10,6 +10,7 @@ import {bandColor} from '../dist/headband.js';
 
 const root=fileURLToPath(new URL('../dist/',import.meta.url));
 const mime={'.html':'text/html; charset=utf-8','.css':'text/css','.js':'text/javascript','.svg':'image/svg+xml','.wasm':'application/wasm'};
+export const MAX_PLAYERS=12;
 const allowedOrigins=(process.env.ALLOWED_ORIGINS||'').split(',').filter(Boolean);
 export function createGameServer(){
  const rooms=new Map(), clients=new Map();
@@ -25,7 +26,7 @@ export function createGameServer(){
  });
  const wss=new WebSocketServer({server,path:'/ws',maxPayload:8192,verifyClient:({origin,req})=>!allowedOrigins.length||allowedOrigins.includes(origin)||origin===`https://${req.headers.host}`||origin===`http://${req.headers.host}`});
  const send=(ws,msg)=>{if(ws.readyState===WebSocket.OPEN)ws.send(JSON.stringify(msg));};
- function view(room){const now=Date.now();for(const p of room.players)replenishMana(p,now);return {code:room.code,hostId:room.hostId,phase:room.phase,endsAt:room.endsAt,winners:room.winners,players:room.players.map(({token,socket,disconnectedAt,...p})=>p),shots:room.shots||[],combat:{mana:MANA,spells:SPELLS},serverTime:now};}
+ function view(room){const now=Date.now();for(const p of room.players)replenishMana(p,now);return {maxPlayers:MAX_PLAYERS,code:room.code,hostId:room.hostId,phase:room.phase,endsAt:room.endsAt,winners:room.winners,players:room.players.map(({token,socket,disconnectedAt,...p})=>p),shots:room.shots||[],combat:{mana:MANA,spells:SPELLS},serverTime:now};}
  function broadcast(room,event){for(const p of room.players){if(event)send(p.socket,event);send(p.socket,{type:'state',room:view(room)});}}
  function finish(room){if(room.phase!=='playing')return;const alive=room.players.filter(p=>p.health>0);if(alive.length<=1||Date.now()>=room.endsAt){room.phase='finished';const best=Math.max(...alive.map(p=>p.health),0);room.winners=alive.filter(p=>p.health===best).map(p=>p.id);}}
  wss.on('connection',ws=>{
@@ -50,7 +51,7 @@ export function createGameServer(){
      if(player){if(player.socket!==ws){clients.delete(player.socket);player.socket.close(4000,'Opened on another connection');}player.socket=ws;player.connected=true;player.disconnectedAt=null;}
      else{
       if(room.phase==='playing')return send(ws,{type:'error',message:'A round is running. Join when it finishes.'});
-      if(room.players.length>=2)return send(ws,{type:'error',message:'This test has exactly two player slots.'});
+      if(room.players.length>=MAX_PLAYERS)return send(ws,{type:'error',message:`The arena is full (${MAX_PLAYERS} players).`});
       if(room.players.some(p=>p.name.toLowerCase()===name.toLowerCase()))return send(ws,{type:'error',message:'That mage name is taken. Choose another.'});
       player={id:randomUUID(),token:randomBytes(24).toString('hex'),name,health:100,mana:MANA.max,manaUpdatedAt:Date.now(),shieldUntil:0,cooldowns:{},connected:true,shirt:null,socket:ws};room.players.push(player);if(!room.players.some(p=>p.id===room.hostId&&p.connected))room.hostId=player.id;
      }
