@@ -73,7 +73,7 @@ function endpoint(){const url=new URL(location.hostname.endsWith('.chatgpt.site'
 const connection=createGameConnection({
  url:endpoint,
  join:()=>({type:'join',name:$('name').value.trim(),token:sessionStorage.getItem('fieldspell-token')}),
- onStatus:status=>{$('connection').textContent=status==='connected'?'Connected':status==='connecting'?'Connecting…':'Reconnecting · casting paused';},
+ onStatus:status=>{$('connection').textContent=status==='connected'?'Connected':status==='connecting'?'Connecting…':'Reconnecting · casting paused';if(!$('lobby').hidden)$('join-status').textContent=status==='connected'?'Joined':status==='connecting'?'Joining the game…':'Trying to reconnect…';},
  onDisconnect:()=>{selected=null;lockId=null;castPending=false;clearFlights();},
  onError:message=>{setError(message);$('connection').textContent='Disconnected · rejoin the arena';},
  onMessage:m=>{
@@ -92,7 +92,7 @@ function beginPractice(realTracking=false){clearFlights();trackingPractice=realT
 $('shirt-test').onclick=()=>beginPractice(true);
 function stopCamera(){cameraEpoch++;identityTrack.reset();tracker.stop();stream?.getTracks().forEach(t=>t.stop());stream=null;$('camera').srcObject=null;trackingStatus='Camera off';selected=null;lockId=null;targetOverlay.hide();}
 function stopSensors(){clearFlights();stopCamera();shirtCamera.stop();fireScene?.clear();clearTimeout(effectTimer);$('fx').className='';$('fx').replaceChildren();voice.stop();}
-$('leave').onclick=()=>{if(!practice)send({type:'leave'});connection.stop();sessionStorage.removeItem('fieldspell-token');$('arena').hidden=true;stopSensors();completedShots.clear();serverClock.reset();room=null;myId=null;practice=false;trackingPractice=false;joined=false;rosterSignature='';$('lobby').hidden=false;$('camera-prompt').hidden=false;targetOverlay.hide();$('join-status').textContent='One shared arena';};
+$('leave').onclick=()=>{if(!practice)send({type:'leave'});connection.stop();sessionStorage.removeItem('fieldspell-token');$('arena').hidden=true;stopSensors();completedShots.clear();serverClock.reset();room=null;myId=null;practice=false;trackingPractice=false;joined=false;rosterSignature='';$('lobby').hidden=false;$('camera-prompt').hidden=false;targetOverlay.hide();$('join-status').textContent='Everyone joins the same game.';};
 async function startCamera(){
  if(cameraStarting||stream?.active)return;if(!navigator.mediaDevices?.getUserMedia){notify('Camera requires Safari or Chrome over HTTPS.');return;}
  cameraStarting=true;const epoch=cameraEpoch;$('camera-start').disabled=true;
