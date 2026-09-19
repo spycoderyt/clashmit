@@ -12,24 +12,34 @@ const root=fileURLToPath(new URL('../dist/',import.meta.url));
 const mime={'.html':'text/html; charset=utf-8','.css':'text/css','.js':'text/javascript','.svg':'image/svg+xml','.wasm':'application/wasm'};
 export const MAX_PLAYERS=12;
 const allowedOrigins=(process.env.ALLOWED_ORIGINS||'').split(',').filter(Boolean);
-export function createGameServer(){
+export function createGameServer({maxPlayers=MAX_PLAYERS,maxBufferedBytes=256*1024}={}){
+ if(!Number.isInteger(maxPlayers)||maxPlayers<2||maxPlayers>100)throw new Error('Invalid player capacity');
+ let closing=false,closePromise;
  const rooms=new Map(), clients=new Map();
  const server=http.createServer(async(req,res)=>{
-  const url=new URL(req.url,'http://localhost');
-  if(url.pathname==='/health'){res.writeHead(200,{'Content-Type':'application/json'});return res.end('{"ok":true}');}
-  if(!['GET','HEAD'].includes(req.method)){res.writeHead(405);return res.end();}
   try{
+  const url=new URL(req.url,'http://localhost');
+  if(url.pathname==='/health'){res.writeHead(closing?503:200,{'Content-Type':'application/json','Cache-Control':'no-store'});return res.end(JSON.stringify({ok:!closing}));}
+  if(closing){res.writeHead(503,{'Retry-After':'2'});return res.end('Server restarting');}
+  if(!['GET','HEAD'].includes(req.method)){res.writeHead(405);return res.end();}
    const path=resolve(root,'.'+decodeURIComponent(url.pathname==='/'?'/index.html':url.pathname));
    if(!path.startsWith(root)){res.writeHead(403);return res.end();}
-   const body=await readFile(path);res.writeHead(200,{'Content-Type':mime[extname(path)]||'application/octet-stream','X-Content-Type-Options':'nosniff','Referrer-Policy':'same-origin','Cache-Control':extname(path)==='.html'?'no-store':'public, max-age=60'});res.end(req.method==='HEAD'?undefined:body);
+   const body=await readFile(path);res.writeHead(200,{'Content-Type':mime[extname(path)]||'application/octet-stream','X-Content-Type-Options':'nosniff','Referrer-Policy':'same-origin','Cache-Control':url.pathname.startsWith('/vendor/')||url.pathname.startsWith('/models/')?'public, max-age=3600':'no-cache'});res.end(req.method==='HEAD'?undefined:body);
   }catch{res.writeHead(404);res.end('Not found');}
  });
- const wss=new WebSocketServer({server,path:'/ws',maxPayload:8192,verifyClient:({origin,req})=>!allowedOrigins.length||allowedOrigins.includes(origin)||origin===`https://${req.headers.host}`||origin===`http://${req.headers.host}`});
- const send=(ws,msg)=>{if(ws.readyState===WebSocket.OPEN)ws.send(JSON.stringify(msg));};
- function view(room){const now=Date.now();for(const p of room.players)replenishMana(p,now);return {maxPlayers:MAX_PLAYERS,code:room.code,hostId:room.hostId,phase:room.phase,endsAt:room.endsAt,winners:room.winners,players:room.players.map(({token,socket,disconnectedAt,...p})=>p),shots:room.shots||[],combat:{mana:MANA,spells:SPELLS},serverTime:now};}
- function broadcast(room,event){for(const p of room.players){if(event)send(p.socket,event);send(p.socket,{type:'state',room:view(room)});}}
+ const wss=new WebSocketServer({server,path:'/ws',maxPayload:8192,verifyClient:({origin,req})=>!closing&&(!allowedOrigins.length||allowedOrigins.includes(origin)||origin===`https://${req.headers.host}`||origin===`http://${req.headers.host}`)});
+ function sendEncoded(ws,payload){
+  if(closing||ws.readyState!==WebSocket.OPEN)return;
+  // A stalled phone must not accumulate unlimited old snapshots in server memory.
+  if(ws.bufferedAmount>maxBufferedBytes){ws.terminate();return;}
+  try{ws.send(payload,error=>{if(error)ws.terminate();});}catch{ws.terminate();}
+ }
+ const send=(ws,msg)=>sendEncoded(ws,JSON.stringify(msg));
+ function view(room){const now=Date.now();for(const p of room.players)replenishMana(p,now);return {maxPlayers,code:room.code,hostId:room.hostId,phase:room.phase,endsAt:room.endsAt,winners:room.winners,players:room.players.map(({token,socket,disconnectedAt,...p})=>p),shots:room.shots||[],combat:{mana:MANA,spells:SPELLS},serverTime:now};}
+ function broadcast(room,event){if(closing)return;const state=JSON.stringify({type:'state',room:view(room)}),encodedEvent=event?JSON.stringify(event):null;for(const p of room.players){if(encodedEvent)sendEncoded(p.socket,encodedEvent);sendEncoded(p.socket,state);}}
  function finish(room){if(room.phase!=='playing')return;const alive=room.players.filter(p=>p.health>0);if(alive.length<=1||Date.now()>=room.endsAt){room.phase='finished';const best=Math.max(...alive.map(p=>p.health),0);room.winners=alive.filter(p=>p.health===best).map(p=>p.id);}}
  wss.on('connection',ws=>{
+  ws.on('error',()=>ws.terminate());
   ws.isAlive=true;ws.on('pong',()=>ws.isAlive=true);let count=0,windowStart=Date.now();
   const timeout=setTimeout(()=>{if(!clients.has(ws))ws.close(1008,'Join the arena first');},10000);timeout.unref();
   ws.on('message',raw=>{
@@ -51,7 +61,7 @@ export function createGameServer(){
      if(player){if(player.socket!==ws){clients.delete(player.socket);player.socket.close(4000,'Opened on another connection');}player.socket=ws;player.connected=true;player.disconnectedAt=null;}
      else{
       if(room.phase==='playing')return send(ws,{type:'error',message:'A round is running. Join when it finishes.'});
-      if(room.players.length>=MAX_PLAYERS)return send(ws,{type:'error',message:`The arena is full (${MAX_PLAYERS} players).`});
+      if(room.players.length>=maxPlayers)return send(ws,{type:'error',message:`The arena is full (${maxPlayers} players).`});
       if(room.players.some(p=>p.name.toLowerCase()===name.toLowerCase()))return send(ws,{type:'error',message:'That mage name is taken. Choose another.'});
       player={id:randomUUID(),token:randomBytes(24).toString('hex'),name,health:100,mana:MANA.max,manaUpdatedAt:Date.now(),shieldUntil:0,cooldowns:{},connected:true,shirt:null,socket:ws};room.players.push(player);if(!room.players.some(p=>p.id===room.hostId&&p.connected))room.hostId=player.id;
      }
@@ -84,6 +94,19 @@ export function createGameServer(){
  });
  const tick=setInterval(()=>{for(const [code,room]of rooms){for(const p of room.players)if(!p.connected&&Date.now()-p.disconnectedAt>60000){p.health=0;p.expired=true;}room.players=room.players.filter(p=>!p.expired);if(!room.players.some(p=>p.id===room.hostId&&p.connected))room.hostId=room.players.find(p=>p.connected)?.id||room.players[0]?.id;if(!room.players.length){rooms.delete(code);continue;}finish(room);for(const event of expireProjectiles(room))broadcast(room,event);broadcast(room);}},500);tick.unref();
  const heartbeat=setInterval(()=>{for(const ws of wss.clients){if(!ws.isAlive){ws.terminate();continue;}ws.isAlive=false;ws.ping();}},15000);heartbeat.unref();
- return {server,rooms,close:()=>{clearInterval(tick);clearInterval(heartbeat);for(const ws of wss.clients)ws.terminate();wss.close();return new Promise(r=>server.close(r));}};
+ function close({graceMs=0}={}){
+  if(closePromise)return closePromise;
+  closing=true;clearInterval(tick);clearInterval(heartbeat);
+  closePromise=new Promise(resolve=>{
+   const force=setTimeout(()=>{for(const ws of wss.clients)ws.terminate();server.closeAllConnections();},graceMs);force.unref();
+   for(const ws of wss.clients){if(graceMs)ws.close(1012,'Server restarting');else ws.terminate();}
+   wss.close();server.close(()=>{clearTimeout(force);resolve();});
+  });return closePromise;
+ }
+ return {server,rooms,close};
 }
-if(process.argv[1]===fileURLToPath(import.meta.url)){const game=createGameServer();const port=Number(process.env.PORT||3000);game.server.listen(port,'0.0.0.0',()=>console.log(`Fieldspell ready at http://localhost:${port}`));}
+if(process.argv[1]===fileURLToPath(import.meta.url)){
+ const game=createGameServer();const port=Number(process.env.PORT||3000);
+ game.server.listen(port,'0.0.0.0',()=>console.log(`ClashMIT ready on port ${port}`));
+ for(const signal of ['SIGTERM','SIGINT'])process.once(signal,()=>{void game.close({graceMs:3000}).then(()=>process.exit(0));});
+}

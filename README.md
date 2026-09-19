@@ -1,5 +1,7 @@
 # ClashMIT — browser spell tag
 
+For remote hosting, costs, deployment from `main`, and step-by-step Porkbun DNS setup for **clashmit.lol**, see [Hosting and custom domain](docs/hosting-and-domain.md).
+
 ## Team setup
 
 Repository: [spycoderyt/clashmit](https://github.com/spycoderyt/clashmit). The app currently displays the original Fieldspell name.
@@ -86,7 +88,7 @@ git commit -m "Describe the change"
 git push -u origin feature/my-feature
 ```
 
-Replace `<changed-files>` with the files you intend to commit, and use your actual branch name. Open a pull request on GitHub from your branch into `main`. Have a teammate review it, resolve any conflicts, then merge it. These are team conventions; branch protection and required checks are not configured yet.
+Replace `<changed-files>` with the files you intend to commit, and use your actual branch name. Open a pull request on GitHub from your branch into `main`. Have a teammate review it, resolve any conflicts, then merge it. GitHub Actions runs tests and builds the container for pull requests and pushes to `main`. Branch protection and required checks are not configured yet; the team should review the check results before merging.
 
 After a merge, commit unfinished work on your feature branch before switching. Everyone, including the owner, can update and start their next task with:
 
@@ -137,13 +139,15 @@ The intended flow is **feature branch → reviewed pull request → merge to `ma
 Railway can provide this once the owner connects the repository:
 
 1. Create a Railway service from `spycoderyt/clashmit`, grant repository access, and select `main` as its deployment branch.
-2. Use the existing root `Dockerfile`, which serves both the frontend and WebSocket game server. Configure `/health` as the health-check path, public networking to the app’s listening port, and exactly **one running instance**. Multiple instances would create separate in-memory arenas.
-3. Enable automatic deployments. To require passing tests before deploying, first add a GitHub Actions workflow running `npm ci` and `npm test` on pull requests and pushes to `main`, then enable Railway’s **Wait for CI**. That workflow and setting are not installed yet.
+2. Use the existing root `Dockerfile`, which serves both the frontend and WebSocket game server. The included `railway.json` configures `/health`, restart retries, one replica, and no sleeping. Configure public networking to the app’s listening port and keep exactly **one running instance in one region**. Multiple instances would create separate in-memory arenas.
+3. Enable automatic deployments. To require passing tests before deploying, enable Railway’s **Wait for CI** for the included GitHub Actions **Tests** workflow. The workflow is checked in; the Railway connection and setting still need to be enabled.
 4. Verify a real deployment and multiplayer session at the Railway HTTPS URL before sharing it. Once the custom domain is configured, point `clashmit.lol` to this same service using the DNS values supplied by the host. Phones should leave Connection settings empty so both the frontend and game use that domain.
 
 See [Railway’s GitHub autodeploy instructions](https://docs.railway.com/deployments/github-autodeploys). Once configured, deployments run remotely and no laptop or Cloudflare tunnel is needed for the shared game. Deployments still restart the in-memory arena, so coordinate merges outside demo rounds. The included `fly.toml` is an alternative manual deployment template, not an active GitHub deployment workflow.
 
 ## Multiplayer capacity work in progress
+
+The updated plan is for everyone to play at one venue wearing **ordered two-color headbands** (one top stripe, one bottom stripe). See [Two-stripe marker design](docs/two-stripe-headbands.md) for ID capacity, registration, tracking, and field-test requirements. This design is not implemented in the current single-color tracker yet.
 
 The lobby now accepts up to 12 connections, with a regression test for the limit. This is capacity plumbing only: camera targeting still selects one opponent, and red/blue bands cannot distinguish multiple individual players wearing the same color. Keep gameplay tests to two players until team health or unique player colors and multi-target tracking are implemented. The 12-player UI labels do not indicate complete multiplayer support.
 
@@ -192,6 +196,6 @@ Optional `ALLOWED_ORIGINS` is a comma-separated browser origin allowlist; same o
 
 ## Verification
 
-`npm test` covers color matching/ambiguity, connected regions, headband/person association helpers, fast headband motion/scale changes and ambiguity, screen crop coordinates, spell rules, tracking-loss misses, delayed impacts, shields at impact, replay/early-impact rejection, two-client WebSocket state, required headband registration, two-player capacity, reconnection, host control, and streaming voice behavior.
+`npm test` covers color matching/ambiguity, connected regions, headband/person association helpers, fast headband motion/scale changes and ambiguity, screen crop coordinates, spell rules, tracking-loss misses, delayed impacts, shields at impact, replay/early-impact rejection, two-client WebSocket state, required headband registration, 12-player capacity, a test-only 30-client infrastructure check, reconnection deadlines and silent sockets, slow-client backpressure, graceful server restarts, host control, and streaming voice behavior.
 
 Third-party assets: Three.js (MIT), MediaPipe Tasks Vision (Apache-2.0), Google's EfficientDet Lite0 and BlazeFace short-range models. See `dist/vendor/THREE-LICENSE.txt` and `dist/vendor/mediapipe/NOTICE.txt`.

@@ -1,3 +1,4 @@
+import {createGameConnection} from './connection.js?v=hosting1';
 import {createTargetOverlay} from './target-overlay.js?v=smooth1';
 import {SPELLS,MANA,manaAt,castSpell,launchProjectile,impactProjectile,FLIGHT_MS} from './rules.js?v=combat1';
 import {createServerClock} from './server-clock.js?v=combat1';
@@ -17,15 +18,15 @@ const audio=createSpellAudio();document.addEventListener('pointerdown',()=>{void
 $('sound-toggle').onclick=()=>{const muted=audio.toggle();$('sound-toggle').textContent=muted?'Sound off':'Sound on';$('sound-toggle').setAttribute('aria-pressed',String(muted));$('sound-toggle').setAttribute('aria-label',muted?'Enable spell sounds':'Mute spell sounds');};
 const safeRead=key=>{try{return localStorage.getItem(key)||'';}catch{return '';}};
 const safeWrite=(key,value)=>{try{localStorage.setItem(key,value);}catch{}};
-let socket,room,myId,practice=false,trackingPractice=false,leaving=false,joined=false,retry=0,reconnectTimer;
-let stream,selected=null,lastPing=0,rosterSignature='',toastTimer,lockSince=0,lockId=null;
+let room,myId,practice=false,trackingPractice=false,joined=false;
+let stream,selected=null,rosterSignature='',toastTimer,lockSince=0,lockId=null;
 let detection={people:[],width:0,height:0,at:0},trackingStatus='Camera off',fireScene,graphicsLoading,effectTimer,cameraStarting=false,cameraEpoch=0;
 const simulated=()=>practice&&!trackingPractice;
 const serverClock=createServerClock();
 const now=()=>practice?Date.now():serverClock.now(),me=()=>room?.players.find(p=>p.id===myId),opponent=()=>room?.players.find(p=>p.id!==myId);
 $('name').value=safeRead('fieldspell-name');$('server-url').value=safeRead('fieldspell-server');
 const notify=text=>{$('toast').textContent=text;clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('toast').textContent='',4000);};
-function send(message){if(socket?.readyState===WebSocket.OPEN)socket.send(JSON.stringify(message));}
+function send(message){return connection.send(message);}
 const identityTrack=createHeadbandMotion(),flights=new Map(),completedShots=new Set();
 const incoming=createIncomingFireballs({container:$('arena'),renderer:()=>fireScene,getAttacker:id=>{const p=matchedPerson();return p?.id===id&&p.confirmed&&p.fresh?{x:p.x,y:p.y}:null;},now});
 const tracker=createPersonTracker($('camera'),(people,width,height,at)=>{detection={people,width,height,at};identityTrack.update(people,at);},status=>{trackingStatus=status;},()=>({opponent:opponent()?.shirt,own:me()?.shirt,track:identityTrack.get()}));
@@ -53,7 +54,7 @@ function effect(spell,{shot,projectile=true}={}){
  const target=targetPoint(shot?.targetId)||{x:.5,y:.4};let depth=false;
  if(['fireball','lightning'].includes(spell)&&projectile&&shot){
   const flightMs=shot.flightMs||FLIGHT_MS,elapsedMs=Math.max(0,flightMs-((shot.impactAt??((shot.at||now())+flightMs))-now())),startedAt=performance.now()-elapsedMs,roundEndsAt=room.endsAt,actor=myId,flight=createFlight({startedAt,flightMs});
-  const timer=setInterval(()=>{const active=!!room&&room.endsAt===roundEndsAt&&myId===actor&&!document.hidden;const result=flight.step(performance.now(),simulated()||!!(matchedPerson()?.fresh&&matchedPerson()?.confirmed),active);if(result){clearInterval(timer);flights.delete(shot.shotId);if(!result.cancelled)completedShots.add(shot.shotId);if(!result.cancelled)finishShot(shot,result.tracked);}},25);flights.set(shot.shotId,timer);
+  const timer=setInterval(()=>{const active=!!room&&room.endsAt===roundEndsAt&&myId===actor&&!document.hidden;const result=flight.step(performance.now(),simulated()||(()=>{const target=matchedPerson();return target?.id===shot.targetId&&target.fresh&&target.confirmed;})(),active);if(result){clearInterval(timer);flights.delete(shot.shotId);if(!result.cancelled)completedShots.add(shot.shotId);if(!result.cancelled)finishShot(shot,result.tracked);}},25);flights.set(shot.shotId,timer);
   if(spell==='fireball'){try{depth=!!fireScene?.fire({...target,getTarget:()=>targetPoint(shot.targetId),flightMs,elapsedMs});}catch(e){console.warn('Fireball graphics fallback',e);}}
   else lightningEffect(target);
   notify(spell==='lightning'?'Lightning launched · pierces shields':'Fireball launched');
@@ -69,32 +70,33 @@ function handleImpact(m){
 function showArena(){loadGraphics();$('lobby').hidden=true;$('arena').hidden=false;$('shirt-open').hidden=simulated();$('tracking-retry').hidden=simulated();$('camera-instructions').textContent=trackingPractice?'Use the front camera to track your own registered headband.':practice?'Practice a 3D fireball over your camera with a simulated target.':'Scan your headband, then point the camera at your opponent.';$('camera-privacy').textContent='Camera frames stay on your phone. No location permissions needed.';$('camera-prompt').hidden=!!stream?.active;}
 function setError(text){$('join-status').textContent=text;$('join').disabled=false;notify(text);}
 function endpoint(){const raw=safeRead('fieldspell-server');const fallback=location.hostname.endsWith('.chatgpt.site')?'https://psi-possibly-drain-upgrade.trycloudflare.com':location.origin;const url=new URL(raw||fallback);if(!['https:','http:'].includes(url.protocol))throw Error('Enter an HTTPS game server URL.');if(location.protocol==='https:'&&url.protocol!=='https:')throw Error('The game server needs HTTPS.');url.protocol=url.protocol==='https:'?'wss:':'ws:';url.pathname='/ws';url.search='';url.hash='';return url.href;}
-function connect(){
- clearTimeout(reconnectTimer);leaving=false;try{socket=new WebSocket(endpoint());}catch(e){setError(e.message);return;}$('connection').textContent='Connecting…';
- const timer=setTimeout(()=>{if(!joined){setError('Game server unavailable. Check Connection settings or try solo practice.');socket.close();}},7000);
- socket.onopen=()=>{retry=0;send({type:'join',name:$('name').value.trim(),token:sessionStorage.getItem('fieldspell-token')});};
- socket.onmessage=e=>{let m;try{m=JSON.parse(e.data);}catch{return;}
-  if(m.type==='welcome'){clearTimeout(timer);joined=true;myId=m.id;sessionStorage.setItem('fieldspell-token',m.token);showArena();$('join').disabled=false;$('connection').textContent='Connected';}
+const connection=createGameConnection({
+ url:endpoint,
+ join:()=>({type:'join',name:$('name').value.trim(),token:sessionStorage.getItem('fieldspell-token')}),
+ onStatus:status=>{$('connection').textContent=status==='connected'?'Connected':status==='connecting'?'Connecting…':'Reconnecting · casting paused';},
+ onDisconnect:()=>{selected=null;lockId=null;castPending=false;clearFlights();},
+ onError:message=>{setError(message);$('connection').textContent='Disconnected · rejoin the arena';},
+ onMessage:m=>{
+  if(m.type==='welcome'){if(myId&&myId!==m.id){clearFlights();completedShots.clear();identityTrack.reset();room=null;rosterSignature='';notify('The arena restarted. Scan your headband to join a new round.');}serverClock.reset();joined=true;myId=m.id;sessionStorage.setItem('fieldspell-token',m.token);showArena();$('join').disabled=false;}
   if(m.type==='state'){if(room&&room.endsAt!==m.room.endsAt)clearFlights();room=m.room;serverClock.bootstrap(room.serverTime);incoming.sync((room.shots||[]).filter(s=>s.targetId===myId));for(const shot of room.shots||[])if(shot.actorId===myId&&room.phase==='playing'&&now()<(shot.expiresAt??Infinity))effect(shot.spell||'fireball',{shot});renderState();}
   if(m.type==='spell'){if(m.actorId===myId){castPending=false;effect(m.spell,{shot:m});}else if(m.targetId===myId&&m.shotId){incoming.launch(m);audio.play(m.spell);}else if(m.spell==='shield')notify('Opponent shield active · lightning pierces it');}
   if(m.type==='impact')handleImpact(m);
   if(m.type==='round-start')notify('Round started. Keep your opponent in view.');
-  if(m.type==='error'){castPending=false;setError(m.message);if(!joined){clearTimeout(timer);leaving=true;socket.close();}}
+  if(m.type==='error'){castPending=false;setError(m.message);}
   if(m.type==='pong'){const receivedAt=Date.now();serverClock.pong(m.serverTime,m.at,receivedAt);$('connection').textContent=`Live · ${receivedAt-m.at}ms`;}
- };
- socket.onerror=()=>{if(!joined)setError('Cannot reach the game server. Check Connection settings.');};
- socket.onclose=e=>{clearTimeout(timer);if(leaving||practice)return;$('connection').textContent='Disconnected · casting paused';selected=null;clearFlights();if(e.code===4000){notify('This player was opened in another tab.');return;}if(joined)reconnectTimer=setTimeout(connect,Math.min(5000,800*2**retry++));else $('join').disabled=false;};
-}
+ }
+});
+function connect(){connection.start();}
 $('join-form').onsubmit=e=>{e.preventDefault();if(!$('name').value.trim())return;practice=false;trackingPractice=false;joined=false;$('join').disabled=true;safeWrite('fieldspell-name',$('name').value.trim());connect();};
 $('settings-open').onclick=()=>$('settings').showModal();
 $('settings-save').onclick=e=>{const raw=$('server-url').value.trim();if(raw){try{const u=new URL(raw);if(!['http:','https:'].includes(u.protocol))throw Error();}catch{e.preventDefault();$('server-url').setCustomValidity('Enter an HTTPS URL.');$('server-url').reportValidity();return;}}safeWrite('fieldspell-server',raw);sessionStorage.removeItem('fieldspell-token');};
 $('server-url').oninput=()=>$('server-url').setCustomValidity('');
-function beginPractice(realTracking=false){clearFlights();trackingPractice=realTracking;practice=true;leaving=true;socket?.close();myId='self';const make=(id,name)=>({id,name,health:100,mana:MANA.max,manaUpdatedAt:Date.now(),shieldUntil:0,cooldowns:{},connected:true});room={phase:'playing',hostId:myId,endsAt:Date.now()+180000,winners:[],players:[make(myId,$('name').value.trim()||'You'),make('dummy','Practice target')]};showArena();$('connection').textContent=trackingPractice?'Local headband test · no server':'Solo · simulated target';renderState();if(trackingPractice){room.players[1].name='Your headband';shirtCamera.open();}else startCamera();}
+function beginPractice(realTracking=false){clearFlights();trackingPractice=realTracking;practice=true;connection.stop();myId='self';const make=(id,name)=>({id,name,health:100,mana:MANA.max,manaUpdatedAt:Date.now(),shieldUntil:0,cooldowns:{},connected:true});room={phase:'playing',hostId:myId,endsAt:Date.now()+180000,winners:[],players:[make(myId,$('name').value.trim()||'You'),make('dummy','Practice target')]};showArena();$('connection').textContent=trackingPractice?'Local headband test · no server':'Solo · simulated target';renderState();if(trackingPractice){room.players[1].name='Your headband';shirtCamera.open();}else startCamera();}
 $('practice').onclick=()=>beginPractice(false);
 $('shirt-test').onclick=()=>beginPractice(true);
 function stopCamera(){cameraEpoch++;identityTrack.reset();tracker.stop();stream?.getTracks().forEach(t=>t.stop());stream=null;$('camera').srcObject=null;trackingStatus='Camera off';selected=null;lockId=null;targetOverlay.hide();}
 function stopSensors(){clearFlights();stopCamera();shirtCamera.stop();fireScene?.clear();clearTimeout(effectTimer);$('fx').className='';$('fx').replaceChildren();voice.stop();}
-$('leave').onclick=()=>{leaving=true;clearTimeout(reconnectTimer);if(!practice)send({type:'leave'});socket?.close();sessionStorage.removeItem('fieldspell-token');$('arena').hidden=true;stopSensors();completedShots.clear();serverClock.reset();room=null;myId=null;practice=false;trackingPractice=false;joined=false;rosterSignature='';$('lobby').hidden=false;$('camera-prompt').hidden=false;targetOverlay.hide();$('join-status').textContent='One shared arena · up to 12 players';};
+$('leave').onclick=()=>{if(!practice)send({type:'leave'});connection.stop();sessionStorage.removeItem('fieldspell-token');$('arena').hidden=true;stopSensors();completedShots.clear();serverClock.reset();room=null;myId=null;practice=false;trackingPractice=false;joined=false;rosterSignature='';$('lobby').hidden=false;$('camera-prompt').hidden=false;targetOverlay.hide();$('join-status').textContent='One shared arena · up to 12 players';};
 async function startCamera(){
  if(cameraStarting||stream?.active)return;if(!navigator.mediaDevices?.getUserMedia){notify('Camera requires Safari or Chrome over HTTPS.');return;}
  cameraStarting=true;const epoch=cameraEpoch;$('camera-start').disabled=true;
@@ -112,7 +114,7 @@ function renderState(){if(!me())return;$('arena').classList.toggle('round-live',
 function renderAim(){
  if(!room)return;const match=simulated()?{id:'dummy',x:.5,y:.4,confirmed:true,fresh:true,box:{x:.36,y:.23,width:.28,height:.34}}:matchedPerson();
  const liveOpponent=opponent()?.connected&&opponent()?.health>0;selected=liveOpponent&&match?.confirmed&&aimContains(match.box)?match.id:null;
- if(!practice&&socket?.readyState!==WebSocket.OPEN)selected=null;
+ if(!practice&&!connection.ready)selected=null;
  if(selected!==lockId){lockSince=Date.now();lockId=selected;}const locked=selected&&match?.fresh&&Date.now()-lockSince>200;
  $('reticle').classList.toggle('locked',!!locked);
  const aimText=simulated()?'Simulated target':!bandColor((trackingPractice?opponent()?.shirt:me()?.shirt)?.rgb)?'Tap Scan headband to get ready.':!opponent()?.shirt?'Waiting for your opponent’s headband sample.':!practice&&bandColor(me().shirt.rgb)===bandColor(opponent().shirt.rgb)?'Headbands too similar · use different colors.':!stream?.active?'Enable your camera.':match?(locked?`${opponent().name} locked · cast a spell`:trackingPractice?'Aim at your headband':'Aim the reticle at your opponent'):trackingPractice?'Show your headband.':'Find your opponent’s headband · move closer if needed';
@@ -122,7 +124,7 @@ function renderAim(){
  for(const spell of ['fireball','lightning'])$(spell).classList.toggle('target-ready',!!locked);
 }
 let castPending=false,castRequest=0;
-function cast(spell){void audio.unlock();if(!room)return;if(room.phase!=='playing'){notify('The host needs to start the round first.');return;}renderAim();if(['fireball','lightning'].includes(spell)&&(!selected||Date.now()-lockSince<200||(!simulated()&&!matchedPerson()?.fresh))){notify('Aim at your opponent until their headband locks.');return;}if(practice){const event=['fireball','lightning'].includes(spell)?launchProjectile(room,myId,spell,selected,crypto.randomUUID()):castSpell(room,myId,spell,selected);if(event.error){notify(event.error);return;}effect(spell,{shot:event});renderState();}else if(socket?.readyState===WebSocket.OPEN){if(castPending)return;castPending=true;const request=++castRequest;send({type:'cast',spell,targetId:selected});notify('Casting '+spell+'…');setTimeout(()=>{if(castPending&&request===castRequest){castPending=false;notify('Cast not confirmed. Check the connection.');}},2500);}else notify('Reconnecting. Casting is paused.');}
+function cast(spell){void audio.unlock();if(!room)return;if(room.phase!=='playing'){notify('The host needs to start the round first.');return;}renderAim();if(['fireball','lightning'].includes(spell)&&(!selected||Date.now()-lockSince<200||(!simulated()&&!matchedPerson()?.fresh))){notify('Aim at your opponent until their headband locks.');return;}if(practice){const event=['fireball','lightning'].includes(spell)?launchProjectile(room,myId,spell,selected,crypto.randomUUID()):castSpell(room,myId,spell,selected);if(event.error){notify(event.error);return;}effect(spell,{shot:event});renderState();}else if(connection.ready){if(castPending)return;castPending=true;const request=++castRequest;send({type:'cast',spell,targetId:selected});notify('Casting '+spell+'…');setTimeout(()=>{if(castPending&&request===castRequest){castPending=false;notify('Cast not confirmed. Check the connection.');}},2500);}else notify('Reconnecting. Casting is paused.');}
 for(const spell of Object.keys(SPELLS))$(spell).onclick=()=>cast(spell);
 $('start-round').onclick=()=>{if(practice){clearFlights();if(trackingPractice){opponent().health=100;room.phase='playing';room.endsAt=Date.now()+180000;room.winners=[];room.shots=[];me().cooldowns={};me().mana=MANA.max;me().manaUpdatedAt=Date.now();me().shieldUntil=0;renderState();}else beginPractice(false);return;}send({type:'start'});};
 const voice=setupVoice({Recognition:window.SpeechRecognition||window.webkitSpeechRecognition,button:$('voice'),status:$('voice-status'),onSpell:cast});
@@ -133,16 +135,17 @@ function renderCombat(){
  for(const [spell,rule] of Object.entries(SPELLS)){
   const remaining=Math.max(0,(p.cooldowns[spell]||0)-at),button=$(spell),cover=button.querySelector('.cooldown');cover.style.display=remaining?'flex':'none';cover.textContent=(remaining/1000).toFixed(1);
   button.querySelector('.mana-cost').textContent=rule.manaCost;button.title=`${spell}: ${rule.manaCost} mana${spell==='lightning'?' · ignores shields':''}`;
-  button.disabled=room.phase!=='playing'||p.health<=0||castPending||remaining>0||mana+1e-6<rule.manaCost||(!practice&&socket?.readyState!==WebSocket.OPEN);button.classList.toggle('needs-mana',mana<rule.manaCost);
+  button.disabled=room.phase!=='playing'||p.health<=0||castPending||remaining>0||mana+1e-6<rule.manaCost||(!practice&&!connection.ready);button.classList.toggle('needs-mana',mana<rule.manaCost);
  }
 }
 function renderAimFrame(){if(room&&!document.hidden&&!$('arena').hidden)renderAim();requestAnimationFrame(renderAimFrame);}
 requestAnimationFrame(renderAimFrame);
 setInterval(()=>{if(!room)return;renderCombat();
  if(room.phase==='playing'&&trackingPractice){$('phase').textContent='Real headband tracking · local test';}else if(room.phase==='playing'){const seconds=Math.max(0,Math.ceil((room.endsAt-now())/1000));$('phase').textContent=`${Math.floor(seconds/60)}:${String(seconds%60).padStart(2,'0')} remaining`;if(practice&&seconds===0){room.phase='finished';room.winners=[];renderState();}}
- if(!practice&&Date.now()-lastPing>3000){send({type:'ping',at:Date.now()});lastPing=Date.now();}
 },100);
-document.addEventListener('visibilitychange',()=>{if(document.hidden){voice.stop();detection.at=0;}else if(joined)notify('Find your opponent again before casting.');});
-window.addEventListener('pagehide',()=>{leaving=true;$('arena').hidden=true;stopSensors();socket?.close();});
+document.addEventListener('visibilitychange',()=>{if(document.hidden){voice.stop();detection.at=0;}else if(joined&&!practice){connection.check();notify('Find your opponent again before casting.');}});
+window.addEventListener('online',()=>{if(joined&&!practice)connection.check();});
+window.addEventListener('pageshow',event=>{if(event.persisted&&joined&&!practice)connect();});
+window.addEventListener('pagehide',()=>{$('arena').hidden=true;stopSensors();connection.stop();});
 
 if(['shirt','headband'].includes(new URLSearchParams(location.search).get('test')))beginPractice(true);
