@@ -1,7 +1,7 @@
 // Compact color histogram. Pixels/photos never leave the device.
 export function colorProfile(data){
  const bins=Array(15).fill(0),rgb=[0,0,0];let n=0;
- for(let i=0;i<data.length;i+=16){const r=data[i]/255,g=data[i+1]/255,b=data[i+2]/255,max=Math.max(r,g,b),min=Math.min(r,g,b),d=max-min,s=max?d/max:0;let bin;
+ for(let i=0;i<data.length;i+=4){const r=data[i]/255,g=data[i+1]/255,b=data[i+2]/255,max=Math.max(r,g,b),min=Math.min(r,g,b),d=max-min,s=max?d/max:0;let bin;
   if(max<.22)bin=12;else if(s<.22)bin=max>.7?14:13;else{let h=d===0?0:max===r?((g-b)/d+6)%6:max===g?(b-r)/d+2:(r-g)/d+4;const u=h*2,j=Math.floor(u)%12,f=u-Math.floor(u);bins[j]+=1-f;bins[(j+1)%12]+=f;bin=null;}
   if(bin!==null)bins[bin]++;rgb[0]+=r;rgb[1]+=g;rgb[2]+=b;n++;
  }

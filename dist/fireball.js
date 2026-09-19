@@ -25,7 +25,7 @@ export function createFireballRenderer(container){
    if(t<1){
     canvas.dataset.phase='flight';shot.ball.visible=true;shot.blast.visible=false;
     // Ease the world-space advance to keep the near-to-far travel legible.
-    if(shot.getTarget){const target=shot.getTarget();if(target){shot.lastSeen=time;shot.end.lerp(screenPoint(target.x,target.y,shot.depth),.22);shot.path.v1.copy(shot.path.v0).lerp(shot.end,.45);shot.path.v1.y+=.45;shot.blast.position.copy(shot.end);}else if(time-shot.lastSeen>450){shot.lost=true;}}
+    if(shot.getTarget){const target=shot.getTarget();if(target){shot.lastSeen=time;shot.end.lerp(screenPoint(target.x,target.y,shot.depth),.22);shot.path.v1.copy(shot.path.v0).lerp(shot.end,.45);shot.path.v1.y+=.45;shot.blast.position.copy(shot.end);}else if(time-shot.lastSeen>700){shot.lost=true;}}
     const travel=t*t;shot.path.getPoint(travel,shot.ball.position);shot.ball.rotation.z=time*.008;
     shot.halo.scale.setScalar(.95+Math.sin(time*.027)*.11);
     shot.trail.forEach((p,j)=>{const u=travel-j*.014;p.visible=u>0;if(!p.visible)return;shot.path.getPoint(Math.max(0,u),p.position);p.position.x+=Math.sin(j*2+time*.009)*.035;p.position.y+=Math.cos(j+time*.005)*.03;p.scale.setScalar(.42*(1-j/shot.trail.length)+.08);p.material.opacity=(1-j/shot.trail.length)*.85;});

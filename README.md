@@ -10,13 +10,14 @@ Node 22+: `npm ci`, `npm start`. Open http://localhost:3000 locally. Both phones
 2. Enter a name, tap Register shirt, enable the selfie camera, and fill the outline with shirt fabric. Capture color and confirm the swatch. Photos are never saved or uploaded.
 3. Repeat on the other phone. The first player taps Start round once both shirts are registered. Similar samples are rejected.
 4. Point the rear camera at the opponent. Aim the reticle inside their detected outline until it locks, then say Fireball (after enabling voice) or tap the spell.
-5. Keep the opponent visible during the 1.4-second flight. The 3D fireball steers toward the current detected torso. Losing the match for over 450ms cancels the hit. Shield and Heal need no target.
+5. For distant opponents, turn on Far mode and keep them near the reticle. Small shirt patches and lighting remain practical limits.
+6. Keep the opponent visible during the 1.4-second flight. The 3D fireball steers toward the current detected torso. Gameplay impact reporting runs independently of the renderer; rendering failures use a visible 2D fallback. Tracking gaps over 700ms cancel the hit; a fresh match is required at impact. Shield and Heal need no target.
 
 Fireball: 25 damage / 1.8-second cooldown. Shield: blocks for 3 seconds / 10-second cooldown. Heal: restores 20 / 12-second cooldown. Shield protection is evaluated at impact. Highest health wins on timeout; last survivor otherwise. Solo practice retains a clearly labeled simulated target and camera view.
 
 ## Recognition and privacy
 
-MediaPipe EfficientDet Lite0 detects people in an on-device Web Worker. Frames are sampled at 640px width with one inference in flight. A central torso region supplies a 15-bin color histogram. The opponent must match better than the player's own shirt, and competing similar candidates prevent a lock. Stale detections cannot target. Detection and shirt sampling happen locally; the server receives only names, numerical color profiles, health, and game events. No photos, video, GPS coordinates, or motion readings are transmitted by the game.
+MediaPipe EfficientDet Lite0 detects people in an on-device Web Worker. Color is sampled from frames up to 1280px wide, with one detector inference in flight. Far mode alternates full-frame detection with a central crop, making distant people occupy more of the model input. A central torso region supplies a 15-bin color histogram. The opponent must match better than the player's own shirt, and competing similar candidates prevent a lock. Two matching frames confirm an identity. Brief gaps preserve that identity, ambiguous lookalikes clear it, and stale detections cannot begin a cast. Detection and shirt sampling happen locally; the server receives only names, numerical color profiles, health, and game events. No photos, video, GPS coordinates, or motion readings are transmitted by the game.
 
 Voice uses the browser's speech recognition service, which may process audio remotely. Complete interim spell words trigger casts; final transcripts do not duplicate them. Browser support and Siri settings can affect availability.
 

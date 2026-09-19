@@ -1,7 +1,9 @@
 import {SPELLS,castSpell,launchFireball,impactFireball,FLIGHT_MS} from './rules.js';
 import {setupVoice} from './voice.js?v=early1';
-import {chooseShirt,coverRect,similarity} from './shirt.js';
-import {createPersonTracker} from './detection.js';
+import {coverRect,similarity} from './shirt.js?v=tracking2';
+import {createTargetTrack,aimContains} from './target-track.js?v=tracking2';
+import {createFlight} from './projectile-flight.js?v=tracking2';
+import {createPersonTracker} from './detection.js?v=tracking2';
 import {setupShirtCamera} from './shirt-camera.js';
 const $=id=>document.getElementById(id);
 const safeRead=key=>{try{return localStorage.getItem(key)||'';}catch{return '';}};
@@ -13,29 +15,36 @@ const now=()=>Date.now()+offset,me=()=>room?.players.find(p=>p.id===myId),oppone
 $('name').value=safeRead('fieldspell-name');$('server-url').value=safeRead('fieldspell-server');
 const notify=text=>{$('toast').textContent=text;clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('toast').textContent='',4000);};
 function send(message){if(socket?.readyState===WebSocket.OPEN)socket.send(JSON.stringify(message));}
-const tracker=createPersonTracker($('camera'),(people,width,height,at)=>{detection={people,width,height,at};},status=>{trackingStatus=status;});
-function loadGraphics(){graphicsLoading??=import('./fireball.js?v=shirts1').then(m=>{fireScene=m.createFireballRenderer($('arena'));}).catch(()=>{fireScene=null;});return graphicsLoading;}
+const identityTrack=createTargetTrack(),flights=new Map();
+let farMode=false;
+const tracker=createPersonTracker($('camera'),(people,width,height,at)=>{detection={people,width,height,at};identityTrack.update(people,opponent()?.shirt,me()?.shirt,at);},status=>{trackingStatus=status;});
+function loadGraphics(){graphicsLoading??=import('./fireball.js?v=tracking2').then(m=>{fireScene=m.createFireballRenderer($('arena'));}).catch(()=>{fireScene=null;});return graphicsLoading;}
 function matchedPerson(){
- if(document.hidden||!stream?.active||Date.now()-detection.at>650||!opponent()?.shirt)return null;
- const match=chooseShirt(detection.people,opponent().shirt,me()?.shirt);if(!match)return null;
+ if(document.hidden||!stream?.active||Date.now()-detection.at>1000||!opponent()?.shirt)return null;
+ const match=identityTrack.get();if(!match)return null;
  const rect=$('arena').getBoundingClientRect(),box=coverRect(match.box,detection.width,detection.height,rect.width,rect.height);
  const x=box.x+box.width/2,y=box.y+box.height*.38;
  if(x<0||x>1||y<0||y>1)return null;
  return{...match,box,x,y,id:opponent().id};
 }
-function targetPoint(id){if(practice)return{x:.5,y:.4};const target=matchedPerson();return target?.id===id?{x:target.x,y:target.y}:null;}
+function targetPoint(id){if(practice)return{x:.5,y:.4};const target=matchedPerson();return target?.id===id&&target.confirmed?{x:target.x,y:target.y}:null;}
 function finishShot(shot,tracked){if(!room)return;if(practice){const event=impactFireball(room,myId,shot.shotId,tracked);if(!event.error)handleImpact(event);if(opponent().health<=0){room.phase='finished';room.winners=[myId];}renderState();}else send({type:'impact',shotId:shot.shotId,tracked});}
 function effect(spell,{shot,projectile=true}={}){
  clearTimeout(effectTimer);const layer=$('fx');layer.className='';layer.replaceChildren();const burst=document.createElement('div');burst.className='spell-burst';
  for(const cls of ['spell-core','spell-ring','spell-feedback']){const el=document.createElement('div');el.className=cls;if(cls==='spell-feedback')el.textContent=spell.toUpperCase();burst.append(el);}layer.append(burst);
  const target=targetPoint(shot?.targetId)||{x:.5,y:.4};
- const depth=spell==='fireball'&&projectile&&fireScene?.fire({...target,getTarget:()=>targetPoint(shot.targetId),flightMs:shot.flightMs,onImpact:tracked=>finishShot(shot,tracked)});
- // Reduced-motion / no-WebGL mode keeps identical tracking and impact timing.
- if(spell==='fireball'&&projectile&&!depth){let lostAt=0,lost=false;const started=Date.now(),roundEndsAt=room.endsAt,actor=myId;const timer=setInterval(()=>{if(!room||room.endsAt!==roundEndsAt||myId!==actor||document.hidden){clearInterval(timer);return;}if(!targetPoint(shot.targetId)){lostAt||=Date.now();if(Date.now()-lostAt>450)lost=true;}else lostAt=0;if(Date.now()-started>=FLIGHT_MS){clearInterval(timer);finishShot(shot,!lost&&!!targetPoint(shot.targetId));}},50);}
+ let depth=false;
+ if(spell==='fireball'&&projectile){
+  const startedAt=performance.now(),roundEndsAt=room.endsAt,actor=myId,flight=createFlight({startedAt,flightMs:shot.flightMs||FLIGHT_MS});
+  if(flights.has(shot.shotId))return;
+  const timer=setInterval(()=>{const active=!!room&&room.endsAt===roundEndsAt&&myId===actor&&!document.hidden;const result=flight.step(performance.now(),practice||!!matchedPerson()?.fresh,active);if(result){clearInterval(timer);flights.delete(shot.shotId);if(!result.cancelled)finishShot(shot,result.tracked);}},40);flights.set(shot.shotId,timer);
+  try{depth=!!fireScene?.fire({...target,getTarget:()=>targetPoint(shot.targetId),flightMs:shot.flightMs});}catch(e){console.warn('Fireball graphics fallback',e);}
+  notify('Fireball launched');
+ }
  layer.className='cast-effect '+spell+(depth?' has-depth':'');effectTimer=setTimeout(()=>{layer.className='';layer.replaceChildren();},2200);
 }
 function handleImpact(m){if(m.actorId===myId)notify(m.missed?'Target lost · fireball fizzled':m.blocked?'Fireball blocked':'Fireball hit · 25 damage');if(m.targetId===myId&&!m.missed){effect('fireball',{projectile:false});notify(m.blocked?'Your shield blocked the fireball':'Hit by a fireball · −25 HP');}}
-function showArena(){loadGraphics();$('lobby').hidden=true;$('arena').hidden=false;$('shirt-open').hidden=practice;$('tracking-retry').hidden=practice;$('camera-instructions').textContent=practice?'Practice a 3D fireball over your camera with a simulated target.':'Register your shirt, then point the camera at your opponent.';$('camera-privacy').textContent='Camera frames stay on your phone. No location permissions needed.';$('camera-prompt').hidden=!!stream?.active;}
+function showArena(){loadGraphics();$('lobby').hidden=true;$('arena').hidden=false;$('shirt-open').hidden=practice;$('range-mode').hidden=practice;$('tracking-retry').hidden=practice;$('camera-instructions').textContent=practice?'Practice a 3D fireball over your camera with a simulated target.':'Register your shirt, then point the camera at your opponent.';$('camera-privacy').textContent='Camera frames stay on your phone. No location permissions needed.';$('camera-prompt').hidden=!!stream?.active;}
 function setError(text){$('join-status').textContent=text;$('join').disabled=false;notify(text);}
 function endpoint(){const raw=safeRead('fieldspell-server');const fallback=location.hostname.endsWith('.chatgpt.site')?'https://withdrawal-calgary-belle-minolta.trycloudflare.com':location.origin;const url=new URL(raw||fallback);if(!['https:','http:'].includes(url.protocol))throw Error('Enter an HTTPS game server URL.');if(location.protocol==='https:'&&url.protocol!=='https:')throw Error('The game server needs HTTPS.');url.protocol=url.protocol==='https:'?'wss:':'ws:';url.pathname='/ws';url.search='';url.hash='';return url.href;}
 function connect(){
@@ -45,10 +54,10 @@ function connect(){
  socket.onmessage=e=>{let m;try{m=JSON.parse(e.data);}catch{return;}
   if(m.type==='welcome'){clearTimeout(timer);joined=true;myId=m.id;sessionStorage.setItem('fieldspell-token',m.token);showArena();$('join').disabled=false;$('connection').textContent='Connected';}
   if(m.type==='state'){room=m.room;offset=room.serverTime-Date.now();renderState();}
-  if(m.type==='spell'&&m.actorId===myId)effect(m.spell,{shot:m});
+  if(m.type==='spell'&&m.actorId===myId){castPending=false;effect(m.spell,{shot:m});}
   if(m.type==='impact')handleImpact(m);
   if(m.type==='round-start')notify('Round started. Keep your opponent in view.');
-  if(m.type==='error'){setError(m.message);if(!joined){clearTimeout(timer);leaving=true;socket.close();}}
+  if(m.type==='error'){castPending=false;setError(m.message);if(!joined){clearTimeout(timer);leaving=true;socket.close();}}
   if(m.type==='pong')$('connection').textContent=`Live · ${Date.now()-m.at}ms`;
  };
  socket.onerror=()=>{if(!joined)setError('Cannot reach the game server. Check Connection settings.');};
@@ -59,8 +68,8 @@ $('settings-open').onclick=()=>$('settings').showModal();
 $('settings-save').onclick=e=>{const raw=$('server-url').value.trim();if(raw){try{const u=new URL(raw);if(!['http:','https:'].includes(u.protocol))throw Error();}catch{e.preventDefault();$('server-url').setCustomValidity('Enter an HTTPS URL.');$('server-url').reportValidity();return;}}safeWrite('fieldspell-server',raw);sessionStorage.removeItem('fieldspell-token');};
 $('server-url').oninput=()=>$('server-url').setCustomValidity('');
 $('practice').onclick=()=>{practice=true;leaving=true;socket?.close();myId='self';offset=0;const make=(id,name)=>({id,name,health:100,shieldUntil:0,cooldowns:{},connected:true});room={phase:'playing',hostId:myId,endsAt:Date.now()+180000,winners:[],players:[make(myId,$('name').value.trim()||'You'),make('dummy','Practice target')]};showArena();$('connection').textContent='Solo · simulated target';renderState();startCamera();};
-function stopCamera(){cameraEpoch++;tracker.stop();stream?.getTracks().forEach(t=>t.stop());stream=null;$('camera').srcObject=null;trackingStatus='Camera off';selected=null;lockId=null;}
-function stopSensors(){stopCamera();shirtCamera.stop();fireScene?.clear();clearTimeout(effectTimer);$('fx').className='';$('fx').replaceChildren();voice.stop();}
+function stopCamera(){cameraEpoch++;identityTrack.reset();tracker.stop();stream?.getTracks().forEach(t=>t.stop());stream=null;$('camera').srcObject=null;trackingStatus='Camera off';selected=null;lockId=null;}
+function stopSensors(){for(const timer of flights.values())clearInterval(timer);flights.clear();stopCamera();shirtCamera.stop();fireScene?.clear();clearTimeout(effectTimer);$('fx').className='';$('fx').replaceChildren();voice.stop();}
 $('leave').onclick=()=>{leaving=true;clearTimeout(reconnectTimer);if(!practice)send({type:'leave'});socket?.close();sessionStorage.removeItem('fieldspell-token');$('arena').hidden=true;stopSensors();room=null;myId=null;practice=false;joined=false;rosterSignature='';$('lobby').hidden=false;$('camera-prompt').hidden=false;$('boxes').replaceChildren();$('join-status').textContent='One shared arena · 2 players';};
 async function startCamera(){
  if(cameraStarting||stream?.active)return;if(!navigator.mediaDevices?.getUserMedia){notify('Camera requires Safari or Chrome over HTTPS.');return;}
@@ -71,24 +80,26 @@ async function startCamera(){
 const shirtCamera=setupShirtCamera({beforeOpen:()=>{voice.stop();stopCamera();fireScene?.clear();},onSave:profile=>send({type:'shirt',profile}),onClose:()=>{if(!$('arena').hidden)startCamera();}});
 $('shirt-open').onclick=()=>{if(room?.phase==='playing'){notify('Wait until the round ends to change your shirt.');return;}shirtCamera.open();};
 $('camera-start').onclick=()=>{if(!practice&&!me()?.shirt)shirtCamera.open();else startCamera();};
+$('range-mode').onclick=()=>{farMode=!farMode;tracker.setZoom(farMode);identityTrack.reset();$('range-mode').textContent=farMode?'Far mode: on':'Far mode: off';notify(farMode?'Keep the opponent near the reticle. Far mode checks a zoomed crop.':'Wide tracking enabled');};
 $('tracking-retry').onclick=()=>{if(stream?.active)tracker.start();else startCamera();};
-function renderState(){if(!me())return;const p=me();$('health-value').innerHTML=`${p.health} <small>/ 100</small>`;$('health-fill').style.width=p.health+'%';$('room-label').textContent=practice?'SOLO PRACTICE':'TWO PLAYER ARENA';$('start-round').hidden=room.hostId!==myId;$('start-round').disabled=room.phase==='playing';$('start-round').textContent=room.phase==='finished'?'New round':'Start round';$('shirt-open').textContent=p.shirt?'Retake shirt':'Register shirt';$('shirt-open').disabled=room.phase==='playing';
+function renderState(){if(!me())return;$('arena').classList.toggle('round-live',room.phase==='playing');const p=me();$('health-value').innerHTML=`${p.health} <small>/ 100</small>`;$('health-fill').style.width=p.health+'%';$('room-label').textContent=practice?'SOLO PRACTICE':'TWO PLAYER ARENA';$('start-round').hidden=room.hostId!==myId;$('start-round').disabled=room.phase==='playing';$('start-round').textContent=room.phase==='finished'?'New round':'Start round';$('shirt-open').textContent=p.shirt?'Retake shirt':'Register shirt';$('shirt-open').disabled=room.phase==='playing';
  const signature=JSON.stringify(room.players.map(p=>[p.id,p.name,p.health,p.connected,!!p.shirt]));if(signature!==rosterSignature){rosterSignature=signature;$('players').replaceChildren(...room.players.filter(p=>p.id!==myId).map(p=>{const el=document.createElement('div');el.className='player'+(p.health<=0?' dead':'');const name=document.createElement('b');name.textContent=p.name;const status=document.createElement('small');status.textContent=!p.connected?'Reconnecting…':`${p.health} HP · ${practice?'simulated':p.shirt?'shirt ready':'needs shirt'}`;el.append(name,status);return el;}));}
  if(room.phase==='finished'){const winners=room.players.filter(p=>room.winners.includes(p.id)).map(p=>p.name);$('phase').textContent=winners.length===1?`${winners[0]} wins`:winners.length?'Round tied':'Round ended';}else if(room.phase==='lobby')$('phase').textContent=room.hostId===myId?`${room.players.length}/2 joined · you control the arena`:'Waiting for the host';
 }
 function renderAim(){
- if(!room)return;const match=practice?{id:'dummy',x:.5,y:.4,box:{x:.36,y:.23,width:.28,height:.34}}:matchedPerson();
- const liveOpponent=opponent()?.connected&&opponent()?.health>0;selected=liveOpponent&&match&&Math.abs(match.x-.5)<Math.max(.12,match.box.width/2)&&.4>match.box.y&&.4<match.box.y+match.box.height?match.id:null;
+ if(!room)return;const match=practice?{id:'dummy',x:.5,y:.4,confirmed:true,fresh:true,box:{x:.36,y:.23,width:.28,height:.34}}:matchedPerson();
+ const liveOpponent=opponent()?.connected&&opponent()?.health>0;selected=liveOpponent&&match?.confirmed&&aimContains(match.box)?match.id:null;
  if(!practice&&socket?.readyState!==WebSocket.OPEN)selected=null;
- if(selected!==lockId){lockSince=Date.now();lockId=selected;}const locked=selected&&Date.now()-lockSince>350;
+ if(selected!==lockId){lockSince=Date.now();lockId=selected;}const locked=selected&&match?.fresh&&Date.now()-lockSince>200;
  $('reticle').classList.toggle('locked',!!locked);
  $('target-status').textContent=practice?'Simulated target':!me()?.shirt?'Tap Register shirt to get ready.':!opponent()?.shirt?'Waiting for your opponent’s shirt sample.':similarity(me().shirt,opponent().shirt)>.8?'Shirts too similar · use different colors.':!stream?.active?'Enable your camera.':match?(locked?`${opponent().name} locked · cast Fireball`:'Aim the reticle at your opponent'):'Find your opponent’s shirt · move closer if needed';
  $('vision-status').textContent=practice?'Simulated tracking':trackingStatus;
- const rect=$('arena').getBoundingClientRect(),people=practice?[match]:Date.now()-detection.at<650?detection.people:[];
- $('boxes').replaceChildren(...people.map(p=>{const box=practice?p.box:coverRect(p.box,detection.width,detection.height,rect.width,rect.height);const isMatch=practice||!!match&&Math.abs(box.x-match.box.x)<.001&&Math.abs(box.y-match.box.y)<.001;const el=document.createElement('div');el.className='person-box'+(isMatch?' matched':'');Object.assign(el.style,{left:box.x*100+'%',top:box.y*100+'%',width:box.width*100+'%',height:box.height*100+'%'});const label=document.createElement('div');label.className='person-label';const title=document.createElement('b');title.textContent=isMatch?opponent()?.name||'Target':'Person';label.append(title);if(isMatch){const meter=document.createElement('meter');meter.min=0;meter.max=100;meter.value=opponent()?.health||0;meter.setAttribute('aria-label','Opponent health');const info=document.createElement('small');info.textContent=practice?'Simulated':`Shirt match · ${Math.round(match.match*100)}%`;label.append(meter,info);}el.append(label);return el;}));
- $('fireball').disabled=!locked||room.phase!=='playing'||me()?.health<=0;
+ const rect=$('arena').getBoundingClientRect(),people=practice?[match]:Date.now()-detection.at<1000?detection.people:[];
+ $('boxes').replaceChildren(...people.map(p=>{const box=practice?p.box:coverRect(p.box,detection.width,detection.height,rect.width,rect.height);const isMatch=practice||!!match&&p.box===match.rawBox;const el=document.createElement('div');el.className='person-box'+(isMatch?' matched':'');Object.assign(el.style,{left:box.x*100+'%',top:box.y*100+'%',width:box.width*100+'%',height:box.height*100+'%'});const label=document.createElement('div');label.className='person-label';const title=document.createElement('b');title.textContent=isMatch?opponent()?.name||'Target':'Person';label.append(title);if(isMatch){const meter=document.createElement('meter');meter.min=0;meter.max=100;meter.value=opponent()?.health||0;meter.setAttribute('aria-label','Opponent health');const info=document.createElement('small');info.textContent=practice?'Simulated':`Shirt match · ${Math.round(match.match*100)}%`;label.append(meter,info);}el.append(label);return el;}));
+ $('fireball').disabled=room.phase!=='playing'||me()?.health<=0||castPending||(!practice&&socket?.readyState!==WebSocket.OPEN);$('fireball').classList.toggle('target-ready',!!locked);
 }
-function cast(spell){if(!room)return;if(room.phase!=='playing'){notify('The host needs to start the round first.');return;}if(spell==='fireball'&&(!selected||Date.now()-lockSince<350)){notify('Aim at your opponent until their shirt locks.');return;}if(practice){const event=spell==='fireball'?launchFireball(room,myId,selected,crypto.randomUUID()):castSpell(room,myId,spell,selected);if(event.error){notify(event.error);return;}effect(spell,{shot:event});renderState();}else if(socket?.readyState===WebSocket.OPEN)send({type:'cast',spell,targetId:selected});else notify('Reconnecting. Casting is paused.');}
+let castPending=false,castRequest=0;
+function cast(spell){if(!room)return;if(room.phase!=='playing'){notify('The host needs to start the round first.');return;}renderAim();if(spell==='fireball'&&(!selected||Date.now()-lockSince<200||(!practice&&!matchedPerson()?.fresh))){notify('Aim at your opponent until their shirt locks.');return;}if(practice){const event=spell==='fireball'?launchFireball(room,myId,selected,crypto.randomUUID()):castSpell(room,myId,spell,selected);if(event.error){notify(event.error);return;}effect(spell,{shot:event});renderState();}else if(socket?.readyState===WebSocket.OPEN){if(castPending)return;castPending=true;const request=++castRequest;send({type:'cast',spell,targetId:selected});notify('Casting '+spell+'…');setTimeout(()=>{if(castPending&&request===castRequest){castPending=false;notify('Cast not confirmed. Check the connection.');}},2500);}else notify('Reconnecting. Casting is paused.');}
 for(const spell of Object.keys(SPELLS))$(spell).onclick=()=>cast(spell);
 $('start-round').onclick=()=>{if(practice){fireScene?.clear();$('practice').click();return;}send({type:'start'});};
 const voice=setupVoice({Recognition:window.SpeechRecognition||window.webkitSpeechRecognition,button:$('voice'),status:$('voice-status'),onSpell:cast});
