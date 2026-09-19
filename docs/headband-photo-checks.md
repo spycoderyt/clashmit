@@ -1,4 +1,6 @@
-# Headband/face regression check
+# Historical headband/face regression check
+
+These checks apply to the earlier face-gated version. The current fast gameplay tracker follows color and motion directly; do not use these results as its false-positive benchmark.
 
 The browser ran the production color filter, face crops, MediaPipe BlazeFace model, body fallback, and spatial association on the three user-supplied photos locally. A single blue color sample from photo 1 (`[32,100,195]`) was reused for all checks. The red profile was `[220,25,25]`.
 
