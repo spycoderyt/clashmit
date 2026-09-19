@@ -29,7 +29,7 @@ Optional `ALLOWED_ORIGINS` is a comma-separated browser origin allowlist; the sa
 1. Each player enters a unique name and joins the shared arena.
 2. Tap Enable camera. Allow camera, Motion & Orientation, and precise location when the browser asks. Location is shared with everyone in the arena. Frames are not uploaded.
 3. Hold the phone upright in portrait. Spread out outdoors, initially roughly 20–50 metres apart. Each player should check their displayed GPS accuracy.
-4. The first player taps Start round. Aim at a GPS label for about 0.35 seconds, then tap Fireball or tap Say a spell and say “Fireball”. Shield and Heal work without a target. Voice recognition support varies; Safari can require Siri enabled. The browser's speech provider may process audio remotely. No paid speech API is configured.
+4. The first player taps Start round. Aim at a GPS label for about 0.35 seconds, then tap Fireball or tap Enable voice once, then say “Fireball”. Shield and Heal work without a target. Voice stays on in the foreground until you tap to stop it; the app shows recognized words and specific speech errors. Voice recognition support varies; Safari can require Siri enabled. The browser's speech provider may process audio remotely. No paid speech API is configured.
 5. Fireball does 25 damage, Shield blocks hits for 3 seconds, Heal restores 20 health. The server enforces health, cooldowns, round timing and nearby/fresh locations for attacks. Last surviving player wins; after 3 minutes the highest health wins, including ties.
 
 ## What this experiment can and cannot establish
