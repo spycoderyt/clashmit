@@ -70,3 +70,18 @@ export function pairStripes(stripes,{tolerance=.6}={}){
 export function recognizePairs(image,buffers={},options={}){
  return pairStripes(findStripes(image,buffers),options).filter(m=>!m.ambiguous);
 }
+
+// Drop-in replacement for findHeadbands: same band shape, same match/self
+// scores, so face confirmation and target tracking stay unchanged. Identity is
+// an exact ordered-pair id, so a match is 1 or 0 rather than a color distance.
+export function findPairBands(image,opponent,own,buffers={}){
+ const wanted=opponent?.id;if(!wanted)return[];
+ const mine=own?.id&&own.id!==wanted?own.id:null;
+ return pairStripes(findStripes(image,buffers))
+  .filter(m=>!m.ambiguous&&(m.id===wanted||m.id===mine))
+  .map(m=>({box:m.box,id:m.id,top:m.top,bottom:m.bottom,area:m.area,
+   fill:m.area/Math.max(1,m.box.width*m.box.height),
+   match:m.id===wanted?1:0,self:m.id===mine?1:0}))
+  .sort((a,b)=>b.match-a.match||b.area-a.area)
+  .slice(0,12);
+}

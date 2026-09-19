@@ -119,26 +119,57 @@ If wearers want a taller marker, the sheet needs regenerating with a
 non-repeating design (for example a thin white separator, or a 3-stripe grammar
 where the middle stripe is always a fixed marker color).
 
-### Not wired into the app yet
+### Wired into the live pipeline
 
-The recognition layer is complete and tested but **nothing calls it in the live
-pipeline**. The app still runs the single-color path
-(`dist/headband.js` -> `bandColor()`, red or blue). Remaining work, in order:
+Recognition now drives the app. Registration, the wire format, the server and
+the detection loop all moved to ordered pairs in one step, because a half-moved
+pipeline cannot run: the detector needs a pair id that only the new profile
+carries.
 
-1. **Registration.** `dist/shirt-camera.js` and `#shirt-dialog` capture one color
-   through one guide rect. Needs two stacked guides and two samples.
-2. **Profile format.** `dist/shirt.js` `colorProfile()` / `validProfile()` return
-   `{bins, rgb}`. Needs an ordered `{top, bottom}` form. Per the design doc, keep
-   the wire version separate so single-color clients cannot silently join.
-3. **Server.** `server/index.js` validates profiles and must additionally reject
-   duplicate ordered pairs across players.
-4. **Detection loop.** `dist/detection.js` gates on `bandColor(opponent.rgb)` and
-   passes one opponent color to `findHeadbands`. Swap for `recognizePairs` and
-   match on marker ID. `dist/color-worker.js` needs the same swap.
-5. **Tracking and shot binding.** `dist/target-track.js` and the continuity logic
-   in `headband.js` key on a single band; rekey to the ordered marker ID so a
-   shot cannot transfer to a different player.
-6. Then the field tests listed at the end of `docs/two-stripe-headbands.md`.
+| File | Change |
+| --- | --- |
+| `dist/shirt.js` | Added `bandProfile()`, `profileId()`, `validBandProfile()` |
+| `dist/shirt-camera.js` | Captures two samples from a split guide |
+| `dist/index.html` | Guide divider, two swatches, `?v=pair1` |
+| `dist/style.css` | Split-guide and dual-swatch rules |
+| `dist/detection.js` | Calls `findPairBands`, gates on pair id, sends only ids to the worker |
+| `dist/color-worker.js` | Calls `findPairBands` |
+| `dist/app.js` | `bandColor` -> `profileId` for gating and aim text |
+| `server/index.js` | Validates v2, re-derives the id, rejects duplicate pairs |
+| `test/game.test.js` | Registers v2 profiles; asserts v1 is refused |
 
-`dist/headband.js` was deliberately left untouched so the working single-color
-path keeps running until step 4 lands.
+**Wire format.** Profiles are now `{version:2, top:{bins,rgb}, bottom:{bins,rgb}, id}`.
+The server **re-derives `id` from the pixel samples** and ignores whatever the
+client sent, so a client cannot claim a pair it did not scan. A version 1
+single-color profile is rejected outright, which is the version separation the
+design doc asked for - an old client cannot silently join a two-stripe arena.
+
+**Duplicate pairs** are refused at registration time (not at round start), with
+the message naming the conflict, and round start re-checks across all players.
+
+**Identity matching became exact.** `findPairBands` is a drop-in replacement for
+`findHeadbands`: same band shape, same `match`/`self` fields, so face/person
+confirmation and `createTargetTrack` are untouched. But `match` is now 1 or 0 on
+an exact ordered-pair id rather than a color distance, so a shot cannot drift to
+a player whose color merely looks similar.
+
+**Verified.** 62/62 tests pass. Checked in a real browser against the served
+files: no console or module errors, the scan guide renders split, the module
+graph resolves through the `?v=pair1` query strings, registration produces the
+expected ids, detection separates two bands in one frame with correct
+`match`/`self`, a forged wire id is ignored, and the module worker loads and
+reports `OffscreenCanvas` support.
+
+### Follow-ups, not done here
+
+- **Dead code.** `bandColor`, `findHeadbands` and `createBandContinuity` in
+  `dist/headband.js` now have no caller in the live pipeline. They are still
+  exercised by `test/headband.test.js`. Left in place deliberately rather than
+  deleted in the same change; remove both together when you are confident.
+- **Field testing.** None of the checks at the end of
+  `docs/two-stripe-headbands.md` have been run on real phones with real fabric:
+  side views, tilt, distance, shade and sun, crossing players, one stripe
+  covered. Synthetic frames cannot stand in for any of that.
+- **`docs/two-stripe-headbands.md`** still says recognition is unimplemented.
+  Update it when this merges.
+- The app is still named "Fieldspell" in the title, lobby and `package.json`.
