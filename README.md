@@ -1,4 +1,63 @@
-# Fieldspell — two-player headband test
+# ClashMIT — browser spell tag
+
+## Team setup
+
+Repository: [spycoderyt/clashmit](https://github.com/spycoderyt/clashmit). The app currently displays the original Fieldspell name.
+
+The repository is private. The owner invites teammates through [Settings → Collaborators](https://github.com/spycoderyt/clashmit/settings/access) with write access. Each teammate must accept the invitation and authenticate Git with their own GitHub account before cloning. Do not share account credentials.
+
+Install Git and Node.js 22 or newer (including npm). Each new teammate runs:
+
+```bash
+git clone https://github.com/spycoderyt/clashmit.git
+cd clashmit
+npm ci
+git switch -c feature/my-feature
+npm start
+```
+
+Use a descriptive, unique branch name in place of `feature/my-feature`. Open http://localhost:3000 to test. Every laptop runs an independent game and can use port 3000. The owner’s existing checkout is already connected to this repository and does not need to be cloned again; start a feature branch in that checkout before editing.
+
+### Test on phones
+
+Install `cloudflared` separately. Keep `npm start` running and open another terminal in the project folder:
+
+```bash
+cloudflared tunnel --url http://127.0.0.1:3000 --protocol http2 --edge-ip-version 4
+```
+
+Open the HTTPS URL printed by the tunnel on each test phone. All phones testing the same multiplayer session must use the **same developer’s URL**. Different developers’ URLs lead to separate games. In Connection settings, leave the server override empty when opening the tunnel URL so the browser connects to that same server. Camera and microphone access require HTTPS on phones; phone `localhost` refers to the phone, not the laptop.
+
+Keep that laptop awake, its server running, and its tunnel connected. If MIT Guest blocks the tunnel, connect the laptop to a phone hotspot. Phones only need internet access; they do not need to join that hotspot. The temporary URL may change when the tunnel restarts.
+
+### Share changes and merge into main
+
+Work on your own feature branch. Coordinate ownership of files, especially `dist/app.js`, to reduce merge conflicts. Before sharing a change:
+
+```bash
+npm test
+git status
+git add <changed-files>
+git commit -m "Describe the change"
+git push -u origin feature/my-feature
+```
+
+Replace `<changed-files>` with the files you intend to commit, and use your actual branch name. Open a pull request on GitHub from your branch into `main`. Have a teammate review it, resolve any conflicts, then merge it. These are team conventions; branch protection and required checks are not configured yet.
+
+After a merge, commit unfinished work on your feature branch before switching. Everyone, including the owner, can update and start their next task with:
+
+```bash
+git switch main
+git pull --ff-only
+npm ci
+git switch -c feature/next-feature
+```
+
+Restart `npm start` after server changes and refresh the browser after frontend changes. Frontend files in `dist/` are edited directly; no build step is required.
+
+### Shared demo and deployment
+
+Use a separate checkout/server running `main` for the shared demo so feature-branch edits do not change the demo unexpectedly. Each developer’s local server serves files from their current checkout. Pushing or merging code does **not** automatically update a running server. Automatic deployment from `main` and the `clashmit.lol` custom domain are not configured yet.
 
 ## Multiplayer capacity work in progress
 
