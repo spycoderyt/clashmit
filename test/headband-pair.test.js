@@ -85,3 +85,37 @@ test('stacking tolerates a small gap and head tilt but not a distant stripe',()=
  assert.equal(stacked(top,{box:{originX:10,originY:40,width:30,height:6}}),false);
  assert.equal(stacked(top,{box:{originX:55,originY:16,width:30,height:6}}),false);
 });
+test('registration rejects unusable samples and re-derives the id from pixels',async()=>{
+ const {bandProfile,profileId,validBandProfile}=await import('../dist/shirt.js');
+ const swatch=name=>new Uint8ClampedArray(Array.from({length:64},()=>[...rgb(name),255]).flat());
+ const grey=new Uint8ClampedArray(Array.from({length:64},()=>[120,120,120,255]).flat());
+ const good=bandProfile(swatch('navy'),swatch('orange'));
+ assert.equal(good.id,'navy-orange');
+ assert.equal(good.version,2);
+ assert.ok(validBandProfile(good));
+ assert.equal(bandProfile(swatch('red'),swatch('red')).id,null);
+ assert.equal(bandProfile(swatch('red'),grey).id,null);
+ // A forged id on the wire is ignored; the server re-derives from the samples.
+ assert.equal(profileId({...good,id:'green-pink'}),'navy-orange');
+ // A version 1 single-color profile cannot pass as a two-stripe profile.
+ assert.equal(profileId({bins:Array(15).fill(1/15),rgb:rgb('red')}),null);
+ assert.equal(validBandProfile(null),false);
+});
+test('detection returns only the registered pair and the wearer own band',async()=>{
+ const {findPairBands}=await import('../dist/headband-pair.js');
+ const image=frame([[35,24,24,5,'red'],[35,29,24,5,'cyan'],[5,90,20,5,'green'],[5,95,20,5,'pink'],[60,120,20,5,'navy'],[60,125,20,5,'orange']]);
+ const bands=findPairBands(image,{id:'red-cyan'},{id:'green-pink'});
+ assert.equal(bands.length,2);
+ assert.equal(bands[0].id,'red-cyan');
+ assert.equal(bands[0].match,1);
+ assert.equal(bands[0].self,0);
+ const own=bands.find(b=>b.id==='green-pink');
+ assert.equal(own.match,0);
+ assert.equal(own.self,1);
+ // A third player's band is present in the frame but is not this client's concern.
+ assert.equal(bands.some(b=>b.id==='navy-orange'),false);
+ assert.equal(findPairBands(image,{id:'navy-orange'},null)[0].id,'navy-orange');
+ assert.equal(findPairBands(image,null,null).length,0);
+ // Reversed pair is a different player and must not match.
+ assert.equal(findPairBands(image,{id:'cyan-red'},null).length,0);
+});

@@ -1,3 +1,4 @@
+import {classifyColor,pairId} from './palette.js?v=pair1';
 // Compact color histogram. Pixels/photos never leave the device.
 export function colorProfile(data){
  // Keep the compact histogram for server registration compatibility. Identity
@@ -13,3 +14,16 @@ export function colorProfile(data){
 export function validProfile(p){return !!p&&Array.isArray(p.bins)&&p.bins.length===15&&p.bins.every(x=>Number.isFinite(x)&&x>=0&&x<=1)&&Math.abs(p.bins.reduce((a,b)=>a+b,0)-1)<.01&&Array.isArray(p.rgb)&&p.rgb.length===3&&p.rgb.every(x=>Number.isInteger(x)&&x>=0&&x<=255);}
 export function similarity(a,b){if(!validProfile(a)||!validProfile(b))return 0;return a.bins.reduce((sum,x,i)=>sum+Math.min(x,b.bins[i]),0);}
 export function coverRect(b,sourceW,sourceH,viewW,viewH){const s=Math.max(viewW/sourceW,viewH/sourceH);return{x:(b.originX*s-(sourceW*s-viewW)/2)/viewW,y:(b.originY*s-(sourceH*s-viewH)/2)/viewH,width:b.width*s/viewW,height:b.height*s/viewH};}
+
+// Ordered two-stripe profile. Version 2 keeps the single-color version 1 wire
+// format separate so an older client cannot silently join a two-stripe arena.
+export function bandProfile(topData,bottomData){
+ const top=colorProfile(topData),bottom=colorProfile(bottomData);
+ return{version:2,top,bottom,id:pairId(classifyColor(top.rgb),classifyColor(bottom.rgb))};
+}
+// The id is always re-derived from the samples, never trusted from the wire.
+export function profileId(p){
+ if(!p||p.version!==2||!validProfile(p.top)||!validProfile(p.bottom))return null;
+ return pairId(classifyColor(p.top.rgb),classifyColor(p.bottom.rgb));
+}
+export function validBandProfile(p){return !!profileId(p);}
