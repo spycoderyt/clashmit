@@ -4,7 +4,7 @@ import {fileURLToPath} from 'node:url';
 import {resolve,extname} from 'node:path';
 import {randomBytes,randomUUID} from 'node:crypto';
 import {WebSocketServer,WebSocket} from 'ws';
-import {castSpell,launchProjectile,impactProjectile,expireProjectiles,replenishMana,MANA,SPELLS} from '../dist/rules.js';
+import {castSpell,launchProjectile,impactProjectile,expireProjectiles,settleRoom,MANA,SPELLS,PERSONAS,DEFAULT_PERSONA} from '../dist/rules.js';
 import {profileId} from '../dist/shirt.js';
 import {validLocation} from '../dist/geo.js';
 import {validEncodedSamples} from '../dist/face-id.js';
@@ -38,7 +38,7 @@ export function createGameServer({maxPlayers=null,maxBufferedBytes=256*1024,coun
   try{ws.send(payload,error=>{if(error)ws.terminate();});}catch{ws.terminate();}
  }
  const send=(ws,msg)=>sendEncoded(ws,JSON.stringify(msg));
- function view(room){const now=Date.now();for(const p of room.players)replenishMana(p,now);return {maxPlayers,code:room.code,hostId:room.hostId,phase:room.phase,startsAt:room.startsAt||0,endsAt:room.endsAt,winners:room.winners,players:room.players.map(({token,socket,disconnectedAt,...p})=>p),shots:room.shots||[],combat:{mana:MANA,spells:SPELLS},serverTime:now};}
+ function view(room){const now=Date.now();settleRoom(room,now);return {maxPlayers,code:room.code,hostId:room.hostId,phase:room.phase,startsAt:room.startsAt||0,endsAt:room.endsAt,winners:room.winners,players:room.players.map(({token,socket,disconnectedAt,...p})=>p),shots:room.shots||[],combat:{mana:MANA,spells:SPELLS},serverTime:now};}
  function broadcast(room,event){if(closing)return;const state=JSON.stringify({type:'state',room:view(room)}),encodedEvent=event?JSON.stringify(event):null;for(const p of room.players){if(encodedEvent)sendEncoded(p.socket,encodedEvent);sendEncoded(p.socket,state);}}
  // Begins the round once the countdown is over, or returns to the lobby if too few players are still connected.
  function begin(room){
@@ -73,6 +73,9 @@ export function createGameServer({maxPlayers=null,maxBufferedBytes=256*1024,coun
      if(clients.has(ws))return;
      const name=typeof m.name==='string'?m.name.trim().slice(0,20):'', code='ARENA';
      if(!name)return send(ws,{type:'error',message:'Choose a mage name.'});
+     // An older tab sends no persona and keeps the original deck; anything else must be a real persona.
+     const persona=m.persona==null?DEFAULT_PERSONA:typeof m.persona==='string'&&Object.hasOwn(PERSONAS,m.persona)?m.persona:null;
+     if(!persona)return send(ws,{type:'error',message:'Choose a persona.'});
      let room=rooms.get(code),player;
 
      if(!room){
@@ -80,12 +83,15 @@ export function createGameServer({maxPlayers=null,maxBufferedBytes=256*1024,coun
       room={code:newCode,players:[],phase:'lobby',hostId:null,endsAt:0,winners:[]};rooms.set(newCode,room);
      }
      if(typeof m.token==='string')player=room.players.find(p=>p.token===m.token);
-     if(player){if(player.socket!==ws){clients.delete(player.socket);player.socket.close(4000,'Opened on another connection');}player.socket=ws;player.connected=true;player.disconnectedAt=null;}
+     if(player){
+      // The lobby choice of a returning player is honoured, but never once a round is counting down or live, and a tab that sends none changes nothing.
+      if(m.persona!=null&&room.phase!=='playing'&&room.phase!=='countdown')player.persona=persona;
+      if(player.socket!==ws){clients.delete(player.socket);player.socket.close(4000,'Opened on another connection');}player.socket=ws;player.connected=true;player.disconnectedAt=null;}
      else{
       if(room.phase==='playing'||room.phase==='countdown')return send(ws,{type:'error',message:'A round is running. Join when it finishes.'});
       if(maxPlayers!==null&&room.players.length>=maxPlayers)return send(ws,{type:'error',message:`The arena is full (${maxPlayers} players).`});
       if(room.players.some(p=>p.name.toLowerCase()===name.toLowerCase()))return send(ws,{type:'error',message:'That mage name is taken. Choose another.'});
-      player={id:randomUUID(),token:randomBytes(24).toString('hex'),name,health:100,mana:MANA.max,manaUpdatedAt:Date.now(),shieldUntil:0,cooldowns:{},connected:true,shirt:null,socket:ws};room.players.push(player);if(!room.players.some(p=>p.id===room.hostId&&p.connected))room.hostId=player.id;
+      player={id:randomUUID(),token:randomBytes(24).toString('hex'),name,persona,health:100,mana:MANA.max,manaUpdatedAt:Date.now(),shieldUntil:0,cooldowns:{},connected:true,shirt:null,socket:ws};room.players.push(player);if(!room.players.some(p=>p.id===room.hostId&&p.connected))room.hostId=player.id;
      }
      clients.set(ws,{room,player});clearTimeout(timeout);send(ws,{type:'welcome',id:player.id,token:player.token,code:room.code});send(ws,{type:'faces',faces:room.faces||{}});broadcast(room);return;
     }
@@ -98,12 +104,12 @@ export function createGameServer({maxPlayers=null,maxBufferedBytes=256*1024,coun
      // Players are identified by a scanned face. Headband samples are still accepted below but no longer needed to start.
      if(room.players.some(p=>!p.faceReady))return send(ws,{type:'error',message:'Every player needs to scan their face first.'});
      room.shots=[];
-     for(const p of room.players){p.health=100;p.mana=MANA.max;p.manaUpdatedAt=Date.now();p.cooldowns={};p.shieldUntil=0;p.diedAt=null;}
+     for(const p of room.players){p.health=100;p.mana=MANA.max;p.manaUpdatedAt=Date.now();p.cooldowns={};p.shieldUntil=0;p.diedAt=null;p.poison=null;p.swarm=null;p.stunUntil=0;}
      // Every phone counts down to the same server moment, so the round opens for everyone together.
      room.winners=[];room.phase='countdown';room.startsAt=Date.now()+countdownMs;room.endsAt=room.startsAt+180000;
      if(countdownMs>0){broadcast(room,{type:'countdown',startsAt:room.startsAt});room.startTimer=setTimeout(()=>begin(room),countdownMs);room.startTimer.unref();}else begin(room);
     }else if(m.type==='cast'){
-     const event=(m.spell==='fireball'||m.spell==='lightning')?launchProjectile(room,player.id,m.spell,m.targetId,randomUUID()):castSpell(room,player.id,m.spell,m.targetId);
+     const event=(typeof m.spell==='string'&&Object.hasOwn(SPELLS,m.spell)&&SPELLS[m.spell].flightMs)?launchProjectile(room,player.id,m.spell,m.targetId,randomUUID()):castSpell(room,player.id,m.spell,m.targetId);
      if(event.error)send(ws,{type:'error',message:event.error});else{finish(room);broadcast(room,event);}
     }else if(m.type==='impact'){
      resolveImpact(room,player,m.shotId,m.tracked===true);
@@ -132,7 +138,7 @@ export function createGameServer({maxPlayers=null,maxBufferedBytes=256*1024,coun
   ws.on('close',()=>{const current=clients.get(ws);if(current)current.player.location=null;}); // never keep a disconnected player's position
   ws.on('close',()=>{clearTimeout(timeout);const current=clients.get(ws);if(!current)return;const{room,player}=current;player.connected=false;player.disconnectedAt=Date.now();clients.delete(ws);if(room.hostId===player.id)room.hostId=room.players.find(p=>p.connected)?.id||player.id;broadcast(room);});
  });
- const tick=setInterval(()=>{for(const [code,room]of rooms){for(const p of room.players)if(!p.connected&&Date.now()-p.disconnectedAt>60000){p.health=0;p.expired=true;}room.players=room.players.filter(p=>!p.expired);if(room.faces)for(const id of Object.keys(room.faces))if(!room.players.some(p=>p.id===id))delete room.faces[id];if(!room.players.some(p=>p.id===room.hostId&&p.connected))room.hostId=room.players.find(p=>p.connected)?.id||room.players[0]?.id;if(!room.players.length){clearTimeout(room.startTimer);rooms.delete(code);continue;}finish(room);for(const event of expireProjectiles(room))broadcast(room,event);broadcast(room);}},500);tick.unref();
+ const tick=setInterval(()=>{for(const [code,room]of rooms){for(const p of room.players)if(!p.connected&&Date.now()-p.disconnectedAt>60000){p.health=0;p.expired=true;}room.players=room.players.filter(p=>!p.expired);if(room.faces)for(const id of Object.keys(room.faces))if(!room.players.some(p=>p.id===id))delete room.faces[id];if(!room.players.some(p=>p.id===room.hostId&&p.connected))room.hostId=room.players.find(p=>p.connected)?.id||room.players[0]?.id;if(!room.players.length){clearTimeout(room.startTimer);rooms.delete(code);continue;}settleRoom(room);finish(room);for(const event of expireProjectiles(room))broadcast(room,event);broadcast(room);}},500);tick.unref();
  const heartbeat=setInterval(()=>{for(const ws of wss.clients){if(!ws.isAlive){ws.terminate();continue;}ws.isAlive=false;ws.ping();}},15000);heartbeat.unref();
  function close({graceMs=0}={}){
   if(closePromise)return closePromise;

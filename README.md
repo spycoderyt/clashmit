@@ -179,7 +179,17 @@ Node 22+: `npm ci`, `npm start`. Open http://localhost:3000 locally. Every phone
 4. Point the rear camera at another player. When their name and health appear, aim the reticle at them until it locks, then say Fireball (after enabling voice) or tap the spell.
 5. Keep your target in view during the 1.4-second flight. The 3D fireball steers toward them. If their face is hidden the lock follows their body; if they are lost for more than 700 ms the hit is cancelled. Shield and Heal need no target.
 
-Fireball: 25 damage / 1.4-second flight / 1.8-second cooldown / 3 mana. Lightning: 20 damage / 0.25-second flight / 2.5-second cooldown / 4 mana; bypasses shields. Shield: blocks every damaging spell except lightning for 3 seconds / 10-second cooldown / 3 mana. Heal: restores 20 / 12-second cooldown / 4 mana. Mana caps at 10 and continuously refills one unit every 1.5 seconds. Shield protection is evaluated at impact. A visible opponent gets a shield aura; your own shield adds a blue screen rim. Incoming fireballs approach from the locally tracked attacker, with an intensifying all-edge warning when their position is unknown. Sound effects unlock on a tap and can be muted. Highest health wins on timeout; last survivor otherwise. Solo practice retains a clearly labeled simulated target and camera view.
+### Personas
+
+Each player picks a persona in the lobby. A persona is a deck of four spells in a fixed order: an attack a shield blocks, an attack it cannot block, then Shield and Heal, which are the same for everyone. Each spell is cast by saying the one word on its button; only the words of your own deck cast. The server enforces decks, and a returning player may change persona before a round but not during one.
+
+| Persona | Slot 1 · blockable | Slot 2 · ignores Shield |
+|---|---|---|
+| Mage · burst | **Fireball**: 25 damage / 1.4 s flight / 1.8 s cooldown / 3 mana / splash | **Lightning**: 20 damage / 0.25 s flight / 2.5 s cooldown / 4 mana |
+| Witch · attrition | **Poison**: 5 on impact then 3 per second for 5 s, 20 in all / 1.2 s flight / 2.5 s cooldown / 3 mana / splash | **Skeletons**: an army marches for 1.5 s and must be tracked like any flight; once it lands it deals 5 per second for 6 s, 30 in all, with no further aiming / 9 s cooldown / 4 mana |
+| Archer · tempo | **Arrows**: 10 damage / 0.5 s flight / 0.6 s cooldown / 1 mana / splash | **Zap**: 8 damage / 0.15 s flight / 1.5 s cooldown / 2 mana / stuns for 0.5 s, during which the target cannot cast |
+
+Shield: blocks every slot-1 attack for 3 seconds / 10-second cooldown / 3 mana. Heal: restores 20 / 12-second cooldown / 4 mana; it does not cure poison or remove skeletons. Skeletons on you are cleared at once by casting any splash spell (Fireball, Poison or Arrows), with or without a locked target. Re-applying poison or skeletons refreshes them; they do not stack. Lingering damage is settled by the server on its 500 ms tick, before it judges the round. Every attack has its own hit sound, and lingering damage ticks once a second. These numbers are untuned prototype values. Mana caps at 10 and continuously refills one unit every 1.5 seconds. Shield protection is evaluated at impact. A visible opponent gets a shield aura and your own shield adds a screen rim, both in the caster’s persona color. Incoming fireballs approach from the locally tracked attacker, with an intensifying all-edge warning when their position is unknown. Sound effects unlock on a tap and can be muted. Highest health wins on timeout; last survivor otherwise. Solo practice retains a clearly labeled simulated target and camera view.
 
 ## Round start and end
 
@@ -190,6 +200,8 @@ When a round ends the view darkens and a leaderboard appears: survivors first by
 ## One-person preview
 
 Open `/?test=face` or tap **Try face lock on my own first**. Scan your face, then prop the phone up and step back in view of the front camera. This uses the real recognition and lock-on pipeline with yourself as the target. No second player or server is needed. **Reset target** restores 100 HP.
+
+Open `/?test=solo&vs=witch` (or `vs=mage`, `vs=archer`) to play your chosen persona against a simulated opponent that casts its own deck back. It needs no camera, second player or server, and shows every incoming effect, status and clear on one device.
 
 ## Haptics and hit feedback
 

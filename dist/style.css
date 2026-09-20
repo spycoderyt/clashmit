@@ -100,3 +100,56 @@
 .lobby .join-panel{width:100%;margin:0;align-self:center;text-align:center}
 .lobby .join-panel input{text-align:center}
 .lobby .credits{align-self:end;margin:0}
+/* Personas: lobby picker, deck-driven spell bar, status chips, and the skeleton army. */
+.persona-picker{border:0;margin:0 0 18px;padding:0;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.persona-picker legend{grid-column:1/-1;padding:0;margin-bottom:8px;font-size:.875rem;color:var(--muted)}
+.persona-card{position:relative;display:flex;flex-direction:column;align-items:center;gap:2px;padding:10px 4px;border:2px solid var(--line);border-radius:12px;background:#1b2432dc;text-align:center;cursor:pointer;min-height:92px}
+.persona-card input{position:absolute;opacity:0;inset:0;margin:0;cursor:pointer}
+.persona-card .persona-symbol{font-size:1.6rem;line-height:1;color:var(--persona-accent)}
+.persona-card b{font-size:.9rem}.persona-card small{font-size:.66rem;line-height:1.25;color:#b9c0cc}
+.persona-card:has(input:checked){border-color:var(--persona-accent);background:#232d3d;box-shadow:0 0 14px color-mix(in srgb,var(--persona-accent) 45%,transparent)}
+.persona-card:has(input:focus-visible){outline:2px solid #fff;outline-offset:2px}
+.arena{--persona-accent:#ff8a3d}
+.spell.poison{border-color:#4f9b35;background:#1d2f1ced}.poison .spell-symbol{color:#9be564}
+.spell.skeletons{border-color:#9aa08c;background:#2a2c27ed}.skeletons .spell-symbol{color:#f4f1e2}
+.spell.arrows{border-color:#b99a4f;background:#33291aed}.arrows .spell-symbol{color:#ffe9a8}
+.spell.zap{border-color:#c9b53a;background:#33301aed}.zap .spell-symbol{color:#ffe650}
+.spell.target-ready{box-shadow:0 0 16px color-mix(in srgb,var(--persona-accent) 55%,transparent);border-color:#fff}
+.spell.clears-swarm{animation:clear-hint .7s ease-in-out infinite alternate}
+@keyframes clear-hint{to{box-shadow:0 0 18px #f4f1e2aa;border-color:#f4f1e2}}
+#fx.poison{--spell-color:#c9ff8f;--spell-glow:#3fae1e}#fx.skeletonArmy{--spell-color:#f4f1e2;--spell-glow:#8d927f}#fx.arrows{--spell-color:#fff2c4;--spell-glow:#cfa35a}
+#fx.zap{--spell-color:#fff6a8;--spell-glow:#e0c21a}.zap .spell-core,.zap .spell-ring{display:none}
+.lightning-bolt.zap{filter:drop-shadow(0 0 5px #ffe650);animation-duration:.22s}.lightning-bolt.zap polyline{stroke:#fffbd1;stroke-width:.8}
+#own-shield{border-color:var(--persona-accent);box-shadow:inset 0 0 35px 7px color-mix(in srgb,var(--persona-accent) 40%,transparent)}
+.band-target.shielded{border-color:var(--persona-accent);box-shadow:0 0 18px color-mix(in srgb,var(--persona-accent) 60%,transparent),inset 0 0 14px color-mix(in srgb,var(--persona-accent) 35%,transparent)}
+.band-target.poisoned{border-color:#9be564;animation:poison-pulse .8s ease-in-out infinite alternate}
+@keyframes poison-pulse{from{box-shadow:0 0 6px #6fe03a66}to{box-shadow:0 0 22px 6px #6fe03acc}}
+.band-target.healed{border-color:#78ffaa;box-shadow:0 0 26px 10px #36d966cc}
+.status-chips{position:absolute;left:50%;top:176px;transform:translateX(-50%);z-index:3;pointer-events:none;display:flex;flex-direction:column;align-items:center;gap:5px;width:max-content;max-width:92%}
+.status-chip{padding:5px 12px;border-radius:99px;font-size:.78rem;font-weight:700;background:#10151de6;border:1.5px solid #566073;text-align:center}
+.status-chip.poison{border-color:#9be564;color:#d8ffbd}.status-chip.swarm{border-color:#f4f1e2;color:#fff}.status-chip.stun{border-color:#ffe650;color:#fff6a8}
+.arena.poisoned::after{content:"";position:absolute;inset:0;z-index:2;pointer-events:none;box-shadow:inset 0 0 60px 12px #4fbf2a77;animation:poison-pulse-screen .9s ease-in-out infinite alternate}
+@keyframes poison-pulse-screen{from{opacity:.55}to{opacity:1}}
+.arena.stunned::before{content:"";position:absolute;inset:0;z-index:9;pointer-events:none;background:#fff;animation:stun-flash .5s ease-out both}
+@keyframes stun-flash{from{opacity:.75}to{opacity:0}}
+.arena.healed-self #health-fill{filter:brightness(1.6)}
+.player .persona-tag{color:var(--persona-accent);margin-right:5px}
+.skeleton-army{position:absolute;inset:0;z-index:2;pointer-events:none;overflow:hidden;contain:layout paint}
+.skel{position:absolute;left:0;top:0;width:0;height:0;will-change:transform;transition:opacity .25s;opacity:1}
+.skel svg{position:absolute;left:-20px;top:-60px;overflow:visible;filter:drop-shadow(0 2px 2px #000a)}
+.skel .leg,.skel .arm{transform-box:fill-box;transform-origin:50% 0}
+.skel .leg-l{animation:skel-step .34s ease-in-out var(--skel-delay,0s) infinite alternate}
+.skel .leg-r{animation:skel-step .34s ease-in-out calc(var(--skel-delay,0s) - .34s) infinite alternate}
+.skel .arm-l{animation:skel-swing .34s ease-in-out calc(var(--skel-delay,0s) - .34s) infinite alternate}
+.skel .arm-r{animation:skel-swing .34s ease-in-out var(--skel-delay,0s) infinite alternate}
+.skel.claw .arm-l{animation:skel-claw-l .22s ease-in-out var(--skel-delay,0s) infinite alternate}
+.skel.claw .arm-r{animation:skel-claw-r .22s ease-in-out calc(var(--skel-delay,0s) - .11s) infinite alternate}
+@keyframes skel-step{from{transform:rotate(-26deg)}to{transform:rotate(26deg)}}
+@keyframes skel-swing{from{transform:rotate(-20deg)}to{transform:rotate(20deg)}}
+@keyframes skel-claw-l{from{transform:rotate(150deg)}to{transform:rotate(185deg)}}
+@keyframes skel-claw-r{from{transform:rotate(-150deg)}to{transform:rotate(-185deg)}}
+/* Walking away from the camera shows the back of the skull. */
+.skel.away .face{display:none}
+.skel.gone{opacity:0}.skel.gone svg{animation:skel-scatter .45s ease-in both}
+@keyframes skel-scatter{to{transform:translateY(24px) rotate(80deg) scale(.6)}}
+@media (prefers-reduced-motion:reduce){.skel .leg,.skel .arm,.skel.gone svg,.band-target.poisoned,.arena.poisoned::after,.spell.clears-swarm{animation:none}.arena.stunned::before{display:none}}
