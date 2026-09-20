@@ -7,7 +7,7 @@ test('four short steps explain targeting, voice, sword and the shop',()=>{
  assert.deepEqual(STEPS.map(s=>s.anchor),['target','attack','melee','shop']);
  for(const step of STEPS){assert.ok(step.text.length<120);assert.ok(step.title.length<30);assert.equal(step.gate,undefined);}
  assert.match(STEPS[0].text,/name/);assert.match(STEPS[1].title,/\{spell\}/);
- assert.match(STEPS[2].text,/Do not touch/);assert.match(STEPS[3].text,/Exit opens the shop/);
+ assert.match(STEPS[2].text,/Do not touch/);assert.match(STEPS[3].text,/end this life and open the shop/);
  assert.doesNotMatch(STEPS.map(s=>s.text).join(' '),/enable voice|start recording/i);
 });
 test('the lit control stays tappable: only the dark panels and the card take taps',()=>{
