@@ -12,6 +12,7 @@ import {createFlight} from './projectile-flight.js?v=face1';
 import {createPersonTracker} from './detection.js?v=smooth1';
 import {setupShirtCamera} from './shirt-camera.js?v=face1';
 import {createMinimap} from './minimap.js?v=map1';
+import {createHaptics} from './haptics.js?v=haptic4';
 const $=id=>document.getElementById(id);
 const targetOverlay=createTargetOverlay($('arena'),$('boxes'));
 const audio=createSpellAudio();document.addEventListener('pointerdown',()=>{void audio.unlock();},{passive:true});
@@ -28,6 +29,7 @@ $('name').value=safeRead('fieldspell-name');$('server-url').value=safeRead('fiel
 const notify=text=>{$('toast').textContent=text;clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('toast').textContent='',4000);};
 function send(message){if(socket?.readyState===WebSocket.OPEN)socket.send(JSON.stringify(message));}
 const minimap=createMinimap({container:$('arena'),send,notify});$('leave').addEventListener('click',()=>minimap.stop());window.addEventListener('pagehide',()=>minimap.stop());
+const haptics=createHaptics({isMuted:()=>audio.muted,stage:$('arena'),shakeTarget:$('camera')});document.querySelectorAll('.spell').forEach(button=>haptics.attachTap(button));if(new URLSearchParams(location.search).get('test')==='haptics')haptics.showTestPanel();
 const identityTrack=createHeadbandMotion(),flights=new Map(),completedShots=new Set();
 const incoming=createIncomingFireballs({container:$('arena'),renderer:()=>fireScene,getAttacker:id=>{const p=matchedPerson();return p?.id===id&&p.confirmed&&p.fresh?{x:p.x,y:p.y}:null;},now});
 const tracker=createPersonTracker($('camera'),(people,width,height,at)=>{detection={people,width,height,at};identityTrack.update(people,at);},status=>{trackingStatus=status;},()=>({opponent:opponent()?.shirt,own:me()?.shirt,track:identityTrack.get()}));
@@ -50,6 +52,7 @@ function lightningEffect(target){
 }
 function effect(spell,{shot,projectile=true}={}){
  if(projectile&&shot?.shotId&&(flights.has(shot.shotId)||completedShots.has(shot.shotId)))return;
+ haptics.play(spell);
  audio.play(spell);clearTimeout(effectTimer);const layer=$('fx');layer.className='';layer.replaceChildren();const burst=document.createElement('div');burst.className='spell-burst';
  for(const cls of ['spell-core','spell-ring','spell-feedback']){const el=document.createElement('div');el.className=cls;if(cls==='spell-feedback')el.textContent=spell.toUpperCase();burst.append(el);}layer.append(burst);
  const target=targetPoint(shot?.targetId)||{x:.5,y:.4};let depth=false;
@@ -64,6 +67,8 @@ function effect(spell,{shot,projectile=true}={}){
 }
 function handleImpact(m){
  const shown=incoming.resolve(m);completedShots.add(m.shotId);if(m.targetId===myId&&!shown&&!m.missed){$('arena').classList.add('incoming-hit-fallback');setTimeout(()=>$('arena').classList.remove('incoming-hit-fallback'),250);}const spell=m.spell||'fireball',name=spell==='lightning'?'Lightning':'Fireball',damage=SPELLS[spell]?.damage||25;
+ // The impact event arrives before the state that applies it, so a lethal hit is predicted from current health.
+ if(!m.missed){if(m.targetId===myId)haptics.play(m.blocked?'shielded':(me()?.health??100)-damage<=0?'death':spell==='lightning'?'hurtLightning':'hurt');else if(m.actorId===myId)haptics.play(m.blocked?'deflected':'hit');}
  if(m.actorId===myId||m.targetId===myId)audio.play(spell,m.missed?'miss':m.blocked?'block':'impact');
  if(m.actorId===myId)notify(m.missed?`Target lost · ${spell} missed`:m.blocked?`${name} blocked`:`${name} hit · ${damage} damage`);
  if(m.targetId===myId&&!m.missed)notify(m.blocked?`Your shield blocked the ${spell}`:`Hit by ${spell} · −${damage} HP`);

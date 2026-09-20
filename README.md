@@ -166,6 +166,18 @@ Fireball: 25 damage / 1.4-second flight / 1.8-second cooldown / 3 mana. Lightnin
 
 Open `/?test=headband` or tap **Test my headband · 1 person**. Scan your headband, then frame your headband in the front camera. This uses the actual color and motion tracking pipeline; the sample represents the test target. No second player or multiplayer connection is needed. The name, headband confirmation, homing fireball, and target health are visible. **Reset target** restores 100 HP. This test does not establish how well two different headband colors separate; use the two-player arena for that.
 
+## Haptics and hit feedback
+
+iPhone Safari has no vibration API, and since iOS 26.5 a web page cannot fire the Taptic Engine from code at all. What a player gets therefore depends on the phone:
+
+| Phone | Spell button tap | Casts, hits and damage |
+| --- | --- | --- |
+| Android (Chrome) | short vibration | Real vibration patterns: a distinct rhythm per spell, a hit confirmation, a 1.4 s slam-stutter-slam when hit by a fireball, a jagged crackle for lightning, a shield-block buzz and a 2.8 s fading death pattern. |
+| iPhone, iOS 26.5 or later | one faint native tick (fixed by iOS) | **Speaker rumble** with the same rhythms: a loud low-frequency growl that makes the phone buzz in the hand. Needs the ringer on and the volume up, and follows the Sound toggle. |
+| iPhone, iOS 18 to 26.4 | one native tick | Speaker rumble plus tick-rhythm patterns from a hidden switch toggled by code. |
+
+Taking damage also flashes a red vignette and briefly shakes the camera feed on every phone; the HUD stays still, and the shake is skipped for reduced-motion users. Damage feedback always overrides lighter feedback. The iPhone tap tick comes from an invisible native switch laid over each spell button and needs **Settings → Sounds & Haptics → System Haptics**. Stronger or longer Taptic feedback on iPhone would need a native app wrapper with Core Haptics. Everything lives in `dist/haptics.js`; open `/?test=haptics` to try each pattern on a phone.
+
 ## Minimap (opt-in location sharing)
 
 The multiplayer arena shows a small round map in the top-right corner. Tap it and allow **Location** (and **Motion & Orientation** on iPhone) to share your position and see every other player who has done the same. A real street map (OpenStreetMap) is drawn under the radar, centred on you and scaled so the outer ring is the stated radius. You are at the centre; other players are dots in their scanned headband color with a faint circle for GPS uncertainty. With a compass the radar is heading-up (the arrow is the way your camera faces and the orange **N** moves around the rim); without one it says “north up”. Tap the map again to enlarge it with names, distances, **− / Auto zoom / +** buttons and a **Stop sharing** button. The range adjusts automatically unless you zoom by hand, and players beyond it pin to the rim as smaller dots. If the map library or tiles cannot load (for example on a blocked network), the plain radar keeps working.
@@ -200,6 +212,6 @@ Optional `ALLOWED_ORIGINS` is a comma-separated browser origin allowlist; same o
 
 ## Verification
 
-`npm test` covers color matching/ambiguity, connected regions, headband/person association helpers, fast headband motion/scale changes and ambiguity, screen crop coordinates, spell rules, tracking-loss misses, delayed impacts, shields at impact, replay/early-impact rejection, two-client WebSocket state, required headband registration, two-player capacity, reconnection, host control, streaming voice behavior, minimap distance/bearing/radar math, and opt-in location sharing with clearing on stop and disconnect.
+`npm test` covers color matching/ambiguity, connected regions, headband/person association helpers, fast headband motion/scale changes and ambiguity, screen crop coordinates, spell rules, tracking-loss misses, delayed impacts, shields at impact, replay/early-impact rejection, two-client WebSocket state, required headband registration, two-player capacity, reconnection, host control, streaming voice behavior, haptic pattern priorities, minimap distance/bearing/radar math, and opt-in location sharing with clearing on stop and disconnect.
 
 Third-party assets: Three.js (MIT), Leaflet 1.9.4 (BSD-2-Clause, `dist/vendor/leaflet/LICENSE`), map data © OpenStreetMap contributors (ODbL), MediaPipe Tasks Vision (Apache-2.0), Google's EfficientDet Lite0 and BlazeFace short-range models. See `dist/vendor/THREE-LICENSE.txt` and `dist/vendor/mediapipe/NOTICE.txt`.
