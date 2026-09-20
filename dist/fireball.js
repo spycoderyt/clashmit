@@ -23,6 +23,19 @@ export function createFireballRenderer(container){
  function resize(){const rect=container.getBoundingClientRect();if(rect.width===width&&rect.height===height)return;width=rect.width;height=rect.height;if(!width||!height)return;renderer.setSize(width,height,false);camera.aspect=width/height;camera.updateProjectionMatrix();}
  function sprite(size,color=0xffb14d,map=glows.fire){const mat=new THREE.SpriteMaterial({map,color,transparent:true,depthWrite:false,blending:THREE.AdditiveBlending});const s=new THREE.Sprite(mat);s.scale.setScalar(size);return s;}
  function screenPoint(x,y,z){const halfHeight=Math.tan(THREE.MathUtils.degToRad(camera.fov/2))*z;return new THREE.Vector3((x*2-1)*halfHeight*camera.aspect,(1-y*2)*halfHeight,-z);}
+ // Sample a continuous per-shot spiral, so the tail follows the same bends as the core.
+ function flightPoint(shot,u,out){
+  shot.path.getPoint(u,out);
+  if(!shot.swirl||u<=0||u>=1)return out;
+  const s=shot.swirl,envelope=Math.sin(Math.PI*u)**1.4;
+  const angle=s.phase+u*s.turns*Math.PI*2+.35*Math.sin(u*9+s.phase);
+  const radius=envelope*(.72+.28*Math.sin(u*13+s.phase));
+  const halfHeight=Math.tan(THREE.MathUtils.degToRad(camera.fov/2))*-out.z;
+  const scale=halfHeight*Math.min(camera.aspect,1)*s.width;
+  out.x+=scale*radius*(Math.cos(angle)+.35*Math.sin(u*7+s.phase));
+  out.y+=scale*radius*(.75*Math.sin(angle)+.25*Math.sin(u*11+s.phase));
+  return out;
+ }
  function remove(shot){scene.remove(shot.group);shot.group.traverse(o=>{if(o.material)o.material.dispose();});}
  function clear(){cancelAnimationFrame(frame);frame=0;for(const shot of shots)remove(shot);shots.length=0;renderer.clear();canvas.dataset.phase='idle';}
  function animate(time){
@@ -39,7 +52,7 @@ export function createFireballRenderer(container){
      const fade=THREE.MathUtils.clamp(1-(time-shot.lastSeen-100)/200,0,1);if(!fade)shot.hiddenSource=true;
      shot.visibility=fade;shot.group.visible=fade>0;shot.path.v1.copy(shot.path.v0).lerp(shot.end,.45);shot.path.v1.y+=look.arc*.55;
     }else if(shot.getTarget){const target=shot.getTarget();if(target){shot.lastSeen=time;shot.end.lerp(screenPoint(target.x,target.y,shot.depth),.22);shot.path.v1.copy(shot.path.v0).lerp(shot.end,.45);shot.path.v1.y+=look.arc;shot.blast.position.copy(shot.end);}else if(time-shot.lastSeen>700){shot.lost=true;}}
-    const travel=t*t;shot.path.getPoint(travel,shot.ball.position);
+    const travel=t*t;flightPoint(shot,travel,shot.ball.position);
     // Shafts fly point-first along the path; a ball just spins.
     if(look.shape==='arrows'){
      // The path runs into the scene, so a true heading shows each shaft end-on as a dot. Flattening the depth keeps them pointing at the target on screen.
@@ -47,7 +60,7 @@ export function createFireballRenderer(container){
      // Fletching makes an arrow spin about its own shaft in flight.
      shot.arrows.forEach((arrow,j)=>{arrow.rotation.y=time*.021+j*2;});
     }else{shot.ball.rotation.z=time*.008;shot.halo.scale.setScalar(.95+Math.sin(time*.027)*.11);}
-    shot.trail.forEach((p,j)=>{const u=travel-j*look.trailGap;p.visible=u>0;if(!p.visible)return;shot.path.getPoint(Math.max(0,u),p.position);p.position.x+=Math.sin(j*2+time*.009)*.035;p.position.y+=Math.cos(j+time*.005)*.03;p.scale.setScalar((.42*(1-j/shot.trail.length)+.08)*look.trailSize);p.material.opacity=(1-j/shot.trail.length)*.85;});
+    shot.trail.forEach((p,j)=>{const u=travel-j*look.trailGap;p.visible=u>0;if(!p.visible)return;flightPoint(shot,Math.max(0,u),p.position);p.position.x+=Math.sin(j*2+time*.009)*.035;p.position.y+=Math.cos(j+time*.005)*.03;p.scale.setScalar((.42*(1-j/shot.trail.length)+.08)*look.trailSize);p.material.opacity=(1-j/shot.trail.length)*.85;});
     shot.sparks.forEach(p=>p.visible=false);
     if(shot.incoming){for(const [material,full] of shot.parts)material.opacity=full*shot.visibility;shot.trail.forEach(p=>p.material.opacity*=shot.visibility);}
    }else{
@@ -105,7 +118,7 @@ export function createFireballRenderer(container){
   const trail=Array.from({length:look.trailCount},()=>{const p=sprite(.4,look.trail,map);group.add(p);return p;});
   const blast=new THREE.Mesh(torus,new THREE.MeshBasicMaterial({color:look.blast,transparent:true,depthWrite:false,blending:THREE.AdditiveBlending}));blast.position.copy(end);group.add(blast);
   const directions=[],sparks=Array.from({length:36},(_,j)=>{const p=sprite(.2,look.sparks[j%3?0:1],map);group.add(p);const a=j*2.39996,z=1-2*(j+.5)/36,r=Math.sqrt(1-z*z);directions.push(new THREE.Vector3(Math.cos(a)*r,Math.sin(a)*r,z));return p;});
-  scene.add(group);shots.push({look,parts,arrows,group,ball,halo,trail,blast,sparks,directions,path,end,started:performance.now()-Math.max(0,elapsedMs),flight:Math.max(1,flightMs)/1000,depth,getTarget,getSource,onImpact,incoming,shotId,visibility:1,hiddenSource:false,lastSeen:performance.now(),lost:false,reported:false});
+  scene.add(group);shots.push({swirl:look===LOOKS.fireball?{phase:Math.random()*Math.PI*2,turns:1.5+Math.random(),width:.24+Math.random()*.12}:null,look,parts,arrows,group,ball,halo,trail,blast,sparks,directions,path,end,started:performance.now()-Math.max(0,elapsedMs),flight:Math.max(1,flightMs)/1000,depth,getTarget,getSource,onImpact,incoming,shotId,visibility:1,hiddenSource:false,lastSeen:performance.now(),lost:false,reported:false});
   if(!frame)frame=requestAnimationFrame(animate);return true;
  }
  document.addEventListener('visibilitychange',()=>{if(document.hidden)clear();});

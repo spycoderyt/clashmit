@@ -25,7 +25,7 @@ import {requestAllPermissions} from './permissions.js?v=perm1';
 import {createRoundOverlay} from './round-overlay.js?v=respawn1';
 import {createOnboarding,shouldOpen,shouldClose} from './onboarding.js?v=continuous1';
 const $=id=>document.getElementById(id);
-const previewMode=new URLSearchParams(location.search).get('test'),hudPreview=['hud','coach','respawn'].includes(previewMode);
+const previewMode=new URLSearchParams(location.search).get('test'),hudPreview=['hud','coach','respawn','fireball'].includes(previewMode);
 const previewGps={watchPosition(onFix){queueMicrotask(()=>onFix({coords:{latitude:42.3601,longitude:-71.0942,accuracy:4}}));return 1;},clearWatch(){}};
 setupLobbyVideo({video:$('lobby-background'),lobby:$('lobby'),button:$('background-toggle'),headline:$('lobby-headline')});
 const arenaLeaders=createArenaLeaders($('arena'));
@@ -73,7 +73,7 @@ const army=createSkeletonArmy($('arena'));
 const describeIncoming=spell=>{const info=SPELL_INFO[spell]||SPELL_INFO.fireball;return{label:info.label.toLowerCase(),rgb:info.rgb,bolt:!!info.bolt,thrown:spell!=='skeletonArmy',hit:spell==='skeletonArmy'?'Skeletons on you':undefined};};
 const incoming=createIncomingFireballs({container:$('arena'),renderer:()=>fireScene,describe:describeIncoming,getAttacker:id=>{if(simulated())return{x:.5,y:.4};const p=matchedPerson(id);return p?.fresh?{x:p.x,y:p.y}:null;},now});
 const faceTracker=createFaceTracker($('camera'),{getGallery:gallery,onStatus:status=>{trackingStatus=status;}});
-function loadGraphics(){graphicsLoading??=import('./fireball.js?v=persona1').then(m=>{fireScene=m.createFireballRenderer($('arena'));}).catch(()=>{fireScene=null;});return graphicsLoading;}
+function loadGraphics(){graphicsLoading??=import('./fireball.js?v=swirl1').then(m=>{fireScene=m.createFireballRenderer($('arena'));}).catch(()=>{fireScene=null;});return graphicsLoading;}
 // Camera tracks mapped to the screen. `named` keeps only recognised, living players.
 function visibleTracks(named=true){
  if(document.hidden||!stream?.active||!room||Date.now()-faceTracker.lastFrameAt()>1000)return[];
@@ -302,5 +302,6 @@ if(hudPreview){
  $('connection').textContent='Preview · simulated players';$('voice-status').textContent='Preview only · in a game, voice and location start on Join.';
  if(previewMode==='respawn'){room.continuous=true;room.phase='playing';room.endsAt=0;for(const p of room.players)p.life=1;me().health=0;me().diedAt=Date.now();me().respawnAt=Date.now()+10000;roundOverlay.update(room,myId);}
  renderState();minimap.update(room,myId);void minimap.enable({requestCompass:false});if(previewMode==='coach')onboarding.open();
+ if(previewMode==='fireball'){const launch=()=>{if(!$('arena').hidden&&!document.hidden)fireScene?.fire({x:.5,y:.4,distance:24,getTarget:()=>({x:.5,y:.4}),flightMs:1400});};void loadGraphics().then(launch);setInterval(launch,2500);}
  let step=0;setInterval(()=>{if(!hudPreview||$('arena').hidden||!room||previewMode==='respawn')return;step++;const values=[[75,100,50,20],[40,60,90,20],[20,30,50,80],[95,100,50,20]][step%4];room.players.forEach((p,i)=>{p.health=values[i];p.location.at=Date.now();});renderState();minimap.update(room,myId);},3500);
 }
