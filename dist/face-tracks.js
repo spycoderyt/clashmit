@@ -24,9 +24,12 @@ const iou=(a,b)=>{const w=Math.min(a.originX+a.width,b.originX+b.width)-Math.max
 // Where the head sits inside a person box: centred, just below the top edge.
 const headOf=(body,headWidth)=>({x:body.originX+body.width/2,y:body.originY+Math.max(headWidth*.6,body.height*.1)});
 export function createFaceTracks(){
- let tracks=[],nextKey=1,pass=0;
+ let tracks=[],nextKey=1,pass=0,pendingAt=null;
  const predicted=(t,at)=>{const dt=Math.min(250,Math.max(0,at-t.seenAt));return{x:t.cx+t.vx*dt,y:t.cy+t.vy*dt};};
- function drop(at){tracks=tracks.filter(t=>{const faceGap=at-t.seenAt;if(faceGap<=LOCK.coastMs)return true;return !!t.id&&!!t.body&&at-t.body.at<=LOCK.bodyFreshMs&&faceGap<=LOCK.bodyHoldMs;});}
+ const alive=(t,at)=>at-t.seenAt<=LOCK.coastMs||!!t.id&&!!t.body&&at-t.body.at<=LOCK.bodyFreshMs&&at-t.seenAt<=LOCK.bodyHoldMs;
+ // Keep identity votes while a bounded inference is pending, but never display or target this
+ // retained history after the normal visibility window. A stalled camera cannot extend it.
+ function drop(at){tracks=tracks.filter(t=>alive(t,at)||(pendingAt!==null&&at-pendingAt<=2000&&pendingAt-t.seenAt<=LOCK.coastMs));}
  // faces: [{box:{x,y,width,height},score,descriptor?,pixels?}] in source pixels. pixels is the face
  // width in the pixels the descriptor was actually computed from, which gates recognition.
  function updateFaces(faces,at,gallery){
@@ -109,13 +112,13 @@ export function createFaceTracks(){
  const mode=(t,at)=>at-t.seenAt<=LOCK.bodyAfterMs?'face':t.body&&at-t.body.at<=LOCK.bodyFreshMs?'body':'coast';
  function list(at){
   drop(at);
-  return tracks.map(t=>{
+  return tracks.filter(t=>alive(t,at)).map(t=>{
    const source=mode(t,at),p=source==='body'?headOf(t.body.box,t.width):predicted(t,at),fresh=source==='face'?at-t.seenAt<=LOCK.faceFreshMs:source==='body';
    return{bodyBox:t.body&&at-t.body.at<=LOCK.bodyFreshMs&&!t.suspectSince?{...t.body.box}:null,key:t.key,id:t.id,via:t.lastMatch?.via||null,source,fresh:source==='coast'?at-t.seenAt<=LOCK.faceFreshMs:fresh,confirmed:!!t.id,hits:t.hits,seenAt:t.seenAt,match:t.lastMatch||null,votes:t.voter.identity.votes,box:{originX:p.x-t.width/2,originY:p.y-t.height/2,width:t.width,height:t.height}};
   });
  }
  return{
-  updateFaces,updateBodies,list,reset(){tracks=[];},
+  updateFaces,updateBodies,list,beginFrame(at){pendingAt=Number.isFinite(at)?at:null;},endFrame(){pendingAt=null;},reset(){tracks=[];pendingAt=null;},
   // True while a named track has lost its face, which is when the person detector is worth running.
   needsBodies:at=>tracks.some(t=>t.id&&at-t.seenAt>LOCK.bodyAfterMs),
   // Also worth an occasional look while the face is visible, so the body is already known when the face goes.

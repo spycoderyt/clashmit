@@ -324,18 +324,14 @@ The face tracker skips repeated camera frames, rejects stale worker results afte
 
 Upgraded first attacks (Chain Lightning, Plague, Arrow Storm) hit the locked target at full damage, then up to two nearest eligible opponents within 5 metres of that target at 50% damage. Plague spreads at half poison damage per second for the same duration. Extra hits require fresh location data; no GPS means the main hit still works without spread. Shields block spread except Chain Lightning. A miss, blocked primary, parry, or reflection cannot start a spread.
 
-### Sword melee in the live game
-
-Every character has a sword. Show a hand to the rear camera and swing it through a recognised opponent's face box. A hit deals 5 HP (half a heart), costs no mana, and has a 1-second cooldown. Shields block it. The server applies normal kills, assists, coins, and streaks. Hand tracking runs separately from face tracking with one small frame in flight. This is a screen-space overlap test; it does not measure physical reach. Use air gestures without contact.
+### Respawn shop
 
 Exit opens the respawn menu and keeps your name and face scan. Locked attack cards can be tapped to buy skills during FFA. Owned attack cards can also be tapped to buy upgrades. Consumables remain in the respawn shop.
 
-### Attack and melee previews
+### Attack previews
 
 - `/upgrades.html`: play all base attacks, upgrades, and consumable effects with sound. The page uses the game renderers and shared balance data. It does not join the arena.
-- `/melee.html`: test hand-controlled melee with a rear or front camera. The sword follows a hand anywhere in the camera view. Swing through a face box to hit. Each hit removes 5 HP from a local target, with a 1-second cooldown. Demo buttons test center/top swings, consecutive hits, misses, and a stationary hand. `Check tracking engine` loads and runs both models without opening the camera. Phone camera access requires HTTPS.
-- Melee is an experiment. Face detection is not player identification. It sends no attacks to the game. Hand and face frames stay in a local worker. Screen overlap does not establish physical distance.
-- Reaper image attribution: [MesserWoland / 1ur1, CC BY 2.0](https://commons.wikimedia.org/wiki/File:The_death.svg). See `dist/media/SOUL-REAPER-CREDITS.md`. Hand model source and license are in `dist/models/HAND-LANDMARKER-NOTICE.txt`.
+- Reaper image attribution: [MesserWoland / 1ur1, CC BY 2.0](https://commons.wikimedia.org/wiki/File:The_death.svg). See `dist/media/SOUL-REAPER-CREDITS.md`.
 
 ### Coin progression and bounties
 

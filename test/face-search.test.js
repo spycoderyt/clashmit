@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createFaceSearch,detectionTime,createVideoFrameGate} from '../dist/face-search.js';
+import {createFaceSearch,detectionTime,createVideoFrameGate,updateInferenceBudget} from '../dist/face-search.js';
 import {createFaceTracks} from '../dist/face-tracks.js';
 const scene={width:1920,height:1080,point:{x:960,y:432}};
 test('full-frame misses still trigger native-resolution distant-face searches',()=>{
@@ -46,4 +46,37 @@ test('frozen camera frames cannot keep a previously recognized target fresh',()=
  for(let at=300;at<=900;at+=100){if(gate.take(video))tracks.updateFaces([face],at,gallery);}
  assert.equal(tracks.list(900)[0].fresh,false,'display coasting never grants a new hit window');
  assert.deepEqual(tracks.list(1500),[],'stalled camera eventually loses the box');
+});
+
+test('discarded slow passes immediately reduce search work before a first face exists',()=>{
+ const search=createFaceSearch(),budget=updateInferenceBudget(0,2500);
+ assert.equal(detectionTime(0,2500),null);assert.equal(budget,2500);
+ const first=search.next({...scene,at:2500,budgetMs:budget}),second=search.next({...scene,at:3000,budgetMs:budget});
+ assert.equal(first.length,1);assert.equal(first[0].detectSize,320);assert.equal(first[0].full,true);
+ assert.equal(second.length,1);assert.equal(second[0].width,480);assert.equal(second[0].detectSize,320);
+ assert.equal(first[0].minScore,.45);assert.equal(second[0].minScore,.45,'confidence does not loosen under load');
+ assert.ok(updateInferenceBudget(budget,100)<budget);assert.ok(updateInferenceBudget(budget,100)>800,'avoid bouncing immediately back to expensive searches');
+});
+test('slow tracked searches never stack a full-frame and follow detection in one pass',()=>{
+ const search=createFaceSearch(),follow=[{x:400,y:100,width:200,height:200},{x:800,y:100,width:200,height:200}];
+ const full=search.next({...scene,at:0,follow,budgetMs:450});assert.equal(full.length,1);assert.equal(full[0].full,true);assert.equal(full[0].detectSize,416);
+ const next=search.next({...scene,at:500,follow,budgetMs:450});assert.equal(next.length,1);assert.equal(next[0].full,undefined);
+});
+test('1.5-second inferences retain consecutive identity votes while hiding expired boxes',()=>{
+ const tracks=createFaceTracks(),descriptor=Array(512).fill(0);descriptor[0]=1;
+ const gallery=[{id:'a',samples:[descriptor]}],face={box:{x:400,y:200,width:80,height:100},score:.9,pixels:80,descriptor};
+ for(let pass=0;pass<3;pass++){
+  const start=pass*1550,done=start+1500;tracks.beginFrame(start);
+  if(pass){assert.equal(tracks.list(start+700).every(t=>!t.fresh),true);assert.deepEqual(tracks.list(start+1300),[],'expired boxes must not remain targetable during inference');}
+  tracks.updateFaces([face],detectionTime(start,done),gallery);tracks.endFrame();
+ }
+ assert.equal(tracks.list(4600)[0].id,'a');assert.equal(tracks.list(4600)[0].votes,3);assert.equal(tracks.list(4600)[0].fresh,true);
+});
+test('a stalled inference cannot retain identity votes indefinitely',()=>{
+ const tracks=createFaceTracks(),descriptor=Array(512).fill(0);descriptor[0]=1;
+ const gallery=[{id:'a',samples:[descriptor]}],face={box:{x:400,y:200,width:80,height:100},score:.9,pixels:80,descriptor};
+ tracks.updateFaces([face],0,gallery);tracks.updateFaces([face],100,gallery);tracks.beginFrame(110);
+ assert.deepEqual(tracks.list(2200),[]);tracks.endFrame();tracks.updateFaces([face],2300,gallery);
+ assert.equal(tracks.list(2300)[0].votes,1);assert.equal(tracks.list(2300)[0].id,null);
+ for(const [start,end] of [[0,NaN],[Infinity,0],[100,90]])assert.equal(detectionTime(start,end),null);
 });

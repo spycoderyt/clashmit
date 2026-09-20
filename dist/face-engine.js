@@ -4,24 +4,18 @@
 // Both come from InsightFace's buffalo_sc pack: NON-COMMERCIAL RESEARCH licence, see
 // models/face/NOTICE.txt. Frames and descriptors never leave the page unless the caller sends them.
 import * as ort from './vendor/onnxruntime/ort.wasm.bundle.min.js';
+import {loadFaceAsset} from './face-assets.js';
 import {alignmentTransform,FACE_TEMPLATE,UPPER_FACE_ROWS} from './face-id.js?v=face13';
 const asset=path=>new URL(path,import.meta.url).href;
 const ALIGNED=112,STRIDES=[8,16,32];
 let loading,detector,recogniser;
-// The runtime and models total about 30 MB and never change, so they are kept in Cache Storage
-// after the first visit instead of being fetched again on every reload. Bump the name to refresh.
-const CACHE='face-engine-v1';
-async function cachedBytes(url){
- try{const cache=await caches.open(CACHE);let response=await cache.match(url);if(!response){response=await fetch(url);if(!response.ok)throw Error(`${response.status} for ${url}`);await cache.put(url,response.clone());}return new Uint8Array(await response.arrayBuffer());}
- catch{const response=await fetch(url);if(!response.ok)throw Error(`Could not download ${url}`);return new Uint8Array(await response.arrayBuffer());}
-}
 export function loadFaceEngine(onProgress=()=>{}){
  loading??=(async()=>{
   // The detector declares output sizes for 640 px input but runs fine at 320; silence its per-run shape warnings.
   ort.env.logLevel='error';const options={executionProviders:['wasm'],graphOptimizationLevel:'all',logSeverityLevel:3};
-  onProgress('Loading recognition runtime (14 MB, first visit only)…');ort.env.wasm.numThreads=1;ort.env.wasm.wasmBinary=await cachedBytes(asset('./vendor/onnxruntime/ort-wasm-simd-threaded.wasm'));
-  onProgress('Loading face detector (3 MB, first visit only)…');detector=await ort.InferenceSession.create(await cachedBytes(asset('./models/face/det_500m.onnx')),options);
-  onProgress('Loading face recogniser (14 MB, first visit only)…');recogniser=await ort.InferenceSession.create(await cachedBytes(asset('./models/face/w600k_mbf.onnx')),options);
+  ort.env.wasm.numThreads=1;ort.env.wasm.wasmBinary=await loadFaceAsset(asset('./vendor/onnxruntime/ort-wasm-simd-threaded.wasm'),{label:'Recognition runtime',onProgress});
+  const detectionBytes=await loadFaceAsset(asset('./models/face/det_500m.onnx'),{label:'Face detector',onProgress});onProgress('Starting face detector on your phone…');detector=await ort.InferenceSession.create(detectionBytes,options);
+  const recognitionBytes=await loadFaceAsset(asset('./models/face/w600k_mbf.onnx'),{label:'Face recogniser',onProgress});onProgress('Starting face recognition on your phone…');recogniser=await ort.InferenceSession.create(recognitionBytes,options);
   return 'ONNX WebAssembly';
  })().catch(error=>{loading=undefined;throw error;});
  return loading;

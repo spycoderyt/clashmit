@@ -268,3 +268,10 @@
 .caster .orbital-warning{top:12%;padding:10px 14px;background:#142536e8;border-color:#62cebf}.caster .orbital-warning strong{font-size:18px}.caster .orbital-warning small{font-size:30px}.caster.detonate .orbital-white{background:radial-gradient(circle at var(--impact-x,50%) var(--impact-y,55%),white 0,#ffda7ddd 10%,transparent 35%)}
 
 .airstrike-preview-controls{position:absolute;bottom:18px;left:10px;z-index:80;max-width:220px;padding:8px;background:#14202aee;border:1px solid #607384;border-radius:8px;font:12px system-ui}.airstrike-preview-controls summary{cursor:pointer}.airstrike-preview-controls button{display:block;width:100%;min-height:38px;margin-top:6px;background:#254334;border-radius:5px;padding:8px}.airstrike-preview-controls[open]{box-shadow:0 8px 25px #0008}
+
+/* Target names and rewards have independent rows, sized to the viewport, not the face. */
+.person-label.band-target-label{width:max-content;min-width:132px;max-width:min(240px,calc(100% - 16px));padding:6px 9px;overflow:visible;white-space:normal}
+.person-label.band-target-label b{white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:anywhere;line-height:1.25}
+.person-label.band-target-label .target-reward{display:flex;align-items:center;justify-content:center;gap:4px;white-space:nowrap;color:#f3cc73;font-weight:600;line-height:1.4;margin-top:2px}
+.person-label.band-target-label .target-reward img{flex:none;margin-left:0!important}
+.person-label.band-target-label small{line-height:1.3;margin-top:3px}

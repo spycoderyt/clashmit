@@ -1,33 +1,42 @@
-/* Respawn shop: a simple equipment list, sized for a phone first. */
-.round-out.shop-screen{background:#101619;backdrop-filter:none;-webkit-backdrop-filter:none;padding:22px 18px max(22px,env(safe-area-inset-bottom));box-shadow:none}
-.respawn-shop{width:min(100%,560px);gap:18px;color:#f2efe6;font-family:'IBM Plex Sans',sans-serif;text-shadow:none}
-.respawn-shop header{align-items:baseline;gap:16px}
-.respawn-shop h2{font:600 28px/1.15 'IBM Plex Sans',sans-serif!important;letter-spacing:-.8px;text-shadow:none}
-.respawn-shop header strong{font:600 24px/1 'IBM Plex Sans',sans-serif;color:#edc566;white-space:nowrap;font-variant-numeric:tabular-nums}
-.respawn-shop>p{font:400 13px/1.5 'IBM Plex Sans',sans-serif!important;color:#a9b1b0!important;text-shadow:none!important}
-.respawn-shop button{font:600 13px/1.25 'IBM Plex Sans',sans-serif!important;border-radius:3px;border:1px solid #47514f;background:#1a2326;color:#f2efe6;padding:11px 12px;min-height:42px;box-shadow:none;text-shadow:none;letter-spacing:0}
-.respawn-shop button:disabled{opacity:1;color:#7d8885;border-color:#303a3b;background:#141d20}
-.respawn-shop button:focus-visible{outline:2px solid #d8ed92;outline-offset:3px}
-.shop-characters{gap:0;border-bottom:1px solid #46514d}
-.shop-characters button{flex:1;border:0;border-radius:0;background:transparent;padding:12px 4px;color:#a9b1b0}
-.shop-characters [aria-pressed=true]{background:transparent;color:#d8ed92;border-bottom:3px solid #d8ed92;padding-bottom:9px}
-.shop-skills{gap:0}
-.shop-skill{display:grid;grid-template-columns:minmax(0,1fr) auto;column-gap:14px;row-gap:6px;align-items:start;background:transparent;border:0;border-bottom:1px solid #303a3b;border-radius:0;padding:17px 0;min-height:0;box-shadow:none}
-.shop-skill h3{grid-column:1;grid-row:1;font:600 18px/1.25 'IBM Plex Sans',sans-serif!important;color:#f2efe6;margin:0;padding:0;overflow-wrap:anywhere;letter-spacing:-.2px}
-.shop-skill p{grid-column:1;grid-row:2;font:400 12px/1.5 'IBM Plex Sans',sans-serif!important;color:#a9b1b0;margin:0!important;white-space:nowrap}
-.shop-skill>button,.shop-skill .shop-upgrade{position:static;grid-column:2;grid-row:1 / span 2;max-width:126px;align-self:center;font-size:12px!important;background:#1a2326;border-color:#47514f;color:#d8ed92}
-.shop-skill>button:disabled{color:#7d8885;border-color:#303a3b;background:transparent}
-.shop-skill small{grid-column:1 / -1;font:400 12px/1.45 'IBM Plex Sans',sans-serif!important;color:#87948f!important;margin:2px 0 0;text-shadow:none!important}
-.shop-skill.upgraded h3,.shop-skill.upgraded p{color:#c9b8e9}
-.shop-items{gap:0;border-bottom:1px solid #303a3b}
-.shop-items>div{gap:12px;padding:8px 0;border-bottom:1px solid #253033}
-.shop-items>div:last-child{border-bottom:0}
-.shop-items span{font:400 14px/1.4 'IBM Plex Sans',sans-serif!important;color:#f2efe6!important}
-.shop-items button{min-width:86px;flex-shrink:0}
-.respawn-shop .respawn-go{background:#d8ed92!important;color:#101619!important;border-color:#d8ed92!important;border-radius:3px;min-height:48px;font:600 16px/1.25 'IBM Plex Sans',sans-serif!important}
-.respawn-shop .respawn-go:disabled{background:#253032!important;border-color:#394340!important;color:#88968f!important}
-.respawn-shop .shop-streak-tip{font:400 12px/1.5 'IBM Plex Sans',sans-serif!important;color:#87948f!important;text-align:left;max-width:44ch;text-shadow:none!important}
-@media(max-width:370px){.round-out.shop-screen{padding-inline:14px}.respawn-shop{gap:14px}.respawn-shop h2{font-size:25px!important}.shop-skill{column-gap:10px}.shop-skill h3{font-size:16px!important}.shop-skill>button,.shop-skill .shop-upgrade{max-width:110px;padding:9px 8px}.shop-skill p{font-size:11px!important}}
-@media(max-height:700px){.round-out.shop-screen{padding-top:16px}.respawn-shop{gap:12px}.shop-skill{padding:13px 0}}
+/* Three skills, three supplies, one respawn action. */
+.round-out.shop-screen{background:#0c1624;backdrop-filter:none;-webkit-backdrop-filter:none;padding:18px 12px max(18px,env(safe-area-inset-bottom));box-shadow:none}
+.respawn-shop{display:grid;width:min(100%,440px);gap:20px;color:#f1f3f6;font-family:'IBM Plex Sans',sans-serif;text-shadow:none;text-align:center}
+.respawn-shop header{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.respawn-shop h2{font:600 25px/1.1 'IBM Plex Sans',sans-serif!important;letter-spacing:-.5px;text-shadow:none;margin:0}
+.respawn-shop header strong{display:flex;align-items:center;gap:6px;font:600 24px/1 'IBM Plex Sans',sans-serif;color:#f3d481;white-space:nowrap;font-variant-numeric:tabular-nums}
+.respawn-shop .coin-icon{width:16px;height:20px;image-rendering:pixelated}
+.respawn-shop button{font:600 13px/1.2 'IBM Plex Sans',sans-serif!important;border-radius:4px;border:1px solid #35485d;background:#17273a;color:#f1f3f6;padding:10px 6px;min-height:44px;box-shadow:none;text-shadow:none;letter-spacing:0}
+.respawn-shop button:disabled{opacity:1;color:#8290a0;border-color:#293a4d;background:#132031}
+.respawn-shop button:focus-visible{outline:2px solid #f3d481;outline-offset:3px}
+.respawn-shop button:active:not(:disabled){transform:translateY(1px);background:#243b53}
+.shop-characters{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px;border:0;padding:3px;background:#101e2e}
+.shop-characters button{border:0;background:transparent;color:#98a7b8;min-height:42px}
+.shop-characters button[aria-pressed=true]{background:#25394f;color:#fff2c8;border:0;padding:10px 6px}
+.shop-skills{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.shop-skill{display:flex;flex-direction:column;align-items:center;gap:9px;min-width:0;padding:12px 7px 7px;border:1px solid #35485d;border-radius:5px;background:#142438;box-shadow:none}
+.shop-skill.locked{background:#101e2e;border-color:#293a4d}
+.shop-skill.upgraded{border-color:#9c88c1;background:#201f37}
+.respawn-shop .shop-skill-state{font:500 10px/1.2 'IBM Plex Sans',sans-serif!important;color:#9fafc2!important;letter-spacing:.1px;margin:0;text-shadow:none}
+.shop-skill.upgraded .shop-skill-state{color:#c6b6ea!important}
+.shop-skill-icon{width:32px;height:32px;filter:brightness(0) saturate(100%) invert(87%) sepia(34%) saturate(576%) hue-rotate(344deg)}
+.respawn-shop .shop-skill h3{display:flex;align-items:center;justify-content:center;min-height:34px;width:100%;margin:0;padding:0;font:600 14px/1.2 'IBM Plex Sans',sans-serif!important;letter-spacing:0;overflow-wrap:anywhere;color:#f1f3f6}
+.respawn-shop .shop-stats{display:flex;justify-content:center;gap:6px;flex-wrap:wrap;min-height:14px;margin:0!important;font:400 10px/1.3 'IBM Plex Sans',sans-serif!important;color:#a7b5c7!important}
+.shop-stats span{display:inline-flex;align-items:center;gap:2px;font:inherit!important;color:inherit!important;white-space:nowrap}
+.shop-stat-icon{width:10px;height:10px;filter:brightness(0) invert(.75)}
+.respawn-shop .shop-skill-action{position:static;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:4px;width:100%;max-width:none;min-height:52px;margin-top:auto;background:#294667;border-color:#496482;color:#f7f1df;font-size:12px!important}
+.shop-price{display:inline-flex;align-items:center;justify-content:center;gap:4px;font:600 13px/1 'IBM Plex Sans',sans-serif!important;color:#f3d481!important;text-shadow:none}
+.shop-price .coin-icon{width:10px;height:13px}
+button:disabled .shop-price{color:#9a947d!important;opacity:.65}
+.shop-items{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;border:0}
+.respawn-shop .shop-item{position:relative;display:flex;flex-direction:column;align-items:center;gap:5px;padding:12px 5px 10px;background:#142438;min-width:0}
+.shop-item-icon{width:27px;height:27px}
+.respawn-shop .shop-item-name{font:600 12px/1.2 'IBM Plex Sans',sans-serif!important;color:#f1f3f6!important}
+.respawn-shop .shop-item small{font:400 10px/1.2 'IBM Plex Sans',sans-serif!important;color:#9fafc2!important;margin:0;text-shadow:none}
+.respawn-shop .shop-item-count{position:absolute;right:7px;top:6px;font:600 11px/1 'IBM Plex Sans',sans-serif!important;color:#9fafc2!important}
+.shop-item .shop-price{margin-top:3px}
+.respawn-shop .respawn-go{width:100%;background:#efcf7b!important;color:#19283b!important;border-color:#efcf7b!important;border-radius:4px;min-height:52px;font:600 17px/1.2 'IBM Plex Sans',sans-serif!important}
+.respawn-shop .respawn-go:disabled{background:#1c3047!important;border-color:#35485d!important;color:#a7b5c7!important}
+@media(max-width:370px){.respawn-shop{gap:15px}.shop-skills,.shop-items{gap:5px}.shop-skill{padding:10px 4px 5px}.respawn-shop .shop-skill h3{font-size:12px!important}.respawn-shop .shop-stats{gap:4px;font-size:9px!important}}
+@media(max-height:620px){.round-out.shop-screen{justify-content:flex-start;padding-top:12px}.respawn-shop{gap:12px}.shop-skill{gap:6px}.shop-skill-icon{width:25px;height:25px}.respawn-shop .shop-item{gap:4px;padding-top:8px}.shop-item-icon{width:22px;height:22px}}
 
-.respawn-shop .shop-area-note{display:block;margin:4px 0 6px;color:#bdb0df!important;max-width:100%;line-height:1.4!important}
+.respawn-shop .shop-mystery{padding:6px;background:#0f1d2d}.respawn-shop .shop-unlock-price{display:flex;align-items:center;justify-content:center;flex:1;width:100%;background:transparent;border:0;min-height:150px}.shop-unlock-price .shop-price{font-size:20px!important;gap:7px}.shop-unlock-price .coin-icon{width:16px;height:21px}

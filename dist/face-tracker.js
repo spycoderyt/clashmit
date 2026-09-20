@@ -3,7 +3,7 @@
 // is hidden, so their body carries the lock until the face comes back.
 import {createFaceTracks,LOCK} from './face-tracks.js?v=damage1';
 import {startFaceEngine,detectFaces,grabRegion} from './face-client.js?v=face13';
-import {createFaceSearch,detectionTime,createVideoFrameGate} from './face-search.js?v=1';
+import {createFaceSearch,detectionTime,createVideoFrameGate,updateInferenceBudget} from './face-search.js?v=1';
 const BODY_EVERY_MS=250,BODY_IDLE_MS=1200,MIN_TICK_MS=50;
 // A face half hidden behind a phone scores lower with the detector. Searches stay fairly strict so stray
 // patterns are not boxed, but a face already being followed is allowed to score much lower.
@@ -38,21 +38,22 @@ export function createFaceTracker(video,{getGallery,onStatus=()=>{},focus={x:.5,
   if(document.hidden||video.readyState<2||!video.videoWidth){timer=setTimeout(tick,120);return;}
   if(!frameGate.take(video)){timer=setTimeout(tick,MIN_TICK_MS);return;}
   width=video.videoWidth;height=video.videoHeight;const point={x:focus.x*width,y:focus.y*height},regions=search.next({width,height,at:started,point,follow:tracks.regions(started,inferenceMs>220?1:2,point),budgetMs:inferenceMs});
-  inFlight=true;
+  inFlight=true;tracks.beginFrame(started);
   try{
-   const result=await detectFaces(video,regions,{known:tracks.knownBoxes(started),describeMax:2,focus:point,upper:true});if(!active||g!==generation)return;
+   const result=await detectFaces(video,regions,{known:inferenceMs>220?[]:tracks.knownBoxes(started),describeMax:inferenceMs>220?1:2,focus:point,upper:true});if(!active||g!==generation)return;
    if(document.hidden){timer=setTimeout(tick,120);return;}
    // A pass that only looked inside small windows says nothing about faces elsewhere, so tracks outside
    // those windows simply keep coasting until the next full-frame pass.
+   inferenceMs=updateInferenceBudget(inferenceMs,Date.now()-started);
    const at=detectionTime(started,Date.now());
    if(at===null){onStatus('Tracking is slow · hold the phone steady');timer=setTimeout(tick,100);return;}
-   inferenceMs=inferenceMs*.7+(Date.now()-started)*.3;tracks.updateFaces(result.faces,at,getGallery());lastFrameAt=at;
+   tracks.updateFaces(result.faces,at,getGallery());lastFrameAt=at;
    const named=tracks.list(at).filter(t=>t.id);onStatus(named.length?`Face lock · ${named.length} player${named.length>1?'s':''} · ${Math.round(result.ms)}ms`:result.faces.length?`Identifying · ${Math.round(result.ms)}ms`:'Looking for players');
    // Often while a named face is hidden; occasionally otherwise, so the body is already bound when the face goes.
    // On slower phones, reserve CPU and memory for faces until body fallback is actually needed.
-   if(named.length&&(inferenceMs<160||tracks.needsBodies(at)))startBodyWorker();
-   if(tracks.needsBodies(at))void requestBodies(at,Math.max(BODY_EVERY_MS,inferenceMs*4));else if(inferenceMs<160&&tracks.wantsBodies(at))void requestBodies(at,BODY_IDLE_MS);
-  }catch(e){if(active&&g===generation)onStatus('Face tracking paused · '+(e.message||'retrying'));}finally{inFlight=false;}
+   if(inferenceMs<=220&&named.length&&(inferenceMs<160||tracks.needsBodies(at)))startBodyWorker();
+   if(inferenceMs<=220&&tracks.needsBodies(at))void requestBodies(at,Math.max(BODY_EVERY_MS,inferenceMs*4));else if(inferenceMs<160&&tracks.wantsBodies(at))void requestBodies(at,BODY_IDLE_MS);
+  }catch(e){if(active&&g===generation)inferenceMs=updateInferenceBudget(inferenceMs,Date.now()-started);if(active&&g===generation)onStatus('Face tracking paused · '+(e.message||'retrying'));}finally{inFlight=false;tracks.endFrame();}
   if(active&&g===generation)timer=setTimeout(tick,Math.max(0,MIN_TICK_MS-(Date.now()-started)));
  }
  return{

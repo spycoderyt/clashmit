@@ -38,16 +38,29 @@ export function createLivePortraitCache({makeImage=()=>new Image(),onLoad=()=>{}
  return{sync,get(id){const entry=entries.get(id);return entry?.loaded?entry.image:null;},clear(){for(const entry of entries.values())release(entry);entries.clear();}};
 }
 
-export function createLiveMap(host,{onCount=()=>{}}={}){
- const tiles=createTileMap(host,{theme:'midnight'}),canvas=document.createElement('canvas');canvas.className='live-map-overlay';canvas.setAttribute('aria-hidden','true');host.append(canvas);
+export function createLiveMap(host,{onCount=()=>{},createTiles=createTileMap}={}){
+ const tiles=createTiles(host,{theme:'midnight'}),canvas=document.createElement('canvas');canvas.className='live-map-overlay';canvas.setAttribute('aria-hidden','true');host.append(canvas);
  const empty=document.createElement('div');empty.className='live-map-empty';const title=document.createElement('strong'),hint=document.createElement('span');title.textContent='Waiting for player locations';hint.textContent='The map appears when players share their GPS location.';empty.append(title,hint);host.append(empty);
  const attribution=document.createElement('div');attribution.className='live-map-attribution';
  for(const [text,url] of [['OpenFreeMap','https://openfreemap.org/'],['OpenMapTiles','https://openmaptiles.org/'],['© OpenStreetMap','https://www.openstreetmap.org/copyright']]){if(attribution.childNodes.length)attribution.append(' · ');const a=document.createElement('a');a.href=url;a.target='_blank';a.rel='noopener';a.textContent=text;attribution.append(a);}host.append(attribution);
- const context=canvas.getContext('2d');let players=[],casts=new Map(),view=null,targetView=null,width=1,height=1,visible=true,raf=0,lastFrame=0,animateUntil=0,anchorServer=Date.now(),anchorLocal=performance.now(),loading=false;
+ const context=canvas.getContext('2d');let players=[],casts=new Map(),view=null,targetView=null,width=1,height=1,visible=true,raf=0,lastFrame=0,animateUntil=0,anchorServer=Date.now(),anchorLocal=performance.now(),loading=false,destroyed=false;
  const positions=new Map(),portraits=createLivePortraitCache({onLoad:()=>{animateUntil=performance.now()+100;request();}}),clock=()=>anchorServer+performance.now()-anchorLocal;
- const project=point=>tiles.ready?tiles.project(point.latitude,point.longitude):projectLivePoint(point,view,width,height);
- function resize(){const box=host.getBoundingClientRect();width=Math.max(1,box.width);height=Math.max(1,box.height);const dpr=Math.min(2,devicePixelRatio||1);canvas.width=Math.round(width*dpr);canvas.height=Math.round(height*dpr);context?.setTransform(dpr,0,0,dpr,0,0);tiles.resize();targetView=fitLiveView(players.map(p=>p.location),width,height);animateUntil=performance.now()+500;request();}
- function request(){if(visible&&!raf)raf=requestAnimationFrame(frame);}
+ // Many simultaneous casts share their caster/target coordinates. Project each unique point once per frame.
+ const projections=new Map(),labelsByPlayer=new Map();
+ function project(point){
+  let row=projections.get(point.latitude);if(!row){row=new Map();projections.set(point.latitude,row);}
+  if(!row.has(point.longitude))row.set(point.longitude,tiles.ready?tiles.project(point.latitude,point.longitude):projectLivePoint(point,view,width,height));
+  return row.get(point.longitude);
+ }
+ function labelFor(player){
+  const fullName=String(player.name||'Player');let label=labelsByPlayer.get(player.id);
+  if(!label||label.fullName!==fullName){const words=fullName.trim().split(/\s+/);label={fullName,name:fullName.slice(0,20),initials:[words[0],...(words.length>1?[words.at(-1)]:[])].map(word=>Array.from(word)[0]||'').join('').toUpperCase(),width:null};labelsByPlayer.set(player.id,label);}
+  return label;
+ }
+ function fontsChanged(){for(const label of labelsByPlayer.values())label.width=null;animateUntil=performance.now()+100;request();}
+ document.fonts?.addEventListener('loadingdone',fontsChanged);
+ function resize(){if(destroyed)return;const box=host.getBoundingClientRect();width=Math.max(1,box.width);height=Math.max(1,box.height);const dpr=Math.min(2,devicePixelRatio||1);if(canvas.width!==Math.round(width*dpr))canvas.width=Math.round(width*dpr);if(canvas.height!==Math.round(height*dpr))canvas.height=Math.round(height*dpr);context?.setTransform(dpr,0,0,dpr,0,0);tiles.resize();targetView=fitLiveView(players.map(p=>p.location),width,height);animateUntil=performance.now()+500;request();}
+ function request(){if(!destroyed&&visible&&!raf)raf=requestAnimationFrame(frame);}
  function duration(cast){if(cast.kind==='impact')return 500;return cast.kind==='orbital'||cast.spell==='orbital'?Math.max(1000,cast.flightMs||5000):['heal','shield','flashbang'].includes(cast.spell)?1100:Math.max(180,cast.flightMs||500);}
  function drawCast(cast,now){
   const elapsed=now-cast.at,flight=duration(cast),tail=cast.kind==='orbital'?900:600;
@@ -76,7 +89,7 @@ export function createLiveMap(host,{onCount=()=>{}}={}){
  function drawPlayers(){
   const labels=[];
   for(const player of players){
-   const saved=positions.get(player.id);if(!saved)continue;saved.latitude+=(player.location.latitude-saved.latitude)*.3;saved.longitude+=(player.location.longitude-saved.longitude)*.3;
+   const label=labelFor(player),saved=positions.get(player.id);if(!saved)continue;saved.latitude+=(player.location.latitude-saved.latitude)*.3;saved.longitude+=(player.location.longitude-saved.longitude)*.3;
    const point=project(saved);if(!point)continue;const color=COLORS[player.persona]||COLORS.mage,hp=Math.max(0,Math.min(1,(player.health||0)/70));
    context.beginPath();context.arc(point.x,point.y,18,0,Math.PI*2);context.fillStyle='#081c37';context.fill();
    const portrait=portraits.get(player.id);
@@ -84,12 +97,11 @@ export function createLiveMap(host,{onCount=()=>{}}={}){
     const size=Math.min(portrait.naturalWidth,portrait.naturalHeight);context.save();context.beginPath();context.arc(point.x,point.y,14,0,Math.PI*2);context.clip();
     context.drawImage(portrait,(portrait.naturalWidth-size)/2,(portrait.naturalHeight-size)/2,size,size,point.x-14,point.y-14,28,28);context.restore();
    }else{
-    const words=String(player.name||'Player').trim().split(/\s+/);const initials=[words[0],...(words.length>1?[words.at(-1)]:[])].map(word=>Array.from(word)[0]||'').join('').toUpperCase();
-    context.fillStyle=player.health>0?color:'#75869d';context.font='600 12px "IBM Plex Sans", sans-serif';context.textAlign='center';context.fillText(initials,point.x,point.y+4);
+    context.fillStyle=player.health>0?color:'#75869d';context.font='600 12px "IBM Plex Sans", sans-serif';context.textAlign='center';context.fillText(label.initials,point.x,point.y+4);
    }
    context.beginPath();context.arc(point.x,point.y,16,0,Math.PI*2);context.strokeStyle='#39495e';context.lineWidth=2;context.stroke();
    context.beginPath();context.arc(point.x,point.y,16,-Math.PI/2,-Math.PI/2+Math.PI*2*hp);context.strokeStyle=hp>.5?'#a8dbaa':hp>.25?'#f3cc73':'#ef8a83';context.stroke();
-   const name=String(player.name||'Player').slice(0,20);context.font='500 12px "IBM Plex Sans", sans-serif';const labelWidth=context.measureText(name).width+12;
+   const name=label.name;context.font='500 12px "IBM Plex Sans", sans-serif';const labelWidth=label.width??=(context.measureText(name).width+12);
    for(const offset of [{x:23,y:-10},{x:23,y:10},{x:-labelWidth-23,y:-10},{x:-labelWidth-23,y:10}]){
     const box={x:Math.max(3,Math.min(width-labelWidth-3,point.x+offset.x)),y:Math.max(3,Math.min(height-35,point.y+offset.y-8)),w:labelWidth,h:20};
     if(labels.some(p=>box.x<p.x+p.w+3&&box.x+box.w+3>p.x&&box.y<p.y+p.h+3&&box.y+box.h+3>p.y))continue;
@@ -98,7 +110,7 @@ export function createLiveMap(host,{onCount=()=>{}}={}){
   }
  }
  function frame(time){
-  raf=0;if(!visible||!context)return;if(time-lastFrame<32){request();return;}lastFrame=time;context.clearRect(0,0,width,height);
+  raf=0;if(!visible||!context)return;if(time-lastFrame<32){request();return;}lastFrame=time;projections.clear();context.clearRect(0,0,width,height);
   if(!targetView)return;
   if(!view)view={...targetView};else for(const key of ['latitude','longitude','metresPerPixel'])view[key]+=(targetView[key]-view[key])*.18;
   if(tiles.ready)tiles.follow(view,view.metresPerPixel*Math.min(width,height)/2,Math.min(width,height)/2,null);
@@ -107,15 +119,16 @@ export function createLiveMap(host,{onCount=()=>{}}={}){
   if(casts.size||time<animateUntil)request();
  }
  function update(data={},serverTime=Date.now()){
+  if(destroyed)return;
   if(Number.isFinite(serverTime)){anchorServer=serverTime;anchorLocal=performance.now();}
   players=(data.players||[]).filter(p=>valid(p.location)&&Number.isFinite(p.location.at)&&serverTime-p.location.at>=-1000&&serverTime-p.location.at<=FRESH_MS);
   portraits.sync(players);
-  const ids=new Set(players.map(p=>p.id));for(const id of positions.keys())if(!ids.has(id))positions.delete(id);for(const p of players)if(!positions.has(p.id))positions.set(p.id,{...p.location});
+  const ids=new Set(players.map(p=>p.id));for(const id of labelsByPlayer.keys())if(!ids.has(id))labelsByPlayer.delete(id);for(const id of positions.keys())if(!ids.has(id))positions.delete(id);for(const p of players)if(!positions.has(p.id))positions.set(p.id,{...p.location});
   for(const cast of data.casts||[])if(cast.id!==undefined&&Number.isFinite(cast.at)&&serverTime-cast.at<12000)casts.set(cast.id,cast);
   targetView=fitLiveView(players.map(p=>p.location),width,height);empty.hidden=players.length>0;onCount(players.length);host.setAttribute('aria-label',`GPS map with ${players.length} players. Spell positions are estimates.`);
   if(players.length&&!loading){loading=true;void tiles.load().then(()=>{resize();},()=>{loading=false;});}
   animateUntil=performance.now()+450;request();
  }
  const observer=new ResizeObserver(resize);observer.observe(host);resize();
- return{update,setVisible(on){visible=on;if(!visible){cancelAnimationFrame(raf);raf=0;}else{resize();request();}},destroy(){visible=false;cancelAnimationFrame(raf);observer.disconnect();portraits.clear();host.replaceChildren();}};
+ return{update,setVisible(on){if(destroyed)return;visible=on;if(!visible){cancelAnimationFrame(raf);raf=0;}else{resize();request();}},destroy(){destroyed=true;visible=false;document.fonts?.removeEventListener('loadingdone',fontsChanged);labelsByPlayer.clear();projections.clear();cancelAnimationFrame(raf);observer.disconnect();portraits.clear();host.replaceChildren();}};
 }

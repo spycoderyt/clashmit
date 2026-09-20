@@ -1,31 +1,33 @@
 // One shared worker for the face scan dialog and the in-game tracker, so the 30 MB engine
 // is loaded once. detect() takes regions of a camera frame and resolves with the faces in them.
-const INIT_TIMEOUT_MS=60000,FRAME_TIMEOUT_MS=3000;
+const INIT_TIMEOUT_MS=60000,MAX_INIT_MS=180000,FRAME_TIMEOUT_MS=3000;
 let worker=null,ready=null,session=null,seq=0;const pending=new Map(),listeners=new Set();
 function failSession(current,error){
  if(session!==current)return;
- clearTimeout(current.initTimer);current.reject(error);
+ clearTimeout(current.initTimer);clearTimeout(current.totalTimer);current.reject(error);
  current.worker?.terminate();worker=null;ready=null;session=null;listeners.clear();
  for(const entry of pending.values()){clearTimeout(entry.timer);entry.reject(error);}pending.clear();
 }
 export function startFaceEngine(onProgress){
- if(onProgress&&!session?.initialized)listeners.add(onProgress);
+ if(onProgress&&!session?.initialized){listeners.add(onProgress);if(session?.progress)onProgress(session.progress);}
  if(ready)return ready;
- const current={worker:null,initialized:false,initTimer:null,reject:null};session=current;
+ const current={worker:null,initialized:false,initTimer:null,totalTimer:null,progress:null,reject:null};session=current;
  let resolveInit,rejectInit;
  const promise=new Promise((resolve,reject)=>{resolveInit=resolve;rejectInit=reject;});
  ready=promise;current.reject=rejectInit;
  try{
   worker=current.worker=new Worker(new URL('./face-worker.js?v=face13',import.meta.url),{type:'module'});
   worker.onerror=e=>failSession(current,Error(e.message||'Face engine failed to start'));
+  worker.onmessageerror=()=>failSession(current,Error('Face engine could not communicate. Tap Try again.'));
   worker.onmessage=({data})=>{
    if(session!==current)return; // A late reply from a replaced worker cannot change the new session.
-   if(data.type==='progress')for(const listener of listeners)listener(data.text);
-   else if(data.type==='ready'){clearTimeout(current.initTimer);current.initialized=true;listeners.clear();resolveInit();}
+   if(data.type==='progress'){current.progress=data.text;if(!current.initialized){clearTimeout(current.initTimer);current.initTimer=setTimeout(()=>failSession(current,Error('Face engine did not finish loading. Tap Try again.')),INIT_TIMEOUT_MS);}for(const listener of listeners){try{listener(data.text);}catch{}}}
+   else if(data.type==='ready'){clearTimeout(current.initTimer);clearTimeout(current.totalTimer);current.initialized=true;listeners.clear();resolveInit();}
    else if(data.type==='error')failSession(current,Error(data.message));
    else if(data.type==='faces'){const entry=pending.get(data.seq);if(!entry)return;pending.delete(data.seq);clearTimeout(entry.timer);if(data.error)entry.reject(Error(data.error));else entry.resolve(data);}
   };
-  current.initTimer=setTimeout(()=>failSession(current,Error('Face engine did not finish loading. Retrying.')),INIT_TIMEOUT_MS);
+  current.initTimer=setTimeout(()=>failSession(current,Error('Face engine did not finish loading. Tap Try again.')),INIT_TIMEOUT_MS);
+  current.totalTimer=setTimeout(()=>failSession(current,Error('Face engine did not finish loading. Check your connection and tap Try again.')),MAX_INIT_MS);
   worker.postMessage({type:'init'});
  }catch(error){failSession(current,error);}
  return promise;

@@ -71,3 +71,14 @@ test('worker errors reject in-flight requests and dispose of their deadlines',()
  assert.equal(workers[0].terminated,true);assert.equal(timers.size,0);
  const restarted=client.startFaceEngine();workers[1].reply({type:'ready'});await restarted;
 }));
+
+test('new scan subscribers receive current progress and progressing downloads keep the idle watchdog fresh',()=>withClient(async({client,workers,timers,fire})=>{
+ const ready=client.startFaceEngine(),rejected=assert.rejects(ready,/did not finish loading/);const before=[...timers.keys()];
+ workers[0].reply({type:'progress',text:'Face detector: 1.2 / 3.0 MB'});const progress=[];assert.equal(client.startFaceEngine(text=>progress.push(text)),ready);assert.deepEqual(progress,['Face detector: 1.2 / 3.0 MB']);assert.ok(before.some(id=>!timers.has(id)),'idle deadline was replaced');
+ fire(180000);await rejected;assert.equal(workers[0].terminated,true);assert.equal(timers.size,0);
+}));
+
+test('worker message decoding errors fail visibly and allow retry',()=>withClient(async({client,workers,timers})=>{
+ const ready=client.startFaceEngine(),rejected=assert.rejects(ready,/could not communicate/);workers[0].onmessageerror();await rejected;assert.equal(timers.size,0);
+ const retry=client.startFaceEngine();workers[1].reply({type:'ready'});await retry;
+}));

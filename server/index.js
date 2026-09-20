@@ -1,4 +1,3 @@
-import {resolveMelee} from './melee.js';
 import {createSharedMusicServer} from './music.js';
 import {createLiveMap} from './live-map.js';
 import {createPassiveCoins,PASSIVE_COINS} from './passive-coins.js';
@@ -194,14 +193,6 @@ export function createGameServer({maxPlayers=null,maxBufferedBytes=256*1024,coun
      const now=Date.now();settleScored(room,now);finish(room);const before=room.players.find(p=>p.id===m.targetId)?.health;
      const event=(typeof m.spell==='string'&&Object.hasOwn(SPELLS,m.spell)&&SPELLS[m.spell].flightMs)?launchProjectile(room,player.id,m.spell,m.targetId,randomUUID(),now):castSpell(room,player.id,m.spell,m.targetId,now);
      if(event.error)send(ws,{type:'error',message:event.error});else{if(room.economy&&(room.players.some(p=>p.id===event.targetId&&p.id!==player.id&&p.connected&&p.faceReady&&p.health>0)||event.affectedIds?.length))participation.engage(player,now);if(room.economy&&Object.hasOwn(CONSUMABLES,m.spell))scores.saveLoadout(player.id,player.loadout);if(event.super)announce(room,{kind:'super',spell:event.spell,actorId:event.actorId,targetId:event.targetId,text:`${SUPER_NAMES[event.spell]} activated by ${player.name}`});if(room.continuous)announceStreak(room,scoreContinuousHit(room,scores,event,before,kill=>recordKill(room,kill)));else recordScore(room,event,before);if(event.shotId)scheduleImpact(room,event);finish(room);broadcast(room,event);}
-    }else if(m.type==='melee'){
-     const now=Date.now();settleScored(room,now);finish(room);const before=room.players.find(p=>p.id===m.targetId)?.health;
-     const event=resolveMelee(room,player,m,now);
-     if(event.error)send(ws,{type:'error',message:event.error});else{
-      if(event.damage>0)damageEvent(room,{...event,amount:event.damage});
-      if(room.continuous)announceStreak(room,scoreContinuousHit(room,scores,event,before,kill=>recordKill(room,kill)));else recordScore(room,event,before);
-      liveMap.record(room,{...event,type:'impact',resolvedAt:now,missed:false},now);finish(room);broadcast(room,event);
-     }
     }else if(m.type==='impact'){
      resolveImpact(room,player,m.shotId,m.tracked===true);
     }else if(m.type==='shirt'){

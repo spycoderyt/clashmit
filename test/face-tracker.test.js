@@ -43,6 +43,16 @@ test('camera tracker avoids duplicate frames and discards body results from an e
   const lastSeen=tracker.lastFrameAt();document.hidden=true;faceWorker.respondFace();await wait(20);
   assert.equal(tracker.lastFrameAt(),lastSeen,'a result finishing in the background cannot refresh face lock');
   before=faceWorker.frames;video.currentTime+=.1;await wait(80);assert.equal(faceWorker.frames,before,'hidden pages suspend inference');
+  document.hidden=false;video.currentTime+=.1;await until(()=>faceWorker.frames>before);
+  const realNow=Date.now,seenBeforeSlow=tracker.lastFrameAt();
+  try{Date.now=()=>realNow()+2500;faceWorker.respondFace();await wait(10);}finally{Date.now=realNow;}
+  assert.equal(tracker.lastFrameAt(),seenBeforeSlow,'a 2.5-second result cannot revive the target');
+  before=faceWorker.frames;video.currentTime+=.1;await until(()=>faceWorker.frames>before);
+  assert.equal(faceWorker.pending.regions.length,1,'discarded slow inference lowers the next pass budget');
+  assert.ok(faceWorker.pending.regions[0].detectSize<=320);assert.equal(faceWorker.pending.describeMax,1);
+  assert.equal(faceWorker.pending.upper,true,'phones in front of faces still get upper-face recognition');
+  faceWorker.respondFace();await wait(10);
+
  }finally{
   tracker.dispose();
   for(const [name,descriptor] of originals){if(descriptor)Object.defineProperty(globalThis,name,descriptor);else delete globalThis[name];}

@@ -12,6 +12,20 @@ const STEPS=[
 ];
 const TARGET=STEPS.reduce((n,s)=>n+s.need,0),MIN_TO_PASS=3,SAMPLE_GAP_MS=450;
 const CSS='.face-dialog{text-align:center}.face-dialog h2{margin:0 0 4px}.face-sub{margin:0 0 12px}.face-stage{position:relative;width:min(68vw,250px);aspect-ratio:1;margin:0 auto 12px}.face-stage video{position:absolute;inset:7%;width:86%;height:86%;object-fit:cover;border-radius:50%;transform:scaleX(-1);background:#090d13}.face-ring{position:absolute;inset:0;width:100%;height:100%;transform:rotate(-90deg)}.face-ring circle{fill:none;stroke-width:4}.face-ring .track{stroke:#3a4150}.face-ring .progress{stroke:#ff9958;stroke-linecap:round;stroke-dasharray:295.3;stroke-dashoffset:295.3;transition:stroke-dashoffset .35s ease}.face-dialog.done .face-ring .progress{stroke:#7be0a0}.face-stage.pulse{animation:face-pulse .3s ease}.face-check{position:absolute;inset:7%;display:none;align-items:center;justify-content:center;border-radius:50%;background:#0d131cc9;color:#7be0a0;font-size:4.5rem}.face-dialog.done .face-check{display:flex}.face-step{min-height:3.2em;margin:0 0 10px;font-size:1.15rem;font-weight:700;color:#f6f4ef!important;line-height:1.3}.face-step.warn{color:#ffd0a8!important}.face-dots{display:flex;justify-content:center;gap:6px;margin:0 0 14px;padding:0;list-style:none}.face-dots li{width:26px;height:5px;border-radius:3px;background:#3a4150}.face-dots li.active{background:#ff9958}.face-dots li.complete{background:#7be0a0}.face-dialog .primary{width:100%}.face-dialog [hidden]{display:none}@keyframes face-pulse{50%{transform:scale(1.04)}}@media(prefers-reduced-motion:reduce){.face-stage.pulse{animation:none}.face-ring .progress{transition:none}}';
+// Prepare camera and recognition concurrently, handling either failure immediately. A late
+// camera permission response after cancellation must release its stream, not reclaim the camera.
+export async function prepareFaceScan({loadEngine,getCamera,startVideo,isCurrent=()=>true,onProgress=()=>{},cameraTimeoutMs=30000}){
+ let failed=false,camera=null,cameraReady=false,timer;
+ const release=()=>camera?.getTracks().forEach(track=>track.stop());
+ const engine=Promise.resolve().then(()=>loadEngine(text=>{if(!failed&&isCurrent())onProgress(text);})).then(()=>{if(!failed&&isCurrent()&&!cameraReady)onProgress('Starting camera… Allow access if asked.');},error=>{throw Object.assign(Error(error.message||'Face recognition could not load'),{stage:'engine'});});
+ const cameraTask=Promise.resolve().then(getCamera).then(async stream=>{
+  camera=stream;if(failed||!isCurrent()){release();return;}
+  await startVideo(stream);cameraReady=true;
+ });
+ try{await Promise.all([engine,Promise.race([cameraTask,new Promise((_,reject)=>{timer=setTimeout(()=>reject(Object.assign(Error('Camera did not start. Check camera permission, then tap Try again.'),{name:'CameraTimeoutError'})),cameraTimeoutMs);})])]);}
+ catch(error){failed=true;release();throw error;}
+ finally{clearTimeout(timer);}
+}
 export function setupFaceScan({beforeOpen=()=>{},onSave,onClose=()=>{},onSample=()=>{}}){
  const style=document.createElement('style');style.textContent=CSS;document.head.append(style);
  const dialog=document.createElement('dialog');dialog.className='face-dialog';dialog.setAttribute('aria-labelledby','face-title');
@@ -37,21 +51,19 @@ export function setupFaceScan({beforeOpen=()=>{},onSave,onClose=()=>{},onSample=
  }
  async function run(){
   const e=++epoch,person={samples:[]},uppers=[];let avatar=null;saved=false;dialog.classList.remove('done');retry.hidden=true;progress(0);for(const dot of dots.children)dot.className='';
-  say('Getting ready… (one-time download)');
-  // Loading progress is only worth showing until the camera is up, and never over a camera error.
-  let cameraFailed=false;const engine=startFaceEngine(text=>{if(e===epoch&&!stream&&!cameraFailed)say(text);});
+  say('Starting face recognition…');
   try{
-   if(!navigator.mediaDevices?.getUserMedia)throw Object.assign(Error('no camera'),{name:'NotSupportedError'});
-   const s=await navigator.mediaDevices.getUserMedia({video:{facingMode:'user',width:{ideal:960},height:{ideal:1280}},audio:false});
-   if(e!==epoch||!dialog.open){s.getTracks().forEach(t=>t.stop());return;}stream=s;video.srcObject=s;await video.play();
-  }catch(error){if(e!==epoch)return;cameraFailed=true;say(error.name==='NotAllowedError'?'Allow camera access, then tap Try again':'Could not open the camera. Close other camera apps, then tap Try again',true);retry.hidden=false;return;}
-  try{say('Getting ready… (one-time download)');await engine;}catch{if(e!==epoch)return;say('Face recognition could not load. Check your connection, then tap Try again',true);retry.hidden=false;return;}
-  let index=0,taken=0,stepStarted=Date.now(),lastSample=0,firstSide=0;
-  while(e===epoch&&dialog.open&&index<STEPS.length){
+   await prepareFaceScan({loadEngine:startFaceEngine,isCurrent:()=>e===epoch&&dialog.open,onProgress:text=>say(text),
+    getCamera:()=>{if(!navigator.mediaDevices?.getUserMedia)throw Object.assign(Error('no camera'),{name:'NotSupportedError'});return navigator.mediaDevices.getUserMedia({video:{facingMode:'user',width:{ideal:960},height:{ideal:1280}},audio:false});},
+    startVideo:async s=>{stream=s;video.srcObject=s;await video.play();}});
+  }catch(error){if(e!==epoch)return;stop();say(error.stage==='engine'?(error.message.includes('Try again')?error.message:`${error.message}. Check your connection, then tap Try again`):error.name==='NotAllowedError'?'Allow camera access, then tap Try again':error.name==='CameraTimeoutError'?error.message:'Could not open the camera. Close other camera apps, then tap Try again',true);retry.hidden=false;return;}
+  if(e!==epoch||!dialog.open)return;
+  const scanDeadline=Date.now()+60000;let index=0,taken=0,stepStarted=Date.now(),lastSample=0,firstSide=0;
+  while(e===epoch&&dialog.open&&index<STEPS.length&&Date.now()<scanDeadline){
    const step=STEPS[index],now=Date.now();dots.children[index].className='active';
    if(now-stepStarted>step.limit){dots.children[index].className=taken?'complete':'';index++;taken=0;stepStarted=Date.now();continue;}
    if(video.readyState<2||!video.videoWidth){await new Promise(r=>setTimeout(r,100));continue;}
-   let face=null;try{face=(await detectFaces(video,[{x:0,y:0,width:video.videoWidth,height:video.videoHeight,maxSize:640,detectSize:640,full:true}],{describeMax:1,upper:true,focus:{x:video.videoWidth/2,y:video.videoHeight/2}})).faces.sort((a,b)=>b.box.width-a.box.width)[0]||null;}catch{}
+   let face=null;try{face=(await detectFaces(video,[{x:0,y:0,width:video.videoWidth,height:video.videoHeight,maxSize:640,detectSize:640,full:true}],{describeMax:1,upper:true,focus:{x:video.videoWidth/2,y:video.videoHeight/2}})).faces.sort((a,b)=>b.box.width-a.box.width)[0]||null;}catch{if(e!==epoch||!dialog.open)return;stop();say('Face recognition stopped responding. Tap Try again',true);retry.hidden=false;return;}
    if(e!==epoch||!dialog.open)return;
    const issue=problem(face,video.videoWidth,video.videoHeight);
    if(issue){say(issue,true);stepStarted+=120;await new Promise(r=>setTimeout(r,60));continue;}

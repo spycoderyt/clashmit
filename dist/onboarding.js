@@ -2,7 +2,6 @@
 export const STEPS=Object.freeze([
  {key:'target',anchor:'target',title:'Find a player',text:'Point your camera at their face. Wait for their name and the locked reticle.'},
  {key:'attack',anchor:'attack',title:'Say “{spell}”',text:'Say the spell name to attack. Voice starts when you join.'},
- {key:'melee',anchor:'melee',title:'Use your free hand',text:'Swing your hand across their face on screen to use your sword. Do not touch them.'},
  {key:'shop',anchor:'shop',title:'Spend your coins',text:'Tap a skill to buy or upgrade it. Use ← to end this life and open the shop. Your face scan stays saved.'},
 ]);
 export function shouldOpen({seen,practice,faceReady,phase,scanOpen,open,continuous=false}){
