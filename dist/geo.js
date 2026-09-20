@@ -44,3 +44,7 @@ export function chooseTarget(candidates){
  return {id:first.id,reason:`Rough aim: ${first.name} · ${Math.round(first.distance)}m`};
 }
 export const formatDistance=m=>m<1000?`${Math.round(m)} m`:`${(m/1000).toFixed(1)} km`;
+
+// A five-metre return margin prevents GPS noise from repeatedly opening the map.
+export const NEARBY_RADIUS=100;
+export const noPlayersNearby=(distance,alreadyOpen=false)=>distance>(alreadyOpen?NEARBY_RADIUS-5:NEARBY_RADIUS);

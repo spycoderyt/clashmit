@@ -39,3 +39,10 @@ test('map zoom matches the radar scale at the player latitude',()=>{
  // A 100 m radar ring drawn 50 px from the centre at MIT is about zoom 16; halving the range zooms in one level.
  const campus=mapZoom(42.3591,100/50);assert.ok(campus>15.5&&campus<16.5);near(mapZoom(42.3591,50/50)-campus,1,1e-9);
 });
+
+test('nearby map opens past 100m and closes inside the 95m GPS return margin',async()=>{
+ const {noPlayersNearby}=await import('../dist/geo.js');
+ for(const distance of [0,25,99.9,100])assert.equal(noPlayersNearby(distance),false);
+ assert.equal(noPlayersNearby(100.1),true);assert.equal(noPlayersNearby(Infinity),true);
+ assert.equal(noPlayersNearby(96,true),true);assert.equal(noPlayersNearby(95,true),false);
+});

@@ -1,3 +1,4 @@
+import {ORBITAL} from './orbital-rules.js';
 import {createTileMap} from './minimap-tiles.js';
 const R=6378137,RAD=Math.PI/180,FRESH_MS=15000;
 const COLORS={mage:'#76baff',witch:'#ca9aff',archer:'#f3cc73'};
@@ -38,7 +39,7 @@ export function createLiveMap(host,{onCount=()=>{}}={}){
    context.beginPath();context.arc(b.x,b.y,5+22*t,0,Math.PI*2);context.strokeStyle=color;context.lineWidth=2;context.globalAlpha=fade*(1-t*.7);context.stroke();
    if(cast.missed||cast.blocked){context.font='500 11px \"IBM Plex Sans\", sans-serif';context.textAlign='center';context.fillStyle=color;context.fillText(cast.blocked?'Blocked':'Miss',b.x,b.y-18);}
   }else if(cast.kind==='orbital'||cast.spell==='orbital'){
-   const centre=project(cast.point||target),radius=(cast.radius||10)/view.metresPerPixel;context.beginPath();context.arc(centre.x,centre.y,Math.max(8,radius),0,Math.PI*2);context.fillStyle='#ff725d22';context.fill();context.strokeStyle=color;context.lineWidth=2;context.setLineDash([5,5]);context.stroke();context.setLineDash([]);
+   const centre=project(cast.point||target),radius=(cast.radius||ORBITAL.radius)/view.metresPerPixel;context.beginPath();context.arc(centre.x,centre.y,Math.max(8,radius),0,Math.PI*2);context.fillStyle='#ff725d22';context.fill();context.strokeStyle=color;context.lineWidth=2;context.setLineDash([5,5]);context.stroke();context.setLineDash([]);
    context.fillStyle='#fff1e9';context.font='600 12px "IBM Plex Sans", sans-serif';context.textAlign='center';context.fillText(elapsed<flight?`Airstrike · ${Math.ceil((flight-elapsed)/1000)}s`:'Impact',centre.x,centre.y-radius-10);
    const y=centre.y-(1-t)*Math.min(140,height*.3);context.beginPath();context.moveTo(centre.x,y-8);context.lineTo(centre.x+4,y+4);context.lineTo(centre.x-4,y+4);context.closePath();context.fillStyle=color;context.fill();
   }else if(['heal','shield','flashbang'].includes(cast.spell)){

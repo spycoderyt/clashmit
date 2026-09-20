@@ -1,3 +1,4 @@
+import {resolveMelee} from './melee.js';
 import {createSharedMusicServer} from './music.js';
 import {createLiveMap} from './live-map.js';
 import {createPassiveCoins,PASSIVE_COINS} from './passive-coins.js';
@@ -6,7 +7,7 @@ import {COINS_PER_KILL,KILL_BOUNTY,bountyMultiplier,killReward,MAX_HEALTH,CONSUM
 import {createAdmin} from './admin.js';
 import {createEventRounds} from './event-rounds.js';
 import {SUPER_NAMES} from '../dist/supers.js';
-import {RESPAWN_MS,spawnPlayer,advanceRespawns,selectRespawnPersona,requestRespawn} from '../dist/respawn.js';
+import {RESPAWN_MS,spawnPlayer,advanceRespawns,selectRespawnPersona,requestRespawn,retirePlayer} from '../dist/respawn.js';
 import {creditContinuous,scoreContinuousHit} from './continuous-scores.js';
 import http from 'node:http';
 import {readFile} from 'node:fs/promises';
@@ -171,9 +172,13 @@ export function createGameServer({maxPlayers=null,maxBufferedBytes=256*1024,coun
      room.winners=[];room.phase='countdown';room.startsAt=Date.now()+countdownMs;room.endsAt=room.startsAt+180000;
      if(countdownMs>0){broadcast(room,{type:'countdown',startsAt:room.startsAt});room.startTimer=setTimeout(()=>begin(room),countdownMs);room.startTimer.unref();}else begin(room);
     }else if(m.type==='inactive'){deactivate(room,player);broadcast(room);ws.close(1000);
+    }else if(m.type==='retire'){
+     const now=Date.now();settleScored(room,now);finish(room);const result=retirePlayer(room,player,now,respawnDelayMs);
+     if(result.error)send(ws,{type:'error',message:result.error});else{finish(room);broadcast(room);}
     }else if(m.type==='respawn'){const result=requestRespawn(room,player);if(result.error)send(ws,{type:'error',message:result.error});else broadcast(room);
     }else if(m.type==='purchase'){
-     if(!room.economy||room.phase!=='playing'||(room.eventRound?.mode||'ffa')!=='ffa'||player.health>0||!player.life||!player.respawnAt||(player.actionLockUntil||0)>Date.now())return send(ws,{type:'error',message:'Shop while waiting to respawn in FFA.'});
+     const aliveUnlock=m.kind==='unlock'&&player.health>0&&player.faceReady;
+     if(!room.economy||room.phase!=='playing'||(room.eventRound?.mode||'ffa')!=='ffa'||!player.life||(!aliveUnlock&&(player.health>0||!player.respawnAt))||(player.actionLockUntil||0)>Date.now())return send(ws,{type:'error',message:'Shop while waiting to respawn in FFA.'});
      const purchase=scores.purchase(player.id,player.nextPersona||player.persona,m.kind,m.item);if(purchase.error)send(ws,{type:'error',message:purchase.error});else{player.loadout=purchase.loadout;broadcast(room);}
     }else if(m.type==='orbital'){settleScored(room);finish(room);const result=launchOrbital(room,player,m.point);if(result.error)send(ws,{type:'error',message:result.error});else{announce(room,{kind:'orbital',actorId:player.id,text:`${player.name} summoned an Orbital Airstrike!`});broadcast(room,result);}
     }else if(m.type==='persona'){
@@ -182,6 +187,14 @@ export function createGameServer({maxPlayers=null,maxBufferedBytes=256*1024,coun
      const now=Date.now();settleScored(room,now);finish(room);const before=room.players.find(p=>p.id===m.targetId)?.health;
      const event=(typeof m.spell==='string'&&Object.hasOwn(SPELLS,m.spell)&&SPELLS[m.spell].flightMs)?launchProjectile(room,player.id,m.spell,m.targetId,randomUUID(),now):castSpell(room,player.id,m.spell,m.targetId,now);
      if(event.error)send(ws,{type:'error',message:event.error});else{if(room.economy&&(room.players.some(p=>p.id===event.targetId&&p.id!==player.id&&p.connected&&p.faceReady&&p.health>0)||event.affectedIds?.length))participation.engage(player,now);if(room.economy&&Object.hasOwn(CONSUMABLES,m.spell))scores.saveLoadout(player.id,player.loadout);if(event.super)announce(room,{kind:'super',spell:event.spell,actorId:event.actorId,targetId:event.targetId,text:`${SUPER_NAMES[event.spell]} activated by ${player.name}`});if(room.continuous)announceStreak(room,scoreContinuousHit(room,scores,event,before,kill=>recordKill(room,kill)));else recordScore(room,event,before);finish(room);broadcast(room,event);}
+    }else if(m.type==='melee'){
+     const now=Date.now();settleScored(room,now);finish(room);const before=room.players.find(p=>p.id===m.targetId)?.health;
+     const event=resolveMelee(room,player,m,now);
+     if(event.error)send(ws,{type:'error',message:event.error});else{
+      if(event.damage>0)damageEvent(room,{...event,amount:event.damage});
+      if(room.continuous)announceStreak(room,scoreContinuousHit(room,scores,event,before,kill=>recordKill(room,kill)));else recordScore(room,event,before);
+      liveMap.record(room,{...event,type:'impact',resolvedAt:now,missed:false},now);finish(room);broadcast(room,event);
+     }
     }else if(m.type==='impact'){
      resolveImpact(room,player,m.shotId,m.tracked===true);
     }else if(m.type==='shirt'){

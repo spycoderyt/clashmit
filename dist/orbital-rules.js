@@ -1,5 +1,5 @@
 import {relativePosition,validLocation} from './geo.js';
-export const ORBITAL={radius:10,durationMs:5000,freshMs:10000};
+export const ORBITAL={radius:25,durationMs:5000,freshMs:10000};
 export function inOrbitalZone(strike,location,at=Date.now()){
  return validLocation(location)&&Number.isFinite(location.at)&&at-location.at<=ORBITAL.freshMs&&relativePosition(strike.point,location).distance<=(strike.radius||ORBITAL.radius);
 }

@@ -1,3 +1,4 @@
+import {ORBITAL} from './orbital-rules.js';
 import {createLiveMap} from './live-map.js?v=map1';
 import {COINS_PER_KILL} from './economy.js';
 import {rankLabel} from './leaderboard.js';
@@ -35,7 +36,7 @@ function demoData(){
  const index=Math.floor((now-demoStart)/1800),spells=['fireball','lightning','poison','arrows','shield','heal','meteor','orbital'],casts=[];
  for(let n=Math.max(0,index-5);n<=index;n++){
   const spell=spells[n%spells.length],actor=mapped[n%mapped.length],target=mapped[(n+3)%mapped.length],from={...actor.location},to=['shield','heal'].includes(spell)?from:{...target.location};
-  casts.push({id:`demo-${n}`,actorId:actor.id,targetId:target.id,spell,at:demoStart+n*1800,flightMs:spell==='orbital'?5000:spell==='lightning'?250:spell==='meteor'?2000:1400,from,to,kind:spell==='orbital'?'orbital':'spell',...(spell==='orbital'?{radius:10,point:to}:{})});
+  casts.push({id:`demo-${n}`,actorId:actor.id,targetId:target.id,spell,at:demoStart+n*1800,flightMs:spell==='orbital'?5000:spell==='lightning'?250:spell==='meteor'?2000:1400,from,to,kind:spell==='orbital'?'orbital':'spell',...(spell==='orbital'?{radius:ORBITAL.radius,point:to}:{})});
  }
  return{serverTime:now,online:8,round:{mode:'ffa',phase:'playing'},players:demoNames.map((name,i)=>({id:i,name,rank:i+1,coins:1020-i*97,bestStreak:12-i,kills:24-i*2,deaths:i+2,online:true})),kills:[['Alex','Leon',8],['John','Gino',3],['Leon','Kai',2],['Mira','Sam',1],['Alex','Ada',7]].map(([killer,victim,streak],i)=>({id:i,at:demoStart-i*19000,killer,victim,streak,coins:COINS_PER_KILL,attackName:['Wildfire','Chain Lightning','Arrows','Poison','Meteor'][i]})),map:{players:mapped,casts}};
 }

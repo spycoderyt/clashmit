@@ -1,19 +1,21 @@
-// This worker receives camera bitmaps from the melee test page. It never opens a camera.
+// Camera bitmaps come from the caller. Production uses handsOnly; the test page
+// can also request anonymous face boxes. This worker never opens a camera.
 importScripts('./vendor/mediapipe/vision_bundle.js');
-let handLandmarker=null,faceDetector=null,loading=null,busy=false,lastTimestamp=-Infinity;
+let handLandmarker=null,faceDetector=null,loading=null,busy=false,lastTimestamp=-Infinity,handsOnly=false;
 const model=path=>new URL(path,self.location).href;
 const clamp=value=>Math.max(0,Math.min(1,value));
-async function init(){
- if(handLandmarker&&faceDetector)return;
+async function init(onlyHands=false){
+ handsOnly=onlyHands;
+ if(handLandmarker&&(handsOnly||faceDetector))return;
  if(loading)return loading;
  loading=(async()=>{
   try{
    const files=await Vision.FilesetResolver.forVisionTasks(model('./vendor/mediapipe/wasm'));
-   handLandmarker=await Vision.HandLandmarker.createFromOptions(files,{
+   handLandmarker??=await Vision.HandLandmarker.createFromOptions(files,{
     baseOptions:{modelAssetPath:model('./models/hand-landmarker.task'),delegate:'CPU'},
     runningMode:'VIDEO',numHands:2,minHandDetectionConfidence:.5,minHandPresenceConfidence:.5,minTrackingConfidence:.5,
    });
-   faceDetector=await Vision.FaceDetector.createFromOptions(files,{
+   if(!handsOnly)faceDetector??=await Vision.FaceDetector.createFromOptions(files,{
     baseOptions:{modelAssetPath:model('./models/face-detector.tflite'),delegate:'CPU'},
     runningMode:'VIDEO',minDetectionConfidence:.5,minSuppressionThreshold:.3,
    });
@@ -25,12 +27,12 @@ async function init(){
 function dropped(data,reason){postMessage({type:'frame',id:data.id,timestamp:data.timestamp,hands:[],faces:[],ms:0,dropped:true,reason});}
 self.onmessage=async({data})=>{
  if(data.type==='init'){
-  try{await init();postMessage({type:'ready'});}catch(error){postMessage({type:'error',message:error?.message||String(error)});}
+  try{await init(data.handsOnly===true);postMessage({type:'ready',handsOnly});}catch(error){postMessage({type:'error',message:error?.message||String(error)});}
   finally{data.bitmap?.close();}
   return;
  }
  if(data.type!=='frame'){data.bitmap?.close();return;}
- if(busy||!handLandmarker||!faceDetector){try{dropped(data,busy?'busy':'not-ready');}finally{data.bitmap?.close();}return;}
+ if(busy||!handLandmarker||(!handsOnly&&!faceDetector)){try{dropped(data,busy?'busy':'not-ready');}finally{data.bitmap?.close();}return;}
  const started=performance.now(),timestamp=data.timestamp;
  if(!Number.isFinite(timestamp)||timestamp<=lastTimestamp){try{dropped(data,'stale-timestamp');}finally{data.bitmap?.close();}return;}
  busy=true;
@@ -38,7 +40,7 @@ self.onmessage=async({data})=>{
   const bitmap=data.bitmap;if(!bitmap?.width||!bitmap?.height)throw Error('The camera frame is empty.');
   lastTimestamp=timestamp;
   const handResult=await handLandmarker.detectForVideo(bitmap,timestamp);
-  const faceResult=await faceDetector.detectForVideo(bitmap,timestamp);
+  const faceResult=handsOnly?{detections:[]}:await faceDetector.detectForVideo(bitmap,timestamp);
   const hands=(handResult.landmarks||[]).slice(0,2).map((landmarks,index)=>({
    landmarks:landmarks.map(({x,y,z})=>({x,y,z})),
    handedness:handResult.handedness?.[index]?.[0]?.categoryName||'Unknown',

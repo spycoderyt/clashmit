@@ -5,6 +5,7 @@ import {healthColor} from './health-hud.js?v=1';
 // projectiles. It never swaps a face/body box into the aiming geometry.
 export function createTargetOverlay(arena,container){
  const frame=document.createElement('div'),label=document.createElement('div'),title=document.createElement('b'),meter=document.createElement('meter'),info=document.createElement('small');
+ const titleText=document.createElement('span'),coin=document.createElement('img');coin.src='/media/coin.svg';coin.alt='gold coins';coin.width=14;coin.height=18;coin.style.verticalAlign='middle';coin.style.marginLeft='4px';title.append(titleText,coin);
  frame.className='person-box band-target';label.className='person-label band-target-label';meter.min=0;meter.max=70;meter.low=20;meter.high=45;meter.optimum=70;meter.setAttribute('aria-label','Opponent health');label.append(title,meter,info);container.append(frame,label);
  const motion=createBoxMotion();
  let width=0,height=0,safeTop=180;const observer=typeof ResizeObserver==='function'?new ResizeObserver(entries=>{const rect=entries[0]?.contentRect;if(rect){width=rect.width;height=rect.height;}}):null;observer?.observe(arena);
@@ -20,7 +21,7 @@ export function createTargetOverlay(arena,container){
   label.classList.toggle('crowned',crowned);label.classList.toggle('shielded',shielded);label.classList.toggle('tracking-gap',!target.fresh);
   const center=Math.max(76,Math.min(viewport.width-76,x+w/2)),top=Math.max(safeTop,y-7);
   label.style.transform=`translate3d(${center.toFixed(2)}px,${top.toFixed(2)}px,0) translate(-50%,-100%)`;
-  text(title,(player.name||'Target')+` · Reward: ${killReward(player.score?.currentStreak??0)} 🪙`);if(meter.value!==player.health){meter.value=player.health;meter.style.setProperty('--health-color',healthColor(player.health));}meter.hidden=!!target.pending;
+  text(titleText,(player.name||'Target')+` · Reward: ${killReward(player.score?.currentStreak??0)} `);if(meter.value!==player.health){meter.value=player.health;meter.style.setProperty('--health-color',healthColor(player.health));}meter.hidden=!!target.pending;
   text(info,shielded?`◇ Shield · ${piercer} pierces`:poisoned?'☣ Poisoned':simulated?'Simulated':target.pending?'Hold steady':target.source==='body'?'Following · face hidden':target.confirmed?(target.fresh?'Face locked':'Tracking…'):'Identifying…');
  }
  hide();return{update,hide,size,setSafeTop(value){safeTop=value;},dispose(){observer?.disconnect();frame.remove();label.remove();}};

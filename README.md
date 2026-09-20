@@ -266,11 +266,11 @@ Paid names: Chain Lightning (14), Wildfire (32), Extinction (67); Plague (8 + 6 
 
 The FFA death screen is a shop with a 10-second minimum wait. Buy or upgrade skills, choose a character, and buy Shield (30 coins, 7s), Heal (30 coins, restores 50 HP, capped at 70), or Flashbang (50 coins, 3s blind/stun for other unshielded players within 10m of the caster; fresh GPS required). Press **Respawn** when ready after the countdown. Shield blocks all normal attacks/ultimates and Flashbang except Lightning, and clears poison/skeletons. Orbital Airstrike ignores shields. Inventory appears bottom-right, skills above mana, and coin balance above your hearts.
 
-Every 5 consecutive kills earns one **Orbital Airstrike** charge. Tap the red button, tap a point on the full-screen map to see the **10m radius**, then hold for 0.8s to launch. Players inside see “Incoming orbital airstrike — get out of the 10m radius!” with **5 seconds to escape**. Movement and casting stay enabled. At impact the server checks the latest fresh locations, kills players still inside (including those who entered during the countdown), spares the caster, and awards each bounty once. Disconnecting preserves a warned player's last location for that strike; it does not cancel it. GPS uncertainty applies, particularly indoors: the on-screen radius is approximate and escaping depends on timely location updates.
+Every 5 consecutive kills earns one **Orbital Airstrike** charge. Tap the red button, tap a point on the full-screen map to see the **25m radius**, then hold for 0.8s to launch. Players inside see “Incoming orbital airstrike — get out of the 25m radius!” with **5 seconds to escape**. Movement and casting stay enabled. At impact the server checks the latest fresh locations, kills players still inside (including those who entered during the countdown), spares the caster, and awards each bounty once. Disconnecting preserves a warned player's last location for that strike; it does not cancel it. GPS uncertainty applies, particularly indoors: the on-screen radius is approximate and escaping depends on timely location updates.
 
 The actual 3D rocket uses the CC0 modular meshes from [Kenney Space Kit](https://kenney.nl/assets/space-kit), bundled locally under `dist/models/rocket` with its license. Three.js animates a quadratic arc with perspective, tangent-aligned rotation and the caster's portrait near the tip. The warning leaves the camera visible and does not intercept movement controls.
 
-When no active opponent with a fresh location is within 10m, the map opens with directions toward the nearest players. It closes below 8m to avoid GPS jitter repeatedly toggling it. Closing it manually pauses auto-opening for 15s. Unknown/stale locations are not treated as nearby. No location access means no automatic distance map or orbital targeting.
+When no active opponent with a fresh location is within 100m, the map opens with directions toward the nearest players. It closes at 95m or less to avoid GPS jitter repeatedly toggling it. Closing it manually pauses auto-opening for 15s. Unknown/stale locations are not treated as nearby. No location access means no automatic distance map or orbital targeting.
 
 Backgrounding, leaving, and socket closure remove a player from public game state and clear their face/map markers. If a phone vanishes without sending a message, the server times out its heartbeat after about 8 seconds. The original browser token restores the same identity, balance, and purchases; a short private reconnect record does not appear in the arena. Non-FFA disconnects forfeit that round. No web app can guarantee receipt of a final message when the OS kills it.
 
@@ -323,6 +323,12 @@ Shield lasts 7s with a14s reuse delay; Heal restores50HP with an8s reuse delay; 
 The face tracker skips repeated camera frames, rejects stale worker results after restarts, and deprioritizes body detection on slow devices. Overlay interpolation does not alter recognition confidence or hit freshness. Physical iPhone12 camera/ASR performance must still be measured on-device.
 
 Upgraded first attacks (Chain Lightning, Plague, Arrow Storm) hit the locked target at full damage, then up to two nearest eligible opponents within 5 metres of that target at 50% damage. Plague spreads at half poison damage per second for the same duration. Extra hits require fresh location data; no GPS means the main hit still works without spread. Shields block spread except Chain Lightning. A miss, blocked primary, parry, or reflection cannot start a spread.
+
+### Sword melee in the live game
+
+Every character has a sword. Show a hand to the rear camera and swing it through a recognised opponent's face box. A hit deals 5 HP (half a heart), costs no mana, and has a 1-second cooldown. Shields block it. The server applies normal kills, assists, coins, and streaks. Hand tracking runs separately from face tracking with one small frame in flight. This is a screen-space overlap test; it does not measure physical reach. Use air gestures without contact.
+
+Exit opens the respawn menu and keeps your name and face scan. Locked attack cards can be tapped to buy skills during FFA. Upgrades and supplies remain in the respawn shop.
 
 ### Attack and melee previews
 

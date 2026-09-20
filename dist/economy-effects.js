@@ -18,7 +18,7 @@ export function createOrbitalView(container,{now=Date.now,audio,getAvatar=()=>nu
  function animate(){if(!running)return;const t=Math.max(0,Math.min(1,(now()-running.startsAt)/(running.endsAt-running.startsAt))),caster=running.actorId===myPlayer,loc=getLocation();
   const fresh=!!loc&&now()-loc.at<=ORBITAL.freshMs;escaped=!caster&&fresh&&!inOrbitalZone(running,loc,now());
   root.classList.toggle('escaped',escaped);root.classList.toggle('detonate',t>=1&&!escaped);root.querySelector('strong').textContent=caster?'Orbital airstrike launched':escaped?'Outside the blast zone':'Incoming orbital airstrike';
-  root.querySelector('p').textContent=caster?`${running.name} · 10 m blast zone`:escaped?'Stay outside until impact.':'Get out of the 10 m radius!';
+  root.querySelector('p').textContent=caster?`${running.name} · ${running.radius||ORBITAL.radius} m blast zone`:escaped?'Stay outside until impact.':`Get out of the ${running.radius||ORBITAL.radius} m radius!`;
   root.querySelector('small').textContent=t<1?`${Math.max(1,Math.ceil((running.endsAt-now())/1000))}`:escaped?'Safe':'Impact';const target=getMapPoint(running.point);root.style.setProperty('--impact-x',`${target.x*100}%`);root.style.setProperty('--impact-y',`${target.y*100}%`);graphics?.render(t,{caster,target});
   if(t<1)frame=requestAnimationFrame(animate);else hideTimer=setTimeout(()=>{root.hidden=true;running=null;},450);
  }
