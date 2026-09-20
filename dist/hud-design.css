@@ -89,3 +89,5 @@
 .consumable-inventory .consumable-refill{display:none;position:absolute;inset:0;pointer-events:none}
 .consumable-inventory .is-cooling>.consumable-content:not(.consumable-refill){filter:grayscale(1);opacity:.35}
 .consumable-inventory .is-cooling>.consumable-refill{display:flex;clip-path:inset(0 calc(100% - var(--consumable-ready,0%)) 0 0)}
+
+#inventory .is-empty{opacity:.4}#inventory .is-empty .consumable-refill{visibility:hidden}

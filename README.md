@@ -323,3 +323,18 @@ Shield lasts 7s with a14s reuse delay; Heal restores50HP with an8s reuse delay; 
 The face tracker skips repeated camera frames, rejects stale worker results after restarts, and deprioritizes body detection on slow devices. Overlay interpolation does not alter recognition confidence or hit freshness. Physical iPhone12 camera/ASR performance must still be measured on-device.
 
 Upgraded first attacks (Chain Lightning, Plague, Arrow Storm) hit the locked target at full damage, then up to two nearest eligible opponents within 5 metres of that target at 50% damage. Plague spreads at half poison damage per second for the same duration. Extra hits require fresh location data; no GPS means the main hit still works without spread. Shields block spread except Chain Lightning. A miss, blocked primary, parry, or reflection cannot start a spread.
+
+### Attack and melee previews
+
+- `/upgrades.html`: play all base attacks, upgrades, and consumable effects with sound. The page uses the game renderers and shared balance data. It does not join the arena.
+- `/melee.html`: test hand-controlled melee with a rear or front camera. Hold a hand in either lower corner, swing it through a face box, then return to the corner. Each hit removes 5 HP from a local target, with a 1-second cooldown. Demo buttons test left/right swings, misses, and a stationary hand. `Check tracking engine` loads and runs both models without opening the camera. Phone camera access requires HTTPS.
+- Melee is an experiment. Face detection is not player identification. It sends no attacks to the game. Hand and face frames stay in a local worker. Screen overlap does not establish physical distance.
+- Reaper image attribution: [MesserWoland / 1ur1, CC BY 2.0](https://commons.wikimedia.org/wiki/File:The_death.svg). See `dist/media/SOUL-REAPER-CREDITS.md`. Hand model source and license are in `dist/models/HAND-LANDMARKER-NOTICE.txt`.
+
+### Coin progression and bounties
+
+A normal kill pays 30 coins. Defeating a player whose current kill streak is at least five pays 90 coins. This uses the victim's streak before death resets it. Projectiles, lingering damage, and orbital strikes use the same payment rule. Duplicate hit reports cannot pay twice. Kill, streak, bounty, and round notices go to every connected player.
+
+Active combat also pays 10 coins per 30 eligible seconds (20 per minute). A server-accepted attack against an active opponent or damage refreshes a 60-second combat window. Payment requires another living player and a fresh connection. The required FFA respawn wait counts; idle shop time, offline time, lobby time, and heartbeats alone do not. Long server stalls do not award catch-up income. Paid coins persist; an unpaid partial interval can be lost on a server restart.
+
+Both additional attacks cost 200 coins per class (60 + 140). Ten active minutes plus zero, three, or seven normal kills earns about 200, 290, or 410 coins. This targets all three attacks in one class within ten minutes if unlocks take priority. Consumables and upgrades use the same balance and can delay this. Full class upgrades cost another 480 coins. A 90-coin bounty adds 60 above the normal kill reward.

@@ -88,3 +88,26 @@ Coin pickup now holds delayed particles at their origin and sends them to the bo
 Upgraded first attacks can hit two extra opponents within 5m of the main target. Extra hits deal half damage. Tests cover shields, missed shots, location age, repeat impact reports, and coin credit for each kill. Shield costs 30 coins, Heal costs 30, and Flashbang costs 50.
 
 Kill rewards show the coin amount and victim name at screen centre. A death card shows the killer and attack for 2.2 seconds before the shop. The respawn timer continues during the card. Killer photos use the existing avatar cache or the immediate kill event; repeated state messages do not include photo data.
+
+## Attack lab and review fixes — 20 September
+
+`/upgrades.html` uses the game projectile renderer, skeleton renderer, impact accents, balance values, and audio clips. It has buttons for all nine base attacks, nine upgrades, and Shield, Heal, and Flashbang. It does not join the game or change scores. CUA clicked all 18 attack buttons and checked that each reached its completed state and reported successful audio playback. Flashbang opacity changed from 1 to 0 after its three-second effect. Browser logs had no errors. These checks do not measure sound quality on a physical phone.
+
+The repository review also added regression coverage for face-worker timeouts, stronger poison preservation, compact round portrait payloads, full-health Heal rejection, and announcement queue overflow. Scythe projectiles now reuse their geometry. The main page no longer lists attacks under each class. The front page uses the crown logo's blue and gold colors.
+
+Remaining field checks: actual face-lock speed on older iPhones; area attacks with poor GPS fixes; Witch performance when cheap attacks clear Skeletons; Shield matchups against the three classes. Area ranges use reported coordinates and are not exact physical measurements.
+
+### Latest effect and melee checks
+
+- CUA checked Shield's blue edge gradient and clear centre. The effect expired and its opacity returned to zero.
+- Heal changed the demo from 2 hearts to 7 hearts. It now uses a brief red edge glow and a message based on the server's actual restored HP.
+- Soul Reaper uses an attributed PNG, curved sweeps, afterimages, and a timed strike. CUA captured the sprite in flight; no browser errors were reported.
+- Fireball uses the direct path. Wildfire has a 3.2-second ground-fire accent. Extinction has three visual meteors, with one gameplay hit.
+- `/melee.html` ran the real MediaPipe hand and face models on a blank test frame without opening the camera. Both loaded and inference completed.
+- CUA demo results: left swing 70→65 HP; right swing 65→60 HP; miss and held hand left health at 60 HP. Twelve rule tests cover jitter, gaps, cooldown and return-to-corner requirements.
+- Melee and the blue-and-gold front page had no horizontal overflow at the narrow preview size. Class attack lists are absent.
+- Real hand swings with a second person on an iPhone remain a field test. The melee page changes local test health only.
+
+### Broadcast and progression verification
+
+The full suite passed 301 tests after the broadcast, bounty, participation income, effect, and melee changes. A three-client socket test checks that killer, victim, and observer receive the same kill and streak notices. Bounty tests cover the five-kill threshold, reset, duplicate reports, projectile kills, poison, and orbital strikes. Participation tests cover active time, the forced respawn wait, idle/offline exclusions, clock gaps, saved coins, and unchanged kill streaks.

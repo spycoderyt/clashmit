@@ -121,6 +121,7 @@ export function castSpell(room,casterId,spell,targetId,now=Date.now()){
  if(Object.hasOwn(SPELLS,spell)&&(SPELLS[spell].dot||SPELLS[spell].swarm||SPELLS[spell].stun))return{error:'That spell must be thrown.'};
  const cast=prepareCast(room,casterId,spell,targetId,now);if(cast.error)return cast;
  const{actor,rule,target,superCast}=cast;
+ if(room.economy&&spell==='heal'&&actor.health>=MAX_HEALTH)return{error:'You are at full health.'};
  if(spell==='flashbang'){
   const fresh=p=>validLocation(p.location)&&Number.isFinite(p.location.at)&&now-p.location.at>=-1000&&now-p.location.at<=10000;
   if(!fresh(actor))return{error:'Waiting for a fresh location before using Flashbang.'};
@@ -131,9 +132,10 @@ export function castSpell(room,casterId,spell,targetId,now=Date.now()){
  }
  spend(actor,spell,rule,now,room);
  const blocked=target?damage(target,rule,now,spell):false;
- if(spell==='heal'){actor.health=Math.min(actor.economy?MAX_HEALTH:100,actor.health+rule.amount);if(rule.regeneration)actor.renewal={at:now,until:now+5000};}
+ let healedAmount;
+ if(spell==='heal'){const before=actor.health;actor.health=Math.min(actor.economy?MAX_HEALTH:100,actor.health+rule.amount);healedAmount=Math.max(0,actor.health-before);if(rule.regeneration)actor.renewal={at:now,until:now+5000};}
  if(spell==='shield'){actor.shieldUntil=now+rule.duration;if(room.enhanced)actor.shieldStartedAt=now;if(superCast||room.economy){actor.superShieldUntil=actor.shieldUntil;actor.poison=null;actor.swarm=null;}}
- return{type:'spell',spell,attackName:room.economy?skillName(actor,spell):(superCast?SUPER_NAMES[spell]:null)||ATTACKS[spell]?.name||spell,...(superCast?{super:true}:{}),actorId:actor.id,targetId:target?.id,blocked,at:now};
+ return{type:'spell',spell,attackName:room.economy?skillName(actor,spell):(superCast?SUPER_NAMES[spell]:null)||ATTACKS[spell]?.name||spell,...(superCast?{super:true}:{}),...(spell==='heal'?{healedAmount}:{}),actorId:actor.id,targetId:target?.id,blocked,at:now};
 }
 export function launchProjectile(room,actorId,spell,targetId,shotId,now=Date.now()){
  if(!Object.hasOwn(SPELLS,spell)||!SPELLS[spell].flightMs)return{error:'Choose a projectile spell.'};

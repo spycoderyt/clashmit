@@ -1,0 +1,22 @@
+MediaPipe Hand Landmarker (float16, version 1)
+Provider: Google / MediaPipe
+Used by the separate ClashMIT melee test page.
+
+Model source:
+https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task
+Official model guide:
+https://developers.google.com/edge/mediapipe/solutions/vision/hand_landmarker
+Model card:
+https://storage.googleapis.com/mediapipe-assets/Model%20Card%20Hand%20Tracking%20(Lite_Full)%20with%20Fairness%20Oct%202021.pdf
+
+The model card identifies the license as Apache License, Version 2.0.
+License text: https://www.apache.org/licenses/LICENSE-2.0
+Bundled license copy: ../vendor/mediapipe/LICENSE.txt
+The existing MediaPipe runtime is in ../vendor/mediapipe/.
+
+Download date: 2026-09-20
+Size: 7819105 bytes
+SHA-256: fbc2a30080c3c557093b5ddfc334698132eb341044ccee322ccf8bcf3607cde1
+
+The model detects hand landmarks and handedness. It does not identify a person.
+Coordinates are camera-relative; this test does not measure real-world contact.

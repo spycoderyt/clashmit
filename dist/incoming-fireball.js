@@ -14,7 +14,7 @@ export function createIncomingFireballs({container,renderer,describe=describeOri
  layer.className='incoming-spell-warning';layer.dataset.phase='idle';layer.setAttribute('aria-hidden','true');
  Object.assign(layer.style,{position:'absolute',inset:'0',zIndex:'8',pointerEvents:'none',opacity:'0',borderRadius:'inherit',transition:'opacity 100ms linear',overflow:'hidden'});
  Object.assign(label.style,{position:'absolute',top:'max(90px, 15%)',left:'50%',transform:'translateX(-50%)',whiteSpace:'nowrap',font:'700 14px system-ui',padding:'8px 13px',borderRadius:'99px',color:'#fff',background:'rgba(18,12,8,.7)',textShadow:'0 1px 4px #000'});
- Object.assign(bolt.style,{position:'absolute',height:'5px',transformOrigin:'0 50%',background:'#eaffff',boxShadow:'0 0 10px 4px #81beff,0 0 28px 8px #956aff',display:'none'});
+ Object.assign(bolt.style,{position:'absolute',height:'9px',transformOrigin:'0 50%',background:'#eaffff',boxShadow:'0 0 10px 4px #81beff,0 0 28px 8px #956aff',display:'none'});
  layer.append(label,bolt);container.append(layer);
  const graphics=()=>typeof renderer==='function'?renderer():renderer;
  const remember=id=>{retired.add(id);if(retired.size>256)retired.delete(retired.values().next().value);};

@@ -1,3 +1,6 @@
+import {createReaperEffect} from './reaper-effect.js';
+import {createHealFeedback} from './heal-effect.js';
+import {createUpgradeEffects} from './upgrade-effects.js';
 import {createKillIntro} from './kill-intro.js';
 import {attacksFor,ATTACKS,CONSUMABLES,ruleFor,skillName,skillLevel,wordsFor,totalDamage,freshLoadout,shopQuote,UNLOCK_COST} from './economy.js';
 import {requestRespawn} from './respawn.js';
@@ -37,6 +40,9 @@ let previewLocation={latitude:42.3601,longitude:-71.0942,accuracy:4};
 let previewFix=null;
 const previewGps={watchPosition(onFix){const fix=()=>{onFix({coords:{...previewLocation}});if(room)for(const p of room.players)if(p.location)p.location.at=Date.now();};previewFix=fix;queueMicrotask(fix);return setInterval(fix,1000);},clearWatch(id){clearInterval(id);previewFix=null;}};
 setupLobbyVideo({video:$('lobby-background'),lobby:$('lobby'),button:$('background-toggle'),headline:$('lobby-headline')});
+const reaperEffect=createReaperEffect($('arena'));$('leave').addEventListener('click',()=>reaperEffect.clear());
+const healFeedback=createHealFeedback($('arena'));$('leave').addEventListener('click',()=>healFeedback.clear());
+const upgradeEffects=createUpgradeEffects($('arena'));$('leave').addEventListener('click',()=>upgradeEffects.clear());
 const arenaLeaders=createArenaLeaders($('arena'));
 const killStreak=createKillStreak($('arena'));$('leave').addEventListener('click',()=>killStreak.clear());
 const targetOverlay=createTargetOverlay($('arena'),$('boxes'));
@@ -62,10 +68,10 @@ let persona=Object.hasOwn(PERSONAS,safeRead('fieldspell-persona'))?safeRead('fie
 const myPersona=()=>me()?personaOf(me()):persona,myDeck=()=>room?.economy?[...attacksFor(myPersona()),'shield','heal','flashbang']:PERSONAS[myPersona()],isThrown=spell=>!!SPELLS[spell]?.flightMs;
 const active=(effect,at)=>!!effect&&effect.until>at;
 $('persona-picker').append(...Object.entries(PERSONA_INFO).map(([id,info])=>{
- const card=document.createElement('label'),input=document.createElement('input'),symbol=document.createElement('span'),name=document.createElement('b'),blurb=document.createElement('small'),deck=document.createElement('small');
+ const card=document.createElement('label'),input=document.createElement('input'),symbol=document.createElement('span'),name=document.createElement('b'),blurb=document.createElement('small');
  card.className='persona-card';card.style.setProperty('--persona-accent',info.accent);input.type='radio';input.name='persona';input.value=id;input.checked=id===persona;
- input.onchange=()=>{persona=id;safeWrite('fieldspell-persona',id);};symbol.className='persona-symbol';symbol.textContent=info.symbol;name.textContent=info.name;blurb.textContent=info.blurb;deck.textContent=attacksFor(id).map(x=>ATTACKS[x].name).join(' · ');
- card.append(input,symbol,name,blurb,deck);return card;
+ input.onchange=()=>{persona=id;safeWrite('fieldspell-persona',id);};symbol.className='persona-symbol';symbol.textContent=info.symbol;name.textContent=info.name;blurb.textContent=info.blurb;
+ card.append(input,symbol,name,blurb);return card;
 }));
 const notify=text=>{$('toast').textContent=text;clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('toast').textContent='',4000);};
 function send(message){return connection.send(message);}
@@ -108,7 +114,7 @@ function matchedPerson(id){
 }
 function targetPoint(id){if(simulated())return{x:.5,y:.4};const target=matchedPerson(id);return target?{x:target.x,y:target.y}:null;}
 function finishShot(shot,tracked){if(!room)return;if(practice){const event=impactProjectile(room,myId,shot.shotId,tracked);if(!event.error)handleImpact(event);if(opponent().health<=0){room.phase='finished';room.winners=[myId];}renderState();}else send({type:'impact',shotId:shot.shotId,tracked});}
-function clearFlights(){clearInterval(dummyTimer);for(const timer of flights.values())clearInterval(timer);flights.clear();incoming.clear();fireScene?.clear();army.clear();}
+function clearFlights(){reaperEffect.clear();healFeedback.clear();upgradeEffects.clear();clearInterval(dummyTimer);for(const timer of flights.values())clearInterval(timer);flights.clear();incoming.clear();fireScene?.clear();army.clear();}
 function lightningEffect(target,spell,superCast=false){
  const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.classList.add('lightning-bolt');if(spell==='zap')svg.classList.add('zap');svg.setAttribute('viewBox','0 0 100 100');svg.setAttribute('preserveAspectRatio','none');
  const path=document.createElementNS(svg.namespaceURI,'polyline'),tx=target.x*100,ty=target.y*100,points=[];
@@ -117,7 +123,7 @@ function lightningEffect(target,spell,superCast=false){
 function effect(spell,{shot,projectile=true}={}){
  if(projectile&&shot?.shotId&&(flights.has(shot.shotId)||completedShots.has(shot.shotId)))return;
  haptics.play(SPELL_INFO[spell]?.bolt?'lightning':isThrown(spell)?'fireball':spell); // new spells borrow the nearest existing pattern
- if(!shot?.super)audio.play(spell,shot?.upgraded||ATTACKS[spell]?.ultimate?'super':'cast');clearTimeout(effectTimer);const layer=$('fx');layer.className='';layer.replaceChildren();const burst=document.createElement('div');burst.className='spell-burst';
+ if(!shot?.super)audio.play(spell,shot?.upgraded||ATTACKS[spell]?.ultimate?'super':'cast');if(spell==='heal'){healFeedback.show(shot?.healedAmount||0);return;}clearTimeout(effectTimer);const layer=$('fx');layer.className='';layer.replaceChildren();const burst=document.createElement('div');burst.className='spell-burst';
  for(const cls of ['spell-core','spell-ring','spell-feedback']){const el=document.createElement('div');el.className=cls;if(cls==='spell-feedback')el.textContent=room.economy?skillName(me(),spell):labelOf(spell);burst.append(el);}layer.append(burst);
  const target=targetPoint(shot?.targetId)||{x:.5,y:.4};let depth=false;
  if(isThrown(spell)&&projectile&&shot?.shotId){
@@ -125,16 +131,17 @@ function effect(spell,{shot,projectile=true}={}){
   const timer=setInterval(()=>{const active=!!room&&room.endsAt===roundEndsAt&&myId===actor&&!document.hidden;const result=flight.step(performance.now(),simulated()||!!matchedPerson(shot.targetId)?.fresh,active);if(result){clearInterval(timer);flights.delete(shot.shotId);if(!result.cancelled)rememberShot(shot.shotId);if(!result.cancelled)finishShot(shot,result.tracked);}},25);flights.set(shot.shotId,timer);
   // Bolts are streaks, the army walks on its own ground layer, and everything else is thrown in the 3D scene.
   if(SPELL_INFO[spell]?.bolt)lightningEffect(target,spell,shot.super||shot.upgraded);
-  else if(spell!=='skeletonArmy'){try{depth=!!fireScene?.fire({...target,style:visualStyle(spell),super:shot.super||shot.upgraded||!!ATTACKS[spell]?.ultimate,getTarget:()=>targetPoint(shot.targetId),flightMs,elapsedMs});}catch(e){console.warn('Spell graphics fallback',e);}}
+  else if(spell==='soulReaper'){depth=reaperEffect.fire({...target,getTarget:()=>targetPoint(shot.targetId),flightMs,elapsedMs,upgraded:!!shot.upgraded});}
+  else if(spell!=='skeletonArmy'){try{depth=!!fireScene?.fire({...target,style:visualStyle(spell),super:shot.super||shot.upgraded||!!ATTACKS[spell]?.ultimate,upgraded:!!shot.upgraded,getTarget:()=>targetPoint(shot.targetId),flightMs,elapsedMs});}catch(e){console.warn('Spell graphics fallback',e);}}
   notify(spell==='skeletonArmy'?'Skeletons marching · keep them in view':`${room.economy?skillName(me(),spell):labelOf(spell)} launched${SPELLS[spell].bypassShield?' · pierces shields':''}${shot.clearedSwarm?' · skeletons cleared':''}`);
  }else if(shot?.clearedSwarm)notify('Skeletons cleared');
  layer.className='cast-effect '+spell+(depth?' has-depth':'');effectTimer=setTimeout(()=>{layer.className='';layer.replaceChildren();},SPELL_INFO[spell]?.bolt?450:2200);
 }
 function handleImpact(m){
  for(const extra of m.secondaryHits||[])handleImpact(extra);
- if(m.secondary&&m.actorId===myId&&!m.blocked){
-  const from=targetPoint(m.primaryTargetId),to=targetPoint(m.targetId);
-  if(from&&to){const svg=document.createElementNS('http://www.w3.org/2000/svg','svg'),path=document.createElementNS(svg.namespaceURI,'path');svg.setAttribute('viewBox','0 0 100 100');svg.setAttribute('preserveAspectRatio','none');svg.classList.add('multi-hit-link');path.setAttribute('d',`M${from.x*100},${from.y*100} Q${(from.x+to.x)*50},${Math.min(from.y,to.y)*100-10} ${to.x*100},${to.y*100}`);path.setAttribute('stroke',m.spell==='poison'?'#b3e477':m.spell==='arrows'?'#edc566':'#c7b5ff');svg.append(path);$('arena').append(svg);setTimeout(()=>svg.remove(),450);}
+ if(m.actorId===myId&&!m.missed&&!m.blocked&&!m.parried&&(m.upgraded||m.attackRule?.upgraded||m.secondary)){
+  const to=targetPoint(m.targetId),from=m.secondary?targetPoint(m.primaryTargetId):to;
+  if(from&&to)upgradeEffects.impact({spell:m.spell,from,targets:[to],ground:m.spell==='fireball'?feetFor(m.targetId):null});
  }
 
  const shown=incoming.resolve(m);rememberShot(m.shotId);if(m.targetId===myId&&!shown&&!m.missed){$('arena').classList.add('incoming-hit-fallback');setTimeout(()=>$('arena').classList.remove('incoming-hit-fallback'),250);}const spell=m.spell||'fireball',name=room.economy?skillName(room.players.find(p=>p.id===m.actorId),spell):labelOf(spell),rule=m.attackRule||upgradedRule(spell,SPELLS[spell]||SPELLS.fireball,m.super),damage=rule.damage,linger=rule.dot||rule.swarm,after=linger?linger.perSecond*linger.duration/1000:0;
@@ -142,7 +149,7 @@ function handleImpact(m){
  // The impact event arrives before the state that applies it, so a lethal hit is predicted from current health.
  if(!m.missed&&!m.blocked&&m.targetId===myId&&(me()?.health??100)-damage<=0)deathFelt=true;
  if(!m.missed){if(m.targetId===myId)haptics.play(m.blocked?'shielded':(me()?.health??100)-damage<=0?'death':SPELL_INFO[spell]?.bolt?'hurtLightning':'hurt');else if(m.actorId===myId)haptics.play(m.blocked?'deflected':'hit');}
- if(m.actorId===myId||m.targetId===myId)audio.play(spell,m.parried?'parry':m.missed?'miss':m.blocked?'block':'impact');
+ if(m.actorId===myId||m.targetId===myId)audio.play(spell,m.parried?'parry':m.missed?'miss':m.blocked?'block':m.spell==='fireball'&&m.attackRule?.upgraded?'upgrade-impact':'impact');
  if(m.actorId===myId)notify(m.missed?`Target lost · ${name} missed`:m.parried?`${name} reflected back at you!`:m.blocked?`${name} blocked`:`${name} ${rule.swarm?'landed':'hit'} · ${dealt}`);
  if(m.targetId===myId&&!m.missed)notify(m.parried?`Parried! ${name} sent back`:m.blocked?`Your shield blocked ${name}`:`${rule.swarm?'Skeletons on you':'Hit by '+name} · ${taken}`);
 }
@@ -183,7 +190,7 @@ const connection=createGameConnection({
    else if(m.affectedIds?.includes(myId)){audio.play('flashbang');haptics.play('hit');notify('Flashbanged · 3 seconds');}
    else if(m.blockedIds?.includes(myId))notify('Your shield blocked the flashbang');
   }
-  if(m.type==='spell'&&m.spell!=='flashbang'){if(m.actorId===myId){castPending=false;effect(m.spell,{shot:m});}else if(m.targetId===myId&&m.shotId){incoming.launch(m);if(!m.super)audio.play(m.spell);}else if(m.spell==='shield')notify(`Opponent shield active · Lightning pierces it`);else if(m.spell==='heal'){healed.set(m.actorId,Date.now()+900);notify(`${room?.players.find(p=>p.id===m.actorId)?.name||'Opponent'} healed +${room.economy?50:m.super?35:20}`);}else if(m.clearedSwarm)notify('Your skeletons were cleared');}
+  if(m.type==='spell'&&m.spell!=='flashbang'){if(m.actorId===myId){castPending=false;effect(m.spell,{shot:m});}else if(m.targetId===myId&&m.shotId){incoming.launch(m);if(!m.super)audio.play(m.spell);}else if(m.spell==='shield')notify(`Opponent shield active · Lightning pierces it`);else if(m.spell==='heal'){healed.set(m.actorId,Date.now()+900);notify(`${room?.players.find(p=>p.id===m.actorId)?.name||'Opponent'} healed +${m.healedAmount??(room.economy?50:m.super?35:20)}`);}else if(m.clearedSwarm)notify('Your skeletons were cleared');}
   if(m.type==='impact')handleImpact(m);
   if(m.type==='round-start')notify('Round started. Keep your opponent in view.');
   if(m.type==='error'){castPending=false;setError(m.message);}
@@ -301,14 +308,14 @@ function renderCombat(){
  const p=me();if(!p)return;orbitalButton.hidden=!(p.airstrikeCharges>0&&p.health>0&&room.phase==='playing'&&!(p.actionLockUntil>now()));flashScreen.style.opacity=p.flashUntil>now()?'1':0;const at=now(),mana=Math.min(MANA.max,Math.max(0,manaAt(p,at))),shieldRemaining=Math.max(0,p.shieldUntil-at);
  $('mana-fill').style.width=100*mana/MANA.max+'%';$('mana-value').textContent=`${Math.floor(mana)} / ${MANA.max}`;$('mana-track').setAttribute('aria-valuenow',mana.toFixed(1));
  $('own-shield').classList.toggle('active',shieldRemaining>0);$('own-shield').classList.toggle('own-super-shield',p.superShieldUntil>at);$('shield-status').hidden=!shieldRemaining;$('shield-status').textContent=p.economy?`◇ Shield ${(shieldRemaining/1000).toFixed(1)}s · Lightning pierces`:p.superShieldUntil>at?`◇ Aegis ${(shieldRemaining/1000).toFixed(1)}s · Lightning pierces`:`◇ Shield ${(shieldRemaining/1000).toFixed(1)}s · Lightning, Skeletons, Zap pierce`;
- for(const row of $('inventory').children){const id=row.dataset.consumable,item=CONSUMABLES[id];if(!item)continue;const remaining=Math.max(0,(p.cooldowns[id]||0)-at),percent=Math.max(0,Math.min(100,100*(1-remaining/item.cooldown))).toFixed(1);row.classList.toggle('is-cooling',remaining>0);row.style.setProperty('--consumable-ready',percent+'%');const label=`${p.loadout?.consumables?.[id]||0} ${item.name}${remaining?`, ready in ${Math.ceil(remaining/1000)} seconds`:''}`;if(row.getAttribute('aria-label')!==label)row.setAttribute('aria-label',label);}
+ for(const row of $('inventory').children){const id=row.dataset.consumable,item=CONSUMABLES[id];if(!item)continue;const remaining=Math.max(0,(p.cooldowns[id]||0)-at),percent=Math.max(0,Math.min(100,100*(1-remaining/item.cooldown))).toFixed(1);row.classList.toggle('is-cooling',remaining>0);row.classList.toggle('is-empty',!(p.loadout?.consumables?.[id]>0));row.style.setProperty('--consumable-ready',percent+'%');const label=`${p.loadout?.consumables?.[id]||0} ${item.name}${remaining?`, ready in ${Math.ceil(remaining/1000)} seconds`:''}`;if(row.getAttribute('aria-label')!==label)row.setAttribute('aria-label',label);}
  const poisoned=active(p.poison,at),swarmed=active(p.swarm,at),stunned=(p.stunUntil||0)>at,live=room.phase==='playing';
  // Re-trigger the flash on each new stun, not on every frame of it.
  if(stunned&&!wasStunned){$('arena').classList.remove('stunned');void $('arena').offsetWidth;$('arena').classList.add('stunned');}wasStunned=stunned;
  $('arena').classList.toggle('poisoned',live&&poisoned&&!trackingPractice);
  // One quiet beat a second while damage lingers on me or on the player I am facing, so it can be heard without looking.
  const beat=Math.floor(at/1000);if(live&&beat!==lastBeat){lastBeat=beat;const foe=opponent();for(const [effect,spell] of [['poison','poison'],['swarm','skeletonArmy']])if(active(p[effect],at)||active(foe?.[effect],at))audio.play(spell,'tick');}
- const chips=[];if(live&&poisoned)chips.push(['poison',`☣ Poisoned ${Math.ceil((p.poison.until-at)/1000)}s`]);if(live&&swarmed)chips.push(['swarm',`☠ Skeletons on you — say ${myDeck().filter(s=>SPELLS[s].splash).map(labelOf).join(' or ')}`]);if(live&&stunned)chips.push(['stun','⚡ Stunned']);
+ const chips=[];if(live&&poisoned)chips.push(['poison',`☣ Poisoned ${Math.ceil((p.poison.until-at)/1000)}s`]);if(live&&swarmed){const counters=myDeck().filter(s=>SPELLS[s]?.splash&&(!room.economy||skillLevel(p,s)>0)&&!(p.cooldowns[s]>at)&&manaAt(p,at)>=(room.economy?ruleFor(p,s):SPELLS[s]).manaCost).map(s=>room.economy?skillName(p,s):labelOf(s));if((!room.economy||p.loadout?.consumables?.shield>0)&&!(p.cooldowns.shield>at))counters.push('Shield');chips.push(['swarm',counters.length?`Skeletons on you · Say ${counters.join(' or ')}`:'Skeletons on you · Wait for them to clear']);}if(live&&stunned)chips.push(['stun','⚡ Stunned']);
  const chipText=chips.map(c=>c[1]).join('|');if($('status-chips').dataset.text!==chipText){$('status-chips').dataset.text=chipText;$('status-chips').replaceChildren(...chips.map(([cls,text])=>{const el=document.createElement('div');el.className='status-chip '+cls;el.textContent=text;return el;}));}
  for(const spell of myDeck()){
   const rule=room.economy?ruleFor(p,spell):SPELLS[spell],remaining=Math.max(0,(p.cooldowns[spell]||0)-at),button=$(spell);if(!button)continue;const cover=button.querySelector('.cooldown');cover.style.display=remaining?'flex':'none';cover.textContent=(remaining/1000).toFixed(1);

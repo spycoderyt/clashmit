@@ -22,6 +22,7 @@ export function createFireballRenderer(container){
  const sphere=new THREE.IcosahedronGeometry(.19,2),torus=new THREE.TorusGeometry(1,.035,6,48),up=new THREE.Vector3(0,1,0),heading=new THREE.Vector3(),wobble=new THREE.Quaternion(),roll=new THREE.Vector3(0,0,1);
  // One arrow, modelled along +Y: wooden shaft, steel head, three vanes of fletching at the tail.
  const shaftGeo=new THREE.CylinderGeometry(.016,.016,.9,6),headGeo=new THREE.ConeGeometry(.05,.17,8),vaneGeo=new THREE.BoxGeometry(.004,.2,.075),nockGeo=new THREE.CylinderGeometry(.02,.02,.04,6);
+ const scytheHandleGeo=new THREE.CylinderGeometry(.025,.025,1.2,6),scytheBladeGeo=new THREE.TorusGeometry(.33,.045,6,18,Math.PI*1.25);
  function glow(stops){const c=document.createElement('canvas');c.width=c.height=64;const ctx=c.getContext('2d'),gradient=ctx.createRadialGradient(32,32,0,32,32,32);for(const [at,color] of stops)gradient.addColorStop(at,color);ctx.fillStyle=gradient;ctx.fillRect(0,0,64,64);return new THREE.CanvasTexture(c);}
  // The fire glow is baked orange; the soft glow is white so a look can tint it any color.
  const glows={fire:glow([[0,'rgba(255,255,240,1)'],[.17,'rgba(255,226,145,.98)'],[.42,'rgba(255,114,20,.65)'],[1,'rgba(255,50,0,0)']]),soft:glow([[0,'rgba(255,255,255,1)'],[.3,'rgba(255,255,255,.7)'],[1,'rgba(255,255,255,0)']])};
@@ -48,6 +49,7 @@ export function createFireballRenderer(container){
   frame=0;resize();
   for(let i=shots.length-1;i>=0;i--){
    const shot=shots[i],age=(time-shot.started)/1000,t=age/shot.flight;
+   if(t<0){shot.group.visible=false;continue;}if(!shot.incoming)shot.group.visible=true;
    const look=shot.look;if(age>shot.flight+look.burstSec||(shot.incoming&&t>=1)){remove(shot);shots.splice(i,1);continue;}
    if(t<1){
     canvas.dataset.phase='flight';shot.ball.visible=true;shot.blast.visible=false;
@@ -57,7 +59,7 @@ export function createFireballRenderer(container){
      if(source&&(!shot.hiddenSource||t<.8)){shot.lastSeen=time;shot.hiddenSource=false;shot.path.v0.lerp(screenPoint(source.x,source.y,shot.depth),.22);}
      const fade=THREE.MathUtils.clamp(1-(time-shot.lastSeen-100)/200,0,1);if(!fade)shot.hiddenSource=true;
      shot.visibility=fade;shot.group.visible=fade>0;shot.path.v1.copy(shot.path.v0).lerp(shot.end,.45);shot.path.v1.y+=look.arc*.55;
-    }else if(shot.getTarget){const target=shot.getTarget();if(target){shot.lastSeen=time;shot.end.lerp(screenPoint(target.x,target.y,shot.depth),.22);shot.path.v1.copy(shot.path.v0).lerp(shot.end,.45);shot.path.v1.y+=look.arc;shot.blast.position.copy(shot.end);}else if(time-shot.lastSeen>700){shot.lost=true;}}
+    }else if(shot.getTarget){const target=shot.getTarget();if(target){shot.lastSeen=time;shot.end.lerp(screenPoint(target.x+shot.targetOffset.x,target.y+shot.targetOffset.y,shot.depth),.22);shot.path.v1.copy(shot.path.v0).lerp(shot.end,.45);shot.path.v1.y+=look.arc;shot.blast.position.copy(shot.end);}else if(time-shot.lastSeen>700){shot.lost=true;}}
     const travel=t*t;flightPoint(shot,travel,shot.ball.position);
     // Shafts fly point-first along the path; a ball just spins.
     if(look.shape==='arrows'){
@@ -93,14 +95,20 @@ export function createFireballRenderer(container){
   renderer.render(scene,camera);
   if(shots.length)frame=requestAnimationFrame(animate);else{renderer.clear();canvas.dataset.phase='idle';}
  }
- function fire({x=.5,y=.4,distance=30,getTarget,onImpact,flightMs=1400,elapsedMs=0,incoming=false,getSource,shotId,style='fireball',super:superCast=false}={}){
-  const base=Object.hasOwn(LOOKS,style)?LOOKS[style]:LOOKS.fireball,look=superCast?{...base,trailSize:base.trailSize*1.7,trailCount:36,arc:base.arc*1.6}:base,map=glows[look.glow];
+ function fire({x=.5,y=.4,distance=30,getTarget,onImpact,flightMs=1400,elapsedMs=0,incoming=false,getSource,shotId,style='fireball',super:superCast=false,upgraded=false}={}){
+  const base=Object.hasOwn(LOOKS,style)?LOOKS[style]:LOOKS.fireball,mainLook=superCast?{...base,trailSize:base.trailSize*1.7,trailCount:36,arc:base.arc*1.6}:base,map=glows[mainLook.glow];
   if(document.hidden||matchMedia('(prefers-reduced-motion: reduce)').matches||renderer.getContext().isContextLost())return false;
   resize();if(!width||!height)return false;
-  while(shots.length>=4)remove(shots.shift());
+  const count=style==='meteor'&&upgraded&&!incoming?3:1,started=performance.now()-Math.max(0,elapsedMs);
+  while(shots.length+count>4){const cosmetic=shots.findIndex(shot=>shot.visualOnly);remove(shots.splice(cosmetic<0?0:cosmetic,1)[0]);}
+  // Extra meteors are visual companions. Only the main shot can report an impact.
+  for(let index=0;index<count;index++){
+  const visualOnly=index>0,targetOffset={x:index===1?-.04:index===2?.045:0,y:index===1?.015:index===2?-.015:0};
+  const look=visualOnly?{...mainLook,trailCount:16,trailSize:mainLook.trailSize*.65}:mainLook;
+  const delay=index*.12*flightMs,flight=visualOnly?flightMs*(index===1?.75:.72):flightMs;
   // Visual depth is compressed for readability; it is not a surveyed world coordinate.
   const depth=THREE.MathUtils.clamp(distance*.35,8,25);
-  const start=incoming?screenPoint(x,y,depth):style==='meteor'?screenPoint(.18,-.18,depth+4):screenPoint(.68,.68,1.3),end=incoming?screenPoint(.5,.53,.65):screenPoint(x,y,depth);
+  const start=incoming?screenPoint(x,y,depth):style==='meteor'?screenPoint(.18+index*.28,-.18-index*.04,depth+4):screenPoint(.68,.68,1.3),end=incoming?screenPoint(.5,.53,.65):screenPoint(x+targetOffset.x,y+targetOffset.y,depth);
   const bend=start.clone().lerp(end,.45);bend.y+=look.arc;
   const path=new THREE.QuadraticBezierCurve3(start,bend,end),group=new THREE.Group(),ball=new THREE.Group();
   // `parts` lists each material with its full opacity so an incoming shot can fade as one.
@@ -117,17 +125,18 @@ export function createFireballRenderer(container){
    }
   }else if(look.shape==='scythe'){
    const bladeMat=new THREE.MeshBasicMaterial({color:look.shell,transparent:true}),handleMat=new THREE.MeshBasicMaterial({color:0x263529,transparent:true});
-   const handle=new THREE.Mesh(new THREE.CylinderGeometry(.025,.025,1.2,6),handleMat),blade=new THREE.Mesh(new THREE.TorusGeometry(.33,.045,6,18,Math.PI*1.25),bladeMat);blade.position.set(.25,.45,0);blade.rotation.z=-.5;halo=sprite(1.3,look.halo,map);ball.add(handle,blade,halo);parts.push([bladeMat,1],[handleMat,1],[halo.material,1]);
+   const handle=new THREE.Mesh(scytheHandleGeo,handleMat),blade=new THREE.Mesh(scytheBladeGeo,bladeMat);blade.position.set(.25,.45,0);blade.rotation.z=-.5;halo=sprite(1.3,look.halo,map);ball.add(handle,blade,halo);parts.push([bladeMat,1],[handleMat,1],[halo.material,1]);
   }else{
    const core=new THREE.Mesh(sphere,new THREE.MeshBasicMaterial({color:look.core,transparent:incoming,depthWrite:!incoming}));
    const shell=new THREE.Mesh(sphere,new THREE.MeshBasicMaterial({color:look.shell,wireframe:true,transparent:true,opacity:.85}));shell.scale.setScalar(1.35);
    halo=sprite(1.05,look.halo,map);ball.add(core,shell,halo);parts.push([core.material,1],[shell.material,.85],[halo.material,1]);
   }
-  ball.scale.setScalar(superCast?1.8:1);group.add(ball);
+  ball.scale.setScalar(visualOnly?1.15:superCast?1.8:1);group.add(ball);
   const trail=Array.from({length:look.trailCount},()=>{const p=sprite(.4,look.trail,map);group.add(p);return p;});
   const blast=new THREE.Mesh(torus,new THREE.MeshBasicMaterial({color:look.blast,transparent:true,depthWrite:false,blending:THREE.AdditiveBlending}));blast.position.copy(end);group.add(blast);
-  const directions=[],sparks=Array.from({length:36},(_,j)=>{const p=sprite(.2,look.sparks[j%3?0:1],map);group.add(p);const a=j*2.39996,z=1-2*(j+.5)/36,r=Math.sqrt(1-z*z);directions.push(new THREE.Vector3(Math.cos(a)*r,Math.sin(a)*r,z));return p;});
-  scene.add(group);shots.push({swirl:style==='fireball'?{phase:Math.random()*Math.PI*2,turns:1.5+Math.random(),width:.24+Math.random()*.12}:null,look,parts,arrows,group,ball,halo,trail,blast,sparks,directions,path,end,started:performance.now()-Math.max(0,elapsedMs),flight:Math.max(1,flightMs)/1000,depth,getTarget,getSource,onImpact,incoming,shotId,visibility:1,hiddenSource:false,lastSeen:performance.now(),lost:false,reported:false});
+  const directions=[],sparks=Array.from({length:visualOnly?18:36},(_,j)=>{const p=sprite(.2,look.sparks[j%3?0:1],map);group.add(p);const a=j*2.39996,z=1-2*(j+.5)/36,r=Math.sqrt(1-z*z);directions.push(new THREE.Vector3(Math.cos(a)*r,Math.sin(a)*r,z));return p;});
+  group.visible=delay<=elapsedMs;scene.add(group);shots.push({visualOnly,targetOffset,swirl:style==='fireball'&&upgraded?{phase:Math.random()*Math.PI*2,turns:1,width:.045}:null,look,parts,arrows,group,ball,halo,trail,blast,sparks,directions,path,end,started:started+delay,flight:Math.max(1,flight)/1000,depth,getTarget,getSource,onImpact:visualOnly?undefined:onImpact,incoming,shotId,visibility:1,hiddenSource:false,lastSeen:performance.now(),lost:false,reported:false});
+  }
   if(!frame)frame=requestAnimationFrame(animate);return true;
  }
  document.addEventListener('visibilitychange',()=>{if(document.hidden)clear();});

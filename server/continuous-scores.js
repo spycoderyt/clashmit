@@ -1,4 +1,4 @@
-import {COINS_PER_KILL,ATTACKS} from '../dist/economy.js';
+import {COINS_PER_KILL,KILL_BOUNTY,ATTACKS} from '../dist/economy.js';
 import {POINTS} from './scores.js';
 // Coin games persist only knockouts; legacy games retain their per-life damage points.
 export function creditContinuous(room,store,{actorId,targetId,amount,lethal=false,actorLife,spell,attackName},onKill){
@@ -10,10 +10,13 @@ export function creditContinuous(room,store,{actorId,targetId,amount,lethal=fals
  if(room.economy&&!knockout)return;
  let damage=0;
  if(!room.economy){const credit=target.damageCredit??={},previous=credit[actorId]||0;damage=Math.min(amount,Math.max(0,POINTS.damageCap-previous));credit[actorId]=previous+damage;}
+ // Read the victim's saved streak before finish() records their death and resets it.
+ const victimStreak=knockout&&room.economy?(store.standings().find(p=>p.id===targetId)?.currentStreak||0):0;
+ const coins=knockout?COINS_PER_KILL*(victimStreak>=KILL_BOUNTY.minimumStreak?KILL_BOUNTY.multiplier:1):0;
  if(knockout)target.koScoredLife=target.life;
  const countStreak=actor.health>0&&(actorLife===undefined||actorLife===actor.life);
- store.award(actorId,room.economy?0:damage*POINTS.damage+(knockout?POINTS.knockout:0),knockout?1:0,0,countStreak,knockout?COINS_PER_KILL:0);
- if(knockout){const score=store.standings().find(p=>p.id===actorId);onKill?.({killer:actor.name,victim:target.name,spell:spell||'unknown',attackName:attackName||ATTACKS[spell]?.name||'an attack',streak:countStreak?score.currentStreak:0,actorId,targetId,coins:COINS_PER_KILL,balance:score.coins});if(countStreak&&score.currentStreak>=3)return{type:'killstreak',actorId,name:actor.name,streak:score.currentStreak};}
+ store.award(actorId,room.economy?0:damage*POINTS.damage+(knockout?POINTS.knockout:0),knockout?1:0,0,countStreak,coins);
+ if(knockout){const score=store.standings().find(p=>p.id===actorId);onKill?.({killer:actor.name,victim:target.name,spell:spell||'unknown',attackName:attackName||ATTACKS[spell]?.name||'an attack',streak:countStreak?score.currentStreak:0,actorId,targetId,coins,balance:score.coins});if(countStreak&&score.currentStreak>=3)return{type:'killstreak',actorId,name:actor.name,streak:score.currentStreak};}
 }
 export function scoreContinuousHit(room,store,event,before,onKill){
  if(event.error||event.missed||event.blocked||!event.targetId||!(before>0))return;

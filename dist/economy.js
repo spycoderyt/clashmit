@@ -1,5 +1,6 @@
 // Shared presentation/balance data; the server is authoritative for spending and combat.
 export const MAX_HEALTH=70,COINS_PER_KILL=30;
+export const KILL_BOUNTY=Object.freeze({minimumStreak:5,multiplier:3});
 export const CLASS_ATTACKS={mage:['lightning','fireball','meteor'],witch:['poison','skeletonArmy','soulReaper'],archer:['arrows','bombArrow','ballista']};
 export const UNLOCK_COST=[0,60,140],UPGRADE_COST=[80,160,240];
 export const CONSUMABLES={shield:{name:'Shield',cost:30,duration:7000,cooldown:14000},heal:{name:'Heal',cost:30,amount:50,cooldown:8000},flashbang:{name:'Flashbang',cost:50,duration:3000,radius:10,cooldown:8000}};

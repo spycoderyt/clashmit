@@ -7,7 +7,7 @@ function element(name,attrs={}){const el=document.createElementNS(NS,name);for(c
 export function createUpgradeEffects(container){
  const live=new Set();
  function clear(){for(const effect of [...live])effect.remove();}
- function impact({spell,from,targets=[],upgraded=true}={}){
+ function impact({spell,from,targets=[],ground,upgraded=true}={}){
   if(!upgraded||!container||!valid(from))return false;
   const selected=targets.filter(valid).slice(0,3);if(!selected.length)return false;
   // No full-screen filters, canvas loop, blur, or uncapped particle emitters.
@@ -15,7 +15,7 @@ export function createUpgradeEffects(container){
   const box=container.getBoundingClientRect(),width=Math.max(1,box.width),height=Math.max(1,box.height),size=clamp(Math.min(width,height)*.105,28,58);
   const point=p=>({x:clamp(p.x,0,1)*width,y:clamp(p.y,0,1)*height});
   const source=point(from),ends=selected.map(point),reduced=globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-  const duration=reduced?220:({lightning:520,arrows:580,ballista:620,poison:900,soulReaper:850}[spell]||760);
+  const duration=reduced?220:({fireball:3200,lightning:520,arrows:580,ballista:620,poison:900,soulReaper:850}[spell]||760);
   const svg=element('svg',{viewBox:`0 0 ${width} ${height}`,'aria-hidden':'true','data-upgrade-effect':spell});
   Object.assign(svg.style,{position:'absolute',inset:'0',width:'100%',height:'100%',pointerEvents:'none',overflow:'hidden',zIndex:'24'});
   const animations=[];let timer;
@@ -50,7 +50,7 @@ export function createUpgradeEffects(container){
   if(spell==='lightning'){
    ends.forEach((p,i)=>{
     const a=i===0?source:ends[0],d=jagged(a,p,i+.3);
-    for(const [color,stroke]of [['#7e83ff',8],['#effaff',2.2]]){const path=add('path',{d,fill:'none',stroke:color,'stroke-width':stroke,'stroke-linejoin':'round'});animate(path,[{opacity:0},{opacity:1,offset:.12},{opacity:.3,offset:.35},{opacity:.95,offset:.48},{opacity:0}],{delay:i*35,duration:duration-i*35});}
+    for(const [color,stroke]of [['#626af3',18],['#bcc6ff',10],['#ffffff',5]]){const path=add('path',{d,fill:'none',stroke:color,'stroke-width':stroke,'stroke-linejoin':'round'});animate(path,[{opacity:0},{opacity:1,offset:.12},{opacity:.3,offset:.35},{opacity:.95,offset:.48},{opacity:0}],{delay:i*35,duration:duration-i*35});}
     pulse(p,'#bdc6ff',size*.6,i*35);
    });
   }else if(spell==='poison'){
@@ -97,8 +97,16 @@ export function createUpgradeEffects(container){
      const crater=add('ellipse',{cx:p.x,cy:p.y+size*.15,rx:size*1.3,ry:size*.4,fill:'#392126',stroke:'#e98d64','stroke-width':3});
      crater.style.transformOrigin=`${p.x}px ${p.y}px`;animate(crater,[{transform:'scale(.2)',opacity:0},{transform:'scale(1)',opacity:.8,offset:.2},{transform:'scale(1.1)',opacity:0}]);
     }else if(!bomb){
-     const g=groupAt(p),flame=add('path',{d:`M0 ${size*.7} C${-size} ${size*.1} ${-size*.1} ${-size*.2} ${-size*.2} ${-size} C${size*.65} ${-size*.5} ${size*.65} ${size*.1} 0 ${size*.7}`,fill:'#ffd17a'},g);
-     flame.style.transformOrigin='0px 0px';animate(flame,[{transform:'scale(.4)',opacity:.8},{transform:'scale(1.3)',opacity:0}]);
+     // The camera has no world map. Use the tracked feet, or an estimated ground point.
+     const floor=valid(ground)?point(ground):{x:p.x,y:Math.min(height*.82,p.y+height*.26)},g=groupAt(floor);
+     const ember=add('ellipse',{rx:size*1.55,ry:size*.25,fill:'#b63914',opacity:.8},g);
+     animate(ember,[{transform:'scale(.3)',opacity:0},{transform:'scale(1)',opacity:.8,offset:.12},{transform:'scale(1.1)',opacity:.7,offset:.85},{opacity:0}]);
+     for(let j=0;j<9;j++){
+      const x=(j-4)*size*.32,y=Math.sin(j*2.4)*size*.08,h=size*(.55+(j%3)*.19),base=add('g',{transform:`translate(${x} ${y})`},g);
+      const flame=add('path',{d:`M${-h*.24} 0 Q${-h*.48} ${-h*.36} ${-h*.07} ${-h} Q${h*.05} ${-h*.5} ${h*.25} ${-h*.66} Q${h*.55} ${-h*.16} ${h*.24} 0 Z`,fill:j%2?'#ff772d':'#ffa23a'},base);
+      const core=add('path',{d:`M${-h*.12} 0 Q${-h*.22} ${-h*.22} 0 ${-h*.52} Q${h*.3} ${-h*.12} ${h*.12} 0 Z`,fill:'#ffeaa1'},base);
+      for(const node of [flame,core]){node.style.transformOrigin='0px 0px';animate(node,[{transform:'scale(.9, .78)'},{transform:'scale(1.1, 1.13)'},{transform:'scale(.85, .9)'}],{duration:420+j*29,iterations:reduced?1:7,direction:'alternate'});}
+     }
     }
    });
   }
