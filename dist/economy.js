@@ -5,7 +5,7 @@ export function bountyMultiplier(streak){return Math.max(1,Math.floor(((Number.i
 export const killReward=streak=>COINS_PER_KILL*bountyMultiplier(streak);
 export const CLASS_ATTACKS={mage:['lightning','fireball','meteor'],witch:['poison','skeletonArmy','soulReaper'],archer:['arrows','bombArrow','ballista']};
 export const UNLOCK_COST=[0,60,140],UPGRADE_COST=[80,160,240];
-export const CONSUMABLES={shield:{name:'Shield',cost:30,duration:7000,cooldown:14000},heal:{name:'Heal',cost:30,amount:50,cooldown:8000},flashbang:{name:'Flashbang',cost:50,duration:3000,radius:10,cooldown:8000}};
+export const CONSUMABLES={shield:{name:'Shield',cost:30,duration:7000,cooldown:14000},heal:{name:'Heal',cost:30,amount:50,cooldown:8000},flashbang:{name:'Flashbang',cost:50,duration:3000,radius:15,cooldown:8000}};
 export const ATTACKS={
  lightning:{name:'Lightning',upgrade:'Chain Lightning',upgradeMultiHit:{radius:5,maxExtraTargets:2,damageScale:.5},icon:'ϟ',damage:10,upDamage:14,manaCost:2,cooldown:1000,flightMs:250,bypassShield:true,bolt:true,words:['lightning','lighting','light ning','chain lightning','chain lighting']},
  fireball:{name:'Fireball',upgrade:'Wildfire',icon:'✷',damage:25,upDamage:32,manaCost:4,cooldown:2400,flightMs:1400,splash:true,words:['fireball','fire ball','wildfire','wild fire']},
