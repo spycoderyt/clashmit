@@ -1,43 +1,51 @@
 .minimap{position:absolute;top:138px;right:12px;z-index:4;display:flex;flex-direction:column;align-items:flex-end;gap:4px;width:116px;font-size:.65rem;color:#c8cbd3;text-shadow:0 1px 3px #000}
 .minimap[hidden]{display:none}
-.minimap.expanded{width:min(260px,calc(100% - 24px))}
-.minimap-radar{position:relative;display:block;width:100%;aspect-ratio:1;padding:0;border-radius:50%;border:1px solid #5961706b;background:#0d131cb8;color:inherit;font:inherit;cursor:pointer;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);overflow:hidden;touch-action:manipulation}
+.minimap.expanded{width:min(230px,calc(100% - 24px))}
+.minimap-radar{position:relative;display:block;width:100%;aspect-ratio:1;padding:0;border-radius:50%;border:1.5px solid #8fb4ff55;box-shadow:0 6px 24px #0009,inset 0 0 18px #0b101880;background:#0d131cb8;color:inherit;font:inherit;cursor:pointer;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);overflow:hidden;touch-action:manipulation}
 .minimap.active .minimap-radar{border-color:#7fd7ff66}
 .minimap-radar svg{display:block;width:100%;height:100%;opacity:.35}
 .minimap.active .minimap-radar svg{opacity:1}
-.minimap-map{position:absolute;inset:0;pointer-events:none;visibility:hidden}
+.minimap-map{position:absolute;inset:0;pointer-events:none;visibility:hidden;filter:grayscale(1) invert(1) contrast(1.05) brightness(.95) sepia(.45) hue-rotate(190deg) saturate(1.5)}
 .minimap.mapped .minimap-map{visibility:visible}
-.minimap-map.leaflet-container{background:#dfe3e8;font:inherit}
+/* The street map is recolored to a dark navy that matches the HUD. The filter runs before it, so this loading
+   color is the light tone that the filter turns into that same navy. */
+.minimap-map.leaflet-container{background:#e9e4da;font:inherit}
 .minimap-radar svg{position:relative}
-.minimap.mapped .minimap-ring{stroke:#1012173d}
-.minimap.mapped .minimap-north{stroke:#fff;stroke-width:4;paint-order:stroke;fill:#d9480f}
-.minimap.mapped .minimap-halo{fill-opacity:.22}
+.minimap.mapped .minimap-ring{stroke:#cfe0ff2e}
+.minimap.mapped .minimap-north{stroke:#0d131c;stroke-width:4;paint-order:stroke;fill:#ff9958}
+.minimap.mapped .minimap-halo{fill-opacity:.2}
 .minimap-cta{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;text-align:center;padding:14px;font-size:.7rem;font-weight:700;line-height:1.25;color:#f6f4ef}
 .minimap-cta:empty{display:none}
 .minimap-ring{fill:none;stroke:#8fa3bd55;stroke-width:1.2;vector-effect:non-scaling-stroke}
 .minimap-north{font-size:17px;font-weight:700;fill:#ff9958}
 .minimap-self{stroke:#101217;stroke-width:2.5;paint-order:stroke}
 .minimap-halo{fill-opacity:.16;stroke:none}
-.minimap-dot{stroke:#101217;stroke-width:2.5}
+.minimap-face-ring{stroke:#0b1018;stroke-width:1.5}
+.minimap-initial{font-weight:800;fill:#0b1018;pointer-events:none}
+.minimap-beak{fill:#f6f4ef;stroke:#0b1018;stroke-width:1.5;stroke-linejoin:round}
+.minimap-player.dead .minimap-face,.minimap-player.dead .minimap-initial{opacity:.35}
+.minimap-player.dead .minimap-face{filter:grayscale(1)}
 .minimap-player.stale{opacity:.4}
-.minimap-player.dead .minimap-dot{fill-opacity:.25;stroke:#c8cbd3}
+.minimap-player.dead .minimap-face-ring{fill-opacity:.35}
 .minimap-label{display:none;font-size:15px;font-weight:700;fill:#f6f4ef;stroke:#101217;stroke-width:3;paint-order:stroke}
 .minimap.expanded .minimap-label{display:block}
 .minimap-info{display:none;width:100%;justify-content:space-between;gap:6px;white-space:nowrap}
 .minimap-info span:not(:empty){background:#0d131cb8;border-radius:6px;padding:2px 6px}
 .minimap.active .minimap-info{display:flex}
 .minimap:not(.expanded) .minimap-gps{display:none}
-.minimap-list,.minimap-stop,.minimap-zoom,.minimap-credit{display:none}
+.minimap-list,.minimap-foot,.minimap-zoom{display:none}
+.minimap.expanded.active .minimap-foot{display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%}
 .minimap.expanded.active .minimap-zoom{display:flex;gap:6px;width:100%}
-.minimap-zoom button{flex:1;min-height:34px;background:#18202be8;border:1px solid #5961706b;border-radius:8px;color:#f6f4ef;font-size:.8rem;font-weight:700;touch-action:manipulation}
+.minimap-zoom button{flex:1;min-height:30px;background:#18202be8;border:1px solid #5961706b;border-radius:8px;color:#f6f4ef;font-size:.8rem;font-weight:700;touch-action:manipulation}
 .minimap-zoom button[data-zoom=auto]{flex:2;font-size:.7rem;font-weight:400}
 .minimap-zoom button:disabled{opacity:.4}
-.minimap.expanded.mapped .minimap-credit{display:block;width:100%;margin:0;font-size:.55rem;text-align:right;color:#a5a9b5}
-.minimap.expanded.active .minimap-list{display:block;width:100%;margin:0;padding:8px 10px;list-style:none;border-radius:8px;border:1px solid #5961706b;background:#0d131cd9;font-size:.75rem;text-shadow:none}
+.minimap-credit{margin:0;font-size:.52rem;line-height:1.2;text-align:right;color:#a5a9b5}
+.minimap:not(.mapped) .minimap-credit{visibility:hidden}
+.minimap.expanded.active .minimap-list{display:block;width:100%;max-height:104px;overflow:auto;margin:0;padding:6px 10px;list-style:none;border-radius:8px;border:1px solid #5961706b;background:#0d131cd9;font-size:.75rem;text-shadow:none}
 .minimap-list:empty{display:none!important}
 .minimap-list li{display:flex;align-items:center;gap:6px;padding:2px 0}
-.minimap-list i{width:9px;height:9px;border-radius:50%;flex-shrink:0;border:1px solid #101217}
+.minimap-list i,.minimap-list img{width:22px;height:22px;border-radius:50%;flex-shrink:0;border:2px solid #101217;object-fit:cover}
 .minimap-list b{color:#f6f4ef;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .minimap-list span{margin-left:auto;white-space:nowrap}
 .minimap-waiting{color:#a5a9b5;font-style:italic}
-.minimap.expanded.active .minimap-stop{display:block;background:#18202be8;border:1px solid #5961706b;border-radius:8px;padding:6px 10px;font-size:.7rem;color:#f6f4ef;min-height:32px}
+.minimap-stop{flex-shrink:0;background:#18202be8;border:1px solid #5961706b;border-radius:8px;padding:5px 9px;font-size:.68rem;color:#f6f4ef;min-height:30px}

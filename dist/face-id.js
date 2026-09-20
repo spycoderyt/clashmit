@@ -100,3 +100,13 @@ export const validEncodedSamples=samples=>Array.isArray(samples)&&samples.length
 // between the eyes, in units of the distance between the eyes. About 0 facing the camera and
 // beyond about 0.25 when clearly turned; the sign says which way.
 export function headTurn(landmarks){const [leftEye,rightEye,nose]=landmarks,eyes=Math.hypot(rightEye[0]-leftEye[0],rightEye[1]-leftEye[1]);return eyes?(nose[0]-(leftEye[0]+rightEye[0])/2)/eyes:0;}
+// A player's map marker: a small square JPEG of their face, cropped during the scan. Only a plain base64 JPEG data
+// URL of bounded size is accepted, so nothing scriptable (such as SVG) can be relayed to other players' pages.
+export const AVATAR={size:96,maxLength:7000};
+export const validAvatar=image=>typeof image==='string'&&image.length<=AVATAR.maxLength&&/^data:image\/jpeg;base64,[A-Za-z0-9+/]+=*$/.test(image);
+// The square to crop around a detected face so the marker shows the whole head: a little wider than the face box,
+// shifted up to include hair, and kept inside the frame. Returns {x,y,size} in source pixels.
+export function avatarCrop(box,frameWidth,frameHeight){
+ const size=Math.min(frameWidth,frameHeight,Math.max(box.width,box.height)*1.45),cx=box.x+box.width/2,cy=box.y+box.height/2-box.height*.06;
+ return{x:Math.max(0,Math.min(frameWidth-size,cx-size/2)),y:Math.max(0,Math.min(frameHeight-size,cy-size/2)),size};
+}

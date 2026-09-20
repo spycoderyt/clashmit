@@ -29,6 +29,7 @@ test('starting a round runs a shared countdown, then records when each player is
  a.send({type:'cast',spell:'lightning',targetId:bw.id});const shot=await a.next('spell');await new Promise(r=>setTimeout(r,260));a.send({type:'impact',shotId:shot.shotId,tracked:true});
  const over=await a.next('state',m=>m.room.phase==='finished');const out=over.room.players.find(p=>p.id===bw.id);assert.equal(out.health,0);assert.ok(out.diedAt>=over.room.startsAt&&out.diedAt<=Date.now());
  assert.deepEqual(rankPlayers(over.room.players).map(p=>p.name),['Ada','Bo']);assert.deepEqual(over.room.winners,[aw.id]);
+ assert.equal(over.room.results.players.find(p=>p.id===aw.id).earnedPoints,295);assert.equal(over.room.results.players.find(p=>p.id===aw.id).wins,1);assert.equal(over.room.players.find(p=>p.id===aw.id).score.points,295);assert.equal(over.room.results.players.find(p=>p.id===bw.id).earnedPoints,25);
  // A new round counts down again and clears the old knock-out times.
  a.send({type:'start'});await a.next('countdown');const again=await a.next('state',m=>m.room.phase==='countdown');assert.ok(again.room.players.every(p=>p.health===100&&!p.diedAt));
  a.ws.close();b.ws.close();
@@ -39,4 +40,20 @@ test('a countdown is abandoned if players leave before it ends',async t=>{
  const a=await join('Ada');await a.next('welcome');const b=await join('Bo');await b.next('welcome');a.send({type:'face',samples:faceOf(1)});b.send({type:'face',samples:faceOf(2)});await a.next('state',m=>m.room.players.every(p=>p.faceReady)&&m.room.players.length===2);
  a.send({type:'start'});await a.next('countdown');b.send({type:'leave'});
  assert.match((await a.next('error',m=>/Not enough/.test(m.message))).message,/Not enough players/);const back=await a.next('state',m=>m.room.phase==='lobby');assert.equal(back.room.startsAt,0);a.ws.close();
+});
+test('a face photo for the map is relayed once, validated strictly and removed when the player leaves',async t=>{
+ const {validAvatar,avatarCrop,AVATAR}=await import('../dist/face-id.js');
+ const jpeg='data:image/jpeg;base64,'+Buffer.from('not really a jpeg but valid base64').toString('base64');
+ assert.ok(validAvatar(jpeg));for(const bad of [null,42,'','data:image/svg+xml;base64,PHN2Zz48L3N2Zz4=','data:image/jpeg;base64,<script>','data:text/html;base64,AAAA','data:image/jpeg;base64,'+'A'.repeat(AVATAR.maxLength)])assert.equal(validAvatar(bad),false);
+ // The crop is a square around the whole head, kept inside the frame.
+ const crop=avatarCrop({x:300,y:200,width:100,height:140},720,960);assert.ok(crop.size>=140&&crop.size<=720);assert.ok(crop.x>=0&&crop.y>=0&&crop.x+crop.size<=720&&crop.y+crop.size<=960);assert.ok(Math.abs(crop.x+crop.size/2-350)<1);
+ const edge=avatarCrop({x:0,y:0,width:200,height:260},720,960);assert.equal(edge.x,0);assert.equal(edge.y,0);
+ const game=createGameServer({countdownMs:0});await new Promise(r=>game.server.listen(0,'127.0.0.1',r));t.after(()=>game.close());const url=`ws://127.0.0.1:${game.server.address().port}/ws`;
+ const join=async name=>{const ws=new WebSocket(url),messages=[];ws.on('message',b=>messages.push(JSON.parse(b)));await new Promise(r=>ws.on('open',r));ws.send(JSON.stringify({type:'join',name}));const next=async(type,predicate=()=>true)=>{const end=Date.now()+3000;while(Date.now()<end){const i=messages.findIndex(m=>m.type===type&&predicate(m));if(i>=0)return messages.splice(i,1)[0];await new Promise(r=>setTimeout(r,10));}throw Error('Timed out waiting for '+type);};return{ws,next,send:m=>ws.send(JSON.stringify(m))};};
+ const a=await join('Ada'),aw=await a.next('welcome'),b=await join('Bo');await b.next('welcome');assert.deepEqual((await b.next('avatars')).avatars,{});
+ a.send({type:'avatar',image:'data:image/svg+xml;base64,PHN2Zz48L3N2Zz4='});assert.match((await a.next('error')).message,/could not be used/);
+ a.send({type:'avatar',image:jpeg});assert.equal((await b.next('avatars',m=>m.avatars[aw.id])).avatars[aw.id],jpeg);
+ // It never rides along in the state broadcast, and a player who joins later still receives it.
+ const state=await b.next('state');assert.ok(!JSON.stringify(state).includes(jpeg.slice(30)));const late=await join('Cy');await late.next('welcome');assert.equal((await late.next('avatars')).avatars[aw.id],jpeg);
+ a.send({type:'leave'});assert.equal((await b.next('avatars',m=>aw.id in m.avatars)).avatars[aw.id],null);assert.equal(game.rooms.get('ARENA').avatars[aw.id],undefined);b.ws.close();late.ws.close();
 });

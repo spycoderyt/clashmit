@@ -16,7 +16,7 @@ export function createTargetOverlay(arena,container){
   label.classList.toggle('shielded',shielded);label.classList.toggle('tracking-gap',!target.fresh);
   const center=Math.max(76,Math.min(viewport.width-76,x+w/2)),top=Math.max(116,y-7);
   label.style.transform=`translate3d(${center.toFixed(2)}px,${top.toFixed(2)}px,0) translate(-50%,-100%)`;
-  text(title,player.name||'Target');if(meter.value!==player.health)meter.value=player.health;meter.hidden=!!target.pending;
+  text(title,(player.score?`#${player.score.rank} `:'')+(player.name||'Target'));if(meter.value!==player.health)meter.value=player.health;meter.hidden=!!target.pending;
   text(info,shielded?`◇ Shield · ${piercer} pierces`:poisoned?'☣ Poisoned':simulated?'Simulated':target.pending?'Hold steady':target.source==='body'?'Following · face hidden':target.confirmed?(target.fresh?'Face locked':'Tracking…'):'Identifying…');
  }
  hide();return{update,hide,size,dispose(){observer?.disconnect();frame.remove();label.remove();}};

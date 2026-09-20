@@ -14,7 +14,7 @@
 // of after verifyMs, and while suspect its last trusted position is kept. If the re-check says this is not
 // the named player, the intruder is split off into a track of their own and the named track goes back to
 // where the player really was, to be carried by their body or to coast until they reappear.
-import {matchPlayer,distanceToPlayer,createIdentityVoter,headTurn,MATCH,UPPER} from './face-id.js?v=face11';
+import {matchPlayer,distanceToPlayer,createIdentityVoter,headTurn,MATCH,UPPER} from './face-id.js?v=face12';
 // bodyAfterMs: how long a face may go unseen before it counts as hidden. It has to cover a few recognition
 // passes, which take 50 to 250 ms each on a phone, or the lock would flicker between face and body.
 // suspectMs: a suspicion that can be neither confirmed nor refuted (a profile, a distant face) lapses after this.

@@ -1,6 +1,6 @@
 // Runs face detection and recognition off the main thread so the camera view, aiming and
 // spell effects never stall. Receives ImageBitmaps of frame regions, returns faces in source pixels.
-import {loadFaceEngine,detectRegion,describe} from './face-engine.js?v=face11';
+import {loadFaceEngine,detectRegion,describe} from './face-engine.js?v=face12';
 const iou=(a,b)=>{const w=Math.min(a.x+a.width,b.x+b.width)-Math.max(a.x,b.x),h=Math.min(a.y+a.height,b.y+b.height)-Math.max(a.y,b.y);if(w<=0||h<=0)return 0;const i=w*h;return i/(a.width*a.height+b.width*b.height-i);};
 self.onmessage=async({data})=>{
  if(data.type==='init'){try{await loadFaceEngine(text=>postMessage({type:'progress',text}));postMessage({type:'ready'});}catch(e){postMessage({type:'error',message:String(e?.message||e)});}return;}

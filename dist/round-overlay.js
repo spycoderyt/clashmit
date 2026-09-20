@@ -6,7 +6,7 @@ const CSS='.round-overlay{position:absolute;inset:0;z-index:2;display:flex;align
 const MEDALS=['🥇','🥈','🥉'];
 const clock=ms=>{const seconds=Math.max(0,Math.round(ms/1000));return `${Math.floor(seconds/60)}:${String(seconds%60).padStart(2,'0')}`;};
 export function createRoundOverlay({container,now=()=>Date.now(),onTick=()=>{}}){
- const style=document.createElement('style');style.textContent=CSS;document.head.append(style);
+ const style=document.createElement('style');style.textContent=CSS+'.round-score-total,.round-breakdown{grid-column:2/-1}.round-board .round-earned{color:#ffcb83;font-weight:700;font-size:.9rem}.round-board .round-score-total{font-size:.72rem}.round-breakdown{font-size:.7rem;color:#a5a9b5}.round-breakdown summary{cursor:pointer}.round-board .round-breakdown small{display:block;white-space:normal;font-size:.7rem;line-height:1.6}.round-board li{row-gap:4px}';document.head.append(style);
  const root=document.createElement('div');root.className='round-overlay';root.setAttribute('aria-live','polite');container.append(root);
  let timer=null,shown='',lastSecond=null,goUntil=0;
  const clear=()=>{clearInterval(timer);timer=null;lastSecond=null;};
@@ -23,16 +23,22 @@ export function createRoundOverlay({container,now=()=>Date.now(),onTick=()=>{}})
  }
  function leaderboard(room,myId){
   const key='board:'+room.startsAt+':'+room.endsAt;if(shown===key)return;clear();shown=key;
-  const ranked=rankPlayers(room.players),winners=ranked.filter(p=>room.winners?.includes(p.id)).map(p=>p.name);
+  const ranked=room.results?.players||rankPlayers(room.players),winners=ranked.filter(p=>room.results?p.id===room.results.winnerId:room.winners?.includes(p.id)).map(p=>p.name);
   const board=document.createElement('section'),title=document.createElement('h2'),subtitle=document.createElement('p'),list=document.createElement('ol');board.className='round-board';
-  title.textContent='Round over';subtitle.textContent=winners.length===1?`${winners[0]} wins`:winners.length?`Tie: ${winners.join(' & ')}`:'Nobody survived';
+  title.textContent='Round over';subtitle.textContent=winners.length===1?`${winners[0]} is last standing · +200 pts`:room.results?'No last-standing win this round':winners.length?`Tie: ${winners.join(' & ')}`:'Nobody survived';
   for(const p of ranked){
    const row=document.createElement('li'),place=document.createElement('span'),name=document.createElement('b'),detail=document.createElement('small');
    if(p.place<=3)row.classList.add('top');if(p.id===myId)row.classList.add('me');
    place.className='place'+(p.place<=3?'':' number');place.textContent=MEDALS[p.place-1]||String(p.place);place.setAttribute('aria-label',`Place ${p.place}`);
    name.textContent=p.name+(p.id===myId?' (you)':'');
    detail.textContent=p.health>0?`Survived · ${p.health} HP`:p.diedAt&&room.startsAt?`Out at ${clock(p.diedAt-room.startsAt)}`:'Out';
-   row.append(place,name,detail);list.append(row);
+   if(room.results){
+    const survival=detail.textContent;detail.textContent=`+${p.earnedPoints} pts`;detail.className='round-earned';
+    const total=document.createElement('small');total.className='round-score-total';total.textContent=`Overall #${p.rank} · ${p.totalPoints} pts · ${p.wins} wins`;
+    const breakdown=document.createElement('details'),summary=document.createElement('summary'),explanation=document.createElement('small');breakdown.className='round-breakdown';summary.textContent=p.forfeited?'Left round':survival;explanation.textContent=`Damage ${p.damagePoints} + KOs ${p.knockoutPoints} + finish ${p.finishPoints} + win ${p.winPoints}`;breakdown.append(summary,explanation);
+    row.append(place,name,detail,total,breakdown);
+   }else row.append(place,name,detail);
+   list.append(row);
   }
   board.append(title,subtitle,list);root.replaceChildren(board);root.classList.add('show','dim');
  }
