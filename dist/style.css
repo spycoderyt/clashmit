@@ -58,7 +58,7 @@
 /* Decorative demo loop sits behind the join page and stops in the arena. */
 .lobby{position:relative;isolation:isolate}
 .lobby-backdrop{position:fixed;inset:0;z-index:-1;pointer-events:none;overflow:hidden;background:#152332}
-#lobby-background{display:block;width:100%;height:100%}
+#lobby-background{display:block;width:100%;height:100%;object-fit:cover;object-position:center 45%}
 .lobby-backdrop::after{content:'';position:absolute;inset:0;background:linear-gradient(90deg,#101217ab,#10121770 55%,#10121728),linear-gradient(0deg,#101217e8,transparent 45%,#10121755)}
 .lobby .intro,.lobby .join-next,.lobby .camera-note,.lobby .credits,.lobby label,.lobby #join-status{text-shadow:0 1px 6px #000}
 .lobby .intro p{color:#d1d6df}
@@ -88,3 +88,8 @@
 .shirt-guide>i{position:absolute;left:0;right:0;top:50%;height:2px;margin-top:-1px;background:#ff9958}
 #shirt-swatch{width:52px;height:44px;padding:0;overflow:hidden;display:flex;flex-direction:column}
 #shirt-swatch>i{flex:1;display:block}
+
+/* Reserve the tallest headline so the form stays still as the copy rotates. */
+#lobby-headline{display:grid;margin-bottom:0;text-wrap:pretty}
+#lobby-headline>span{grid-area:1/1}
+#lobby-headline>span[aria-hidden="true"]{visibility:hidden}

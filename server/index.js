@@ -8,9 +8,10 @@ import {castSpell,launchProjectile,impactProjectile,expireProjectiles,replenishM
 import {profileId} from '../dist/shirt.js';
 import {validLocation} from '../dist/geo.js';
 import {validEncodedSamples} from '../dist/face-id.js';
+import {serveVideo} from './video.js';
 
 const root=fileURLToPath(new URL('../dist/',import.meta.url));
-const mime={'.html':'text/html; charset=utf-8','.css':'text/css','.js':'text/javascript','.svg':'image/svg+xml','.wasm':'application/wasm'};
+const mime={'.html':'text/html; charset=utf-8','.css':'text/css','.js':'text/javascript','.svg':'image/svg+xml','.wasm':'application/wasm','.jpg':'image/jpeg'};
 const allowedOrigins=(process.env.ALLOWED_ORIGINS||'').split(',').filter(Boolean);
 // countdownMs: how long every phone shows the synchronised countdown before a round begins (0 starts at once).
 export function createGameServer({maxPlayers=null,maxBufferedBytes=256*1024,countdownMs=5000}={}){
@@ -25,6 +26,7 @@ export function createGameServer({maxPlayers=null,maxBufferedBytes=256*1024,coun
   if(!['GET','HEAD'].includes(req.method)){res.writeHead(405);return res.end();}
    const path=resolve(root,'.'+decodeURIComponent(url.pathname==='/'?'/index.html':url.pathname));
    if(!path.startsWith(root)){res.writeHead(403);return res.end();}
+   if(extname(path)==='.mp4')return await serveVideo(req,res,path);
    const body=await readFile(path);res.writeHead(200,{'Content-Type':mime[extname(path)]||'application/octet-stream','X-Content-Type-Options':'nosniff','Referrer-Policy':'same-origin','Cache-Control':url.pathname.startsWith('/vendor/')||url.pathname.startsWith('/models/')?'public, max-age=3600':'no-cache'});res.end(req.method==='HEAD'?undefined:body);
   }catch{res.writeHead(404);res.end('Not found');}
  });
