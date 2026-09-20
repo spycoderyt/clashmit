@@ -1,10 +1,12 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#101217"><meta name="description" content="ClashMIT: a camera-based spell tag prototype for friends."><title>ClashMIT • Spell tag</title><link rel="icon" href="favicon.svg?v=crown1"><link rel="stylesheet" href="style.css?v=video2"></head>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#101217"><meta name="description" content="ClashMIT: a camera-based spell tag prototype for friends."><title>ClashMIT • Spell tag</title><link rel="icon" href="favicon.svg?v=crown1"><link rel="stylesheet" href="style.css?v=center1"></head>
 <body><main>
 <section id="lobby" class="lobby">
   <div class="lobby-backdrop" aria-hidden="true"><video id="lobby-background" muted loop playsinline preload="metadata" poster="media/lobby-gameplay-v1.jpg" disablepictureinpicture><source src="media/lobby-gameplay-v1.mp4" type="video/mp4"></video></div>
+  <div class="lobby-heading">
   <header class="brand"><img class="brand-mark" src="favicon.svg?v=crown1" width="44" height="52" alt=""><span>ClashMIT</span><button id="background-toggle" type="button" aria-label="Pause background and rotating title" aria-pressed="false">Ⅱ</button></header>
   <div class="intro"><h1 id="lobby-headline"><span>A million years of evolution has led to ClashMIT.</span><span aria-hidden="true">Everyone is AI slop except for us.</span><span aria-hidden="true">Fireball! Lightning! Fireball! Fireball!</span></h1></div>
+  </div>
   <form id="join-form" class="join-panel">
     <label for="name">Your name</label>
     <input id="name" maxlength="20" autocomplete="nickname" enterkeyhint="go" placeholder="What should we call you?" required>

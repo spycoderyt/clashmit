@@ -93,3 +93,10 @@
 #lobby-headline{display:grid;margin-bottom:0;text-wrap:pretty}
 #lobby-headline>span{grid-area:1/1}
 #lobby-headline>span[aria-hidden="true"]{visibility:hidden}
+
+/* Keep joining centered, with branding above and credits at the bottom. */
+.lobby{display:grid;grid-template-rows:minmax(max-content,1fr) auto minmax(max-content,1fr);gap:28px}
+.lobby-heading{align-self:start}
+.lobby .join-panel{width:100%;margin:0;align-self:center;text-align:center}
+.lobby .join-panel input{text-align:center}
+.lobby .credits{align-self:end;margin:0}
