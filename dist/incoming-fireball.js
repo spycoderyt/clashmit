@@ -5,7 +5,10 @@ export function shotTiming(shot,serverNow,localNow){
  const impact=Number.isFinite(shot.impactAt)?shot.impactAt:launched+duration;
  return{duration,deadline:localNow+impact-serverNow,expires:localNow+(Number.isFinite(shot.expiresAt)?shot.expiresAt:impact+2500)-serverNow};
 }
-export function createIncomingFireballs({container,renderer,getAttacker=()=>null,now=()=>Date.now(),clock=()=>performance.now(),schedule=cb=>requestAnimationFrame(cb),unschedule=id=>cancelAnimationFrame(id)}){
+// How an incoming spell reads on the receiving phone. `bolt` spells draw a streak instead of a thrown
+// object; `thrown:false` spells are drawn elsewhere (the skeleton army walks in on its own layer).
+const describeOriginal=spell=>spell==='lightning'?{label:'lightning',rgb:'146,180,255',bolt:true}:{label:'fireball',rgb:'255,113,32'};
+export function createIncomingFireballs({container,renderer,describe=describeOriginal,getAttacker=()=>null,now=()=>Date.now(),clock=()=>performance.now(),schedule=cb=>requestAnimationFrame(cb),unschedule=id=>cancelAnimationFrame(id)}){
  const active=new Map(),retired=new Set();let frame=0,outcomeUntil=0,disposed=false;
  const layer=document.createElement('div'),label=document.createElement('div'),bolt=document.createElement('div');
  layer.className='incoming-spell-warning';layer.dataset.phase='idle';layer.setAttribute('aria-hidden','true');
@@ -23,22 +26,23 @@ export function createIncomingFireballs({container,renderer,getAttacker=()=>null
   for(const [id,entry]of active){
    if(time>entry.expires){remove(id,true);continue;}
    const progress=Math.max(0,Math.min(1,1-(entry.deadline-time)/entry.duration)),source=sourceFor(entry.shot);
-   if(!entry.started&&source&&progress<.8&&entry.shot.spell!=='lightning'){
-    try{entry.started=!!graphics()?.incoming?.({shotId:id,...source,getSource:()=>sourceFor(entry.shot),flightMs:entry.duration,elapsedMs:progress*entry.duration});}catch{entry.started=false;}
+   const look=describe(entry.shot.spell);
+   if(!entry.started&&source&&progress<.8&&!look.bolt&&look.thrown!==false){
+    try{entry.started=!!graphics()?.incoming?.({shotId:id,style:entry.shot.spell,...source,getSource:()=>sourceFor(entry.shot),flightMs:entry.duration,elapsedMs:progress*entry.duration});}catch{entry.started=false;}
    }
    if(!strongest||progress>strongest.progress)strongest={...entry,progress,source};
   }
   if(outcomeUntil>time){ensureFrame();return;}
   bolt.style.display='none';
   if(strongest){
-   const lightning=strongest.shot.spell==='lightning',rgb=lightning?'146,180,255':'255,113,32',intensity=.2+.65*strongest.progress**2;
+   const look=describe(strongest.shot.spell),lightning=!!look.bolt,rgb=look.rgb,intensity=.2+.65*strongest.progress**2;
    layer.style.opacity='1';layer.style.boxShadow=`inset 0 0 ${25+strongest.progress*55}px ${5+strongest.progress*15}px rgba(${rgb},${intensity})`;
    layer.style.background=`radial-gradient(ellipse at center,transparent 48%,rgba(${rgb},${intensity*.3}) 100%)`;
    layer.dataset.phase=strongest.progress<1?'incoming':'awaiting-impact';
-   label.textContent=lightning?'Incoming lightning':'Incoming fireball';
+   label.textContent='Incoming '+look.label;
    if(lightning&&strongest.source&&strongest.progress<1&&!globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches){
     const rect=container.getBoundingClientRect(),x=strongest.source.x*rect.width,y=strongest.source.y*rect.height,dx=rect.width*.5-x,dy=rect.height*.53-y;
-    Object.assign(bolt.style,{display:'block',left:x+'px',top:y+'px',width:Math.hypot(dx,dy)*strongest.progress+'px',transform:`rotate(${Math.atan2(dy,dx)}rad)`});
+    Object.assign(bolt.style,{boxShadow:`0 0 10px 4px rgba(${rgb},.9),0 0 28px 8px rgba(${rgb},.55)`,display:'block',left:x+'px',top:y+'px',width:Math.hypot(dx,dy)*strongest.progress+'px',transform:`rotate(${Math.atan2(dy,dx)}rad)`});
    }
   }else{layer.style.opacity='0';layer.dataset.phase='idle';}
   if(active.size)ensureFrame();
@@ -53,10 +57,10 @@ export function createIncomingFireballs({container,renderer,getAttacker=()=>null
   if(disposed||!event?.shotId||retired.has(event.shotId))return false;
   const entry=active.get(event.shotId);if(!entry)return false;remove(event.shotId,true);
   const missed=event.missed||event.outcome==='missed',blocked=event.blocked||event.outcome==='blocked';
-  const rgb=blocked?'107,210,255':missed?'165,170,180':'255,103,32';
+  const look=describe(entry.shot.spell),rgb=blocked?'107,210,255':missed?'165,170,180':look.rgb;
   layer.style.opacity='1';layer.style.boxShadow=`inset 0 0 75px 22px rgba(${rgb},.85)`;layer.style.background=`rgba(${rgb},${missed ? .04 : .15})`;
   layer.dataset.phase=missed?'missed':blocked?'blocked':'hit';bolt.style.display='none';
-  label.textContent=missed?'Spell fizzled':blocked?'Shield blocked it':entry.shot.spell==='lightning'?'Lightning hit':'Fireball hit';outcomeUntil=clock()+(missed?350:600);ensureFrame();return true;
+  label.textContent=missed?'Spell fizzled':blocked?'Shield blocked it':look.hit||look.label[0].toUpperCase()+look.label.slice(1)+' hit';outcomeUntil=clock()+(missed?350:600);ensureFrame();return true;
  }
  function sync(shots=[]){
   const ids=new Set(shots.map(s=>s.shotId));for(const id of active.keys())if(!ids.has(id))remove(id,true);
