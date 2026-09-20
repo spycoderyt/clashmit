@@ -40,6 +40,11 @@ function bleed(player,key,now,dealt){
  if(now>=effect.until||player.health<=0)player[key]=null;
 }
 const lingering=(rule,now,by)=>({by,perSecond:rule.perSecond,startedAt:now,until:now+rule.duration,applied:0});
+// Who to name for a knock-out that no impact announced: the caster of the lingering damage that was on the
+// player when last seen alive. With both on them, the skeletons out-damage the poison and most likely landed it.
+export function lingeringKiller(before){
+ const worst=[before?.swarm,before?.poison].filter(Boolean).sort((a,b)=>b.perSecond-a.perSecond)[0];return worst?.by||null;
+}
 export function settle(player,now=Date.now(),dealt){replenishMana(player,now);bleed(player,'poison',now,dealt);bleed(player,'swarm',now,dealt);return player;}
 // Returns the lingering damage just dealt as [{actorId,targetId,amount,lethal}]. A server that scores should settle
 // with the same `now` it then passes to a cast or an impact, so nothing is dealt unseen inside those calls.

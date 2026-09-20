@@ -2,7 +2,7 @@ import {setupLeaderboard} from './leaderboard.js?v=scores1';
 import {setupLobbyVideo} from './lobby-video.js?v=2';
 import {createGameConnection} from './connection.js?v=hosting1';
 import {createTargetOverlay} from './target-overlay.js?v=persona3';
-import {piercerOf,SPELLS,MANA,manaAt,castSpell,launchProjectile,impactProjectile,FLIGHT_MS,PERSONAS,DEFAULT_PERSONA,personaOf,settleRoom} from './rules.js?v=persona1';
+import {piercerOf,SPELLS,MANA,manaAt,castSpell,launchProjectile,impactProjectile,FLIGHT_MS,PERSONAS,DEFAULT_PERSONA,personaOf,settleRoom,lingeringKiller} from './rules.js?v=persona1';
 import {PERSONA_INFO,SPELL_INFO,deckWords,labelOf} from './personas.js?v=persona1';
 import {createSkeletonArmy,feetOf} from './skeleton-army.js?v=persona1';
 import {createServerClock} from './server-clock.js?v=combat1';
@@ -122,9 +122,12 @@ const connection=createGameConnection({
  onError:message=>{setError(message);$('connection').textContent='Disconnected · rejoin the arena';},
  onMessage:m=>{
   if(m.type==='welcome'){if(myId&&myId!==m.id){clearFlights();completedShots.clear();faceTracker.reset();room=null;rosterSignature='';notify('The arena restarted. Rejoining with your face scan.');}serverClock.reset();joined=true;myId=m.id;sessionStorage.setItem('fieldspell-token',m.token);safeWrite('clashmit-player-token',m.token);safeWrite('clashmit-player-id',m.id);showArena();$('join').disabled=false;}
+  // The knock-out banner names whoever landed the last hit. A death that no hit announced since the last state was
+  // dealt by poison or skeletons, so name their caster instead of whoever happened to hit that player last.
+  if(m.type==='state'){if(room)for(const p of m.room.players){const was=room.players.find(o=>o.id===p.id);if(was?.health>0&&!(p.health>0)&&!hitSinceState.has(p.id)){const by=lingeringKiller(was);if(by)roundOverlay.impact({targetId:p.id,actorId:by});}}hitSinceState.clear();}
   if(m.type==='state'){if(room&&room.endsAt!==m.room.endsAt)clearFlights();room=m.room;serverClock.bootstrap(room.serverTime);incoming.sync((room.shots||[]).filter(s=>s.targetId===myId));for(const shot of room.shots||[])if(shot.actorId===myId&&room.phase==='playing'&&now()<(shot.expiresAt??Infinity))effect(shot.spell||'fireball',{shot});renderState();}
   if(m.type==='state')minimap.update(m.room,myId);
-  if(m.type==='impact')roundOverlay.impact(m);
+  if(m.type==='impact'){roundOverlay.impact(m);if(!m.missed&&!m.blocked&&m.targetId)hitSinceState.add(m.targetId);}
   if(m.type==='state'){roundOverlay.update(m.room,myId);if(m.room.phase==='countdown')$('phase').textContent='Round starting…';}
   // Each player's scan: whole-face samples plus upper-face ones for when a phone hides their nose and mouth.
   if(m.type==='faces')for(const [id,scan] of Object.entries(m.faces||{})){const decode=list=>(list||[]).map(decodeDescriptor).filter(Boolean),samples=decode(scan?.samples);if(samples.length)faces.set(id,{samples,upper:decode(scan.upper)});else faces.delete(id);}
@@ -189,7 +192,7 @@ function renderAim(){
  for(const spell of myDeck())if(isThrown(spell))$(spell)?.classList.toggle('target-ready',!!locked);
  renderArmy();
 }
-let castPending=false,castRequest=0,wasStunned=false,lastBeat=0,lastHealth=100,deathFelt=false,deckSignature='';const healed=new Map();
+const hitSinceState=new Set();let castPending=false,castRequest=0,wasStunned=false,lastBeat=0,lastHealth=100,deathFelt=false,deckSignature='';const healed=new Map();
 function cast(spell){void audio.unlock();if(!room||!myDeck().includes(spell))return;if(room.phase!=='playing'){notify('The host needs to start the round first.');return;}renderAim();if((me().stunUntil||0)>now()){notify('You’re stunned.');return;}
  // Skeletons are on you, not across the field: a splash spell may be spent on them with nobody locked.
  const clearing=!!SPELLS[spell].splash&&active(me().swarm,now());

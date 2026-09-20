@@ -45,3 +45,9 @@ test('lingering damage respects the per-opponent cap and ignores strangers to th
  for(const bad of [{actorId:'ghost',targetId:'b',amount:5},{actorId:'a',targetId:'a',amount:5},{actorId:'a',targetId:'b',amount:0},{actorId:null,targetId:'b',amount:5}])recordLingering(room,bad);
  assert.equal(a.roundPoints,POINTS.damageCap*POINTS.damage);assert.equal(b.roundPoints,0);
 });
+test('a knock-out by lingering damage names whoever cast it, the stronger effect first',async()=>{
+ const {lingeringKiller}=await import('../dist/rules.js');
+ assert.equal(lingeringKiller({poison:{by:'a',perSecond:3}}),'a');assert.equal(lingeringKiller({swarm:{by:'w',perSecond:5}}),'w');
+ assert.equal(lingeringKiller({poison:{by:'a',perSecond:3},swarm:{by:'w',perSecond:5}}),'w','skeletons out-damage poison, so they most likely landed the kill');
+ assert.equal(lingeringKiller({poison:null,swarm:null}),null);assert.equal(lingeringKiller(undefined),null);assert.equal(lingeringKiller({poison:{perSecond:3}}),null,'an effect with no caster names nobody');
+});
