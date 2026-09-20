@@ -56,9 +56,9 @@ test('a landed skeleton army deals 30 over six seconds without further tracking'
  assert.equal(b.health,100,'the march itself deals no damage');assert.ok(b.swarm);
  settle(b,hit.resolvedAt+3000);assert.equal(b.health,85);settle(b,hit.resolvedAt+9000);assert.equal(b.health,70);assert.equal(b.swarm,null);
 });
-test('an untracked skeleton army fizzles',()=>{
+test('a launched skeleton army keeps its target after tracking is lost',()=>{
  const room=arena('witch','mage'),shot=launchProjectile(room,'a','skeletonArmy','b','s',1000),hit=impactProjectile(room,'a','s',false,shot.impactAt);
- assert.equal(hit.missed,true);assert.equal(room.players[1].swarm??null,null);
+ assert.equal(hit.missed,false);assert.ok(room.players[1].swarm);settle(room.players[1],shot.impactAt+6000);assert.equal(room.players[1].health,70);
 });
 test('a splash cast clears the caster’s swarm; a single-target cast does not',()=>{
  const room=arena('witch','mage'),[,b]=room.players,hit=land(room,'a','skeletonArmy','b',1000),t=hit.resolvedAt;

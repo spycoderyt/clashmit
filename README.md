@@ -177,7 +177,7 @@ Node 22+: `npm ci`, `npm start`. Open http://localhost:3000 locally. Every phone
 2. Follow the face scan. A small face avatar and face signatures are shared with players in the arena, in memory only.
 3. Enter the live arena immediately after scanning. There is no host start, round time limit, or last-player-standing ending.
 4. Point the rear camera at another player. When their name and health appear, aim the reticle at them until it locks, then say your unlocked spell (Lightning, Poison or Arrows). Voice starts automatically on joining after permissions are allowed. All spells, including Shield and Heal, are voice-only; the spell cards display mana costs and cooldowns and cannot be tapped to cast. Both “heal” and the speech transcription “heel” activate Heal.
-5. Keep your target in view during the 1.4-second flight. The 3D fireball steers toward them. If their face is hidden the lock follows their body; if they are lost for more than 700 ms the hit is cancelled. Shield and Heal need no target.
+5. Lock a player and cast. Launched spells keep that target if the camera loses their face. The server resolves the hit at the end of the flight. Shield and Heal need no target.
 
 ### Personas
 
@@ -211,7 +211,7 @@ Taking damage also flashes a red vignette and briefly shakes the camera feed on 
 
 **HUD preview.** Open `/?test=hud` for a sensor-free in-game preview with simulated players, automatic health changes, and example map positions. It does not join the server or request camera, microphone, or location access.
 
-**Passive healing.** During live rounds, living connected players regenerate 5 HP (half a heart) every 4 seconds, up to 70 HP. It costs no mana, does not revive knocked-out players, and stops outside the round. Damage over time is resolved before each healing tick.
+**Passive healing.** During live rounds, living connected players regenerate 5 HP (half a heart) every 8 seconds, up to 70 HP. It costs no mana, does not revive knocked-out players, and stops outside the round. Damage over time is resolved before each healing tick.
 
 **Health HUD.** Seven pixel hearts (10 HP each) show your health with partial fills. Coin balance sits above them; skill cards sit above mana. The top-left panel shows the three richest active players with medals/portraits, and the bottom-right panel lists consumable stocks. The target health meter turns from green through yellow to red.
 
@@ -235,7 +235,7 @@ Voice uses the browser's speech recognition service, which may process audio rem
 
 **This is a hackathon prototype, not reliable identity recognition.** Lighting changes, distance, head angle and look-alikes can defeat matching, and a face signature does not authenticate a person. Start close together and test on the actual phones. Visual projectile depth is artistic; there is no real-world distance, surface occlusion, or shared AR map.
 
-The server enforces player slots, round state, cooldowns, impact timing, shields, and health, but trusts the firing client to report whether tracking remained valid. It is not anti-cheat-secure. A disconnect or missing impact report cancels ordinary projectile damage; an already-launched orbital strike still resolves. Foreground camera tracking is required. In-memory state is lost on server restart.
+The server enforces player slots, round state, cooldowns, impact timing, shields, and health. Camera identification at cast time remains a client claim. After launch, the server resolves the locked target without another tracking report. A target who dies, changes life, or disconnects cannot take that old hit. Foreground camera tracking is required to find new targets. In-memory state is lost on server restart.
 
 ## Hosting
 
@@ -245,7 +245,7 @@ Optional `ALLOWED_ORIGINS` is a comma-separated browser origin allowlist; same o
 
 ## Verification
 
-`npm test` covers knock-out detection, face-photo validation and relay for map markers, the shared round countdown, knock-out times and leaderboard order, face matching, frame voting, upper-face matching behind a raised phone, alignment, enrolment, signature encoding, lock-on through hidden faces and people crossing in front, face registration on the server, haptic pattern priorities, minimap distance/bearing/radar math, opt-in location sharing with clearing on stop and disconnect, screen crop coordinates, spell rules, tracking-loss misses, delayed impacts, shields at impact, replay/early-impact rejection, two-client WebSocket state, 31-player lobby admission, a 30-client infrastructure check, reconnection deadlines and silent sockets, slow-client backpressure, graceful server restarts, host control, streaming voice behavior, and the dormant color-marker helpers.
+`npm test` covers knock-out detection, face-photo validation and relay for map markers, the shared round countdown, knock-out times and leaderboard order, face matching, frame voting, upper-face matching behind a raised phone, alignment, enrolment, signature encoding, lock-on through hidden faces and people crossing in front, face registration on the server, haptic pattern priorities, minimap distance/bearing/radar math, opt-in location sharing with clearing on stop and disconnect, screen crop coordinates, spell rules, target retention after tracking loss, delayed impacts, shields at impact, replay/early-impact rejection, two-client WebSocket state, 31-player lobby admission, a 30-client infrastructure check, reconnection deadlines and silent sockets, slow-client backpressure, graceful server restarts, host control, streaming voice behavior, and the dormant color-marker helpers.
 
 Third-party assets: Three.js (MIT), ONNX Runtime Web 1.30.0 (MIT), InsightFace buffalo_sc face models (non-commercial research only, `dist/models/face/NOTICE.txt`), MapLibre GL JS 6.10.0 (BSD-3-Clause, `dist/vendor/maplibre/LICENSE.txt`), map tiles by OpenFreeMap © OpenMapTiles with data © OpenStreetMap contributors (ODbL), MediaPipe Tasks Vision (Apache-2.0), Google's EfficientDet Lite0 and BlazeFace short-range models. See `dist/vendor/THREE-LICENSE.txt` and `dist/vendor/mediapipe/NOTICE.txt`.
 
@@ -260,13 +260,13 @@ Production players have **7 hearts / 70 HP**. Each class starts with only its qu
 | --- | --- | --- | --- |
 | Mage | Lightning: 10 / 2 / 1s | Fireball: 25 / 4 / 2.4s | Meteor: 60 / 10 / 15s |
 | Witch | Poison: 5 + 6 over 3s / 1 / 1s | Skeletons: 25 over 5s / 4 / 5s | Reaper: 60 / 10 / 15s |
-| Archer | Arrows: 8 / 1 / 0.65s | Bomb Arrow: 25 / 4 / 2.4s | Ballista: 60 / 10 / 15s |
+| Archer | Arrows: 8 / 1 / 0.65s | Bomb Arrow: 25 / 4 / 2.4s | John: 60 / 10 / 15s |
 
-Paid names: Chain Lightning (14), Wildfire (32), Extinction (67); Plague (8 + 6 lingering), Super Skeleton (35 lingering), Soul Reaper (67); Arrow Storm (12), Explosive Arrow (32), Railgun (67). Numbers are HP. Ultimates require and spend all 10 mana. Voice accepts base and upgraded names, common aliases including “heel” and “flash bank”, and bounded spelling variation; locked attacks and empty consumables remain server-rejected.
+Paid names: Chain Lightning (14), Wildfire (32), Extinction (67); Plague (8 + 6 lingering), Super Skeleton (35 lingering), Soul Reaper (67); Arrow Storm (12), Explosive Arrow (32), Railgun (67). Numbers are HP. Ultimates require and spend all 10 mana. Voice accepts base and upgraded names, common aliases including “heel”, “flash bank”, and “Jon” for John, and bounded spelling variation; locked attacks and empty consumables remain server-rejected.
 
 The FFA death screen is a shop with a 10-second minimum wait. Buy or upgrade skills, choose a character, and buy Shield (30 coins, 7s), Heal (30 coins, restores 50 HP, capped at 70), or Flashbang (50 coins, 3s blind/stun for other unshielded players within 10m of the caster; fresh GPS required). Press **Respawn** when ready after the countdown. Shield blocks all normal attacks/ultimates and Flashbang except Lightning, and clears poison/skeletons. Orbital Airstrike ignores shields. Inventory appears bottom-right, skills above mana, and coin balance above your hearts.
 
-Every 5 consecutive kills earns one **Orbital Airstrike** charge. Tap the red button, tap a point on the full-screen map to see the **25m radius**, then hold for 0.8s to launch. Players inside see “Incoming orbital airstrike — get out of the 25m radius!” with **5 seconds to escape**. Movement and casting stay enabled. At impact the server checks the latest fresh locations, kills players still inside (including those who entered during the countdown), spares the caster, and awards each bounty once. Disconnecting preserves a warned player's last location for that strike; it does not cancel it. GPS uncertainty applies, particularly indoors: the on-screen radius is approximate and escaping depends on timely location updates.
+Every 3 consecutive kills earns one **Orbital Airstrike** charge. Tap the red button, tap a point on the full-screen map to see the **25m radius**, then hold for 0.8s to launch. Players inside see “Incoming orbital airstrike — get out of the 25m radius!” with **5 seconds to escape**. Movement and casting stay enabled. At impact the server checks the latest fresh locations, kills players still inside (including those who entered during the countdown), spares the caster, and awards each bounty once. Disconnecting preserves a warned player's last location for that strike; it does not cancel it. GPS uncertainty applies, particularly indoors: the on-screen radius is approximate and escaping depends on timely location updates.
 
 The actual 3D rocket uses the CC0 modular meshes from [Kenney Space Kit](https://kenney.nl/assets/space-kit), bundled locally under `dist/models/rocket` with its license. Three.js animates a quadratic arc with perspective, tangent-aligned rotation and the caster's portrait near the tip. The warning leaves the camera visible and does not intercept movement controls.
 
@@ -304,7 +304,7 @@ Set **`ADMIN_PASSWORD`** to a strong private password in Railway service variabl
 
 **King of the Hill** lasts three minutes and needs at least two scanned, connected players. A random living player starts with the crown; killing them transfers it to the living killer. On disconnect it transfers to another living player. The crown holder accumulates time; the most time wins, with kills/deaths breaking ties. The crown appears above the tracked face and beside the top-left coin standings. Round results rank KOTH by crown time. Global coin rankings remain on the front/live leaderboards.
 
-**Upgrades replace supers:** buy them in the FFA death shop; there is no automatic cast counter. See the balance table above.
+**Upgrades replace supers:** buy them from the FFA skill cards or death shop; there is no automatic cast counter. See the balance table above.
 
 A blockable projectile hitting within **350ms** of raising a shield is **parried**: it reflects once, costs no extra mana, credits the defender, and cannot be parried again. Killing your previous killer grants **revenge**, a public announcement and 2 mana. The admin’s **Mana surge** event doubles mana regeneration for 20 seconds. Public kill/streak/round/crown/revenge announcements are sent to all players and the spectator screen. Other possible event additions: low-gravity projectiles, double-coin minute, or a rotating bounty; these are ideas, not active rules.
 
@@ -328,7 +328,7 @@ Upgraded first attacks (Chain Lightning, Plague, Arrow Storm) hit the locked tar
 
 Every character has a sword. Show a hand to the rear camera and swing it through a recognised opponent's face box. A hit deals 5 HP (half a heart), costs no mana, and has a 1-second cooldown. Shields block it. The server applies normal kills, assists, coins, and streaks. Hand tracking runs separately from face tracking with one small frame in flight. This is a screen-space overlap test; it does not measure physical reach. Use air gestures without contact.
 
-Exit opens the respawn menu and keeps your name and face scan. Locked attack cards can be tapped to buy skills during FFA. Upgrades and supplies remain in the respawn shop.
+Exit opens the respawn menu and keeps your name and face scan. Locked attack cards can be tapped to buy skills during FFA. Owned attack cards can also be tapped to buy upgrades. Consumables remain in the respawn shop.
 
 ### Attack and melee previews
 

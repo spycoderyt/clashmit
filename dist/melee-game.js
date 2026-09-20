@@ -21,16 +21,16 @@ export function createMeleeGame({video,container,getTargets=()=>[],onHit=()=>{},
  const tracker=createMeleeTracker({damage:5,cooldown:1000}),canvas=document.createElement('canvas'),capture=document.createElement('canvas');
  canvas.className='melee-game-overlay';canvas.setAttribute('aria-hidden','true');Object.assign(canvas.style,{position:'absolute',inset:'0',width:'100%',height:'100%',pointerEvents:'none',zIndex:'5'});container.append(canvas);
  const context=canvas.getContext('2d'),captureContext=capture.getContext('2d',{alpha:false});
- let running=false,worker=null,ready=false,run=0,generation=0,attempts=0,pending=null,capturing=false,seq=0,captureTimer=0,initTimer=0,workerTimer=0,retryAt=0,raf=0,lastVideoTime=-1,lastHand=null,display=null,lastResultAt=-Infinity,cooldownUntil=0,wasEnabled=false;
+ let running=false,worker=null,ready=false,run=0,generation=0,attempts=0,pending=null,capturing=false,seq=0,captureTimer=0,initTimer=0,workerTimer=0,retryAt=0,raf=0,paintTimer=0,drawGeometry=null,lastVideoTime=-1,lastHand=null,display=null,lastResultAt=-Infinity,cooldownUntil=0,wasEnabled=false;
  const enabled=()=>{try{return running&&!document.hidden&&!!isEnabled();}catch{return false;}};
  function erase(){context?.clearRect(0,0,canvas.width,canvas.height);}
- function clear(){generation++;tracker.reset();lastHand=null;display=null;lastResultAt=-Infinity;cooldownUntil=0;cancelAnimationFrame(raf);raf=0;erase();}
+ function clear(){generation++;tracker.reset();lastHand=null;display=null;lastResultAt=-Infinity;cooldownUntil=0;drawGeometry=null;cancelAnimationFrame(raf);clearTimeout(paintTimer);paintTimer=0;raf=0;erase();}
  function terminate(){clearTimeout(initTimer);clearTimeout(workerTimer);worker?.terminate();worker=null;ready=false;pending=null;capturing=false;}
  function stop(){running=false;run++;clearTimeout(captureTimer);terminate();clear();wasEnabled=false;lastVideoTime=-1;}
  function fail(){terminate();clear();retryAt=performance.now()+2000;}
  function draw(at){
-  raf=0;if(!enabled()||!lastHand||at-lastResultAt>MAX_AGE_MS){display=null;erase();return;}
-  const box=container.getBoundingClientRect(),dpr=Math.min(1.5,devicePixelRatio||1),width=box.width,height=box.height;if(!width||!height)return;
+  raf=0;clearTimeout(paintTimer);paintTimer=0;if(!enabled()||!lastHand||at-lastResultAt>MAX_AGE_MS){display=null;erase();return;}
+  const box=drawGeometry;if(!box)return;const dpr=Math.min(1.5,devicePixelRatio||1),width=box.width,height=box.height;if(!width||!height)return;
   if(canvas.width!==Math.round(width*dpr)||canvas.height!==Math.round(height*dpr)){canvas.width=Math.round(width*dpr);canvas.height=Math.round(height*dpr);}
   context.setTransform(dpr,0,0,dpr,0,0);context.clearRect(0,0,width,height);
   if(!display)display={...lastHand};else{display.x+=(lastHand.x-display.x)*.4;display.y+=(lastHand.y-display.y)*.4;const turn=Math.atan2(Math.sin(lastHand.angle-display.angle),Math.cos(lastHand.angle-display.angle));display.angle+=turn*.3;}
@@ -40,7 +40,14 @@ export function createMeleeGame({video,container,getTargets=()=>[],onHit=()=>{},
   context.beginPath();context.moveTo(-6,-13);context.lineTo(-7,-length+12);context.lineTo(0,-length);context.lineTo(7,-length+12);context.lineTo(6,-13);context.closePath();context.fill();context.stroke();
   context.strokeStyle=cooling?'#b5c0cd':'#fff';context.lineWidth=1;context.beginPath();context.moveTo(0,-length+10);context.lineTo(0,-15);context.stroke();
   context.fillStyle=cooling?'#8291a1':'#f3cc73';context.fillRect(-17,-15,34,6);context.fillStyle=cooling?'#5d6979':'#96734a';context.fillRect(-4,-9,8,20);context.restore();
-  raf=requestAnimationFrame(draw);
+  const moving=Math.hypot(lastHand.x-display.x,lastHand.y-display.y)>.0004||Math.abs(Math.atan2(Math.sin(lastHand.angle-display.angle),Math.cos(lastHand.angle-display.angle)))>.003;
+  if(moving)raf=requestAnimationFrame(draw);
+  else{
+   // A settled sword needs no 60 Hz canvas repaint. Wake for the next sample,
+   // a cooldown color change, or the strict stale-frame deadline.
+   const delay=Math.max(1,Math.min(MAX_AGE_MS-(at-lastResultAt)+1,cooling?cooldownUntil-at:Infinity));
+   paintTimer=setTimeout(()=>{paintTimer=0;if(!raf)raf=requestAnimationFrame(draw);},delay);
+  }
  }
  function select(hands,geometry){
   let candidates=hands.map(palm).filter(Boolean).map(hand=>coverHand(hand,geometry.source,geometry.viewport,geometry.container)).filter(Boolean);
@@ -67,8 +74,8 @@ export function createMeleeGame({video,container,getTargets=()=>[],onHit=()=>{},
    if(data.error){fail();return;}
    if(data.dropped||now-sent.at>MAX_AGE_MS||data.timestamp!==sent.at||video.videoWidth!==sent.geometry.source.width||video.videoHeight!==sent.geometry.source.height){tracker.update({hand:null,faces:[],at:sent.at});lastHand=null;display=null;erase();return;}
    const hand=select(Array.isArray(data.hands)?data.hands:[],sent.geometry);let targets=[];try{targets=getTargets()||[];}catch{}
-   const result=tracker.update({hand,faces:targets,at:sent.at});lastHand=hand;lastResultAt=sent.at;cooldownUntil=sent.at+result.cooldownRemaining;
-   if(hand&&!raf)raf=requestAnimationFrame(draw);if(!hand){display=null;erase();}
+   const result=tracker.update({hand,faces:targets,at:sent.at});lastHand=hand;drawGeometry=sent.geometry.container;lastResultAt=sent.at;cooldownUntil=sent.at+result.cooldownRemaining;
+   if(hand&&!raf){clearTimeout(paintTimer);paintTimer=0;raf=requestAnimationFrame(draw);}if(!hand){display=null;erase();}
    if(result.hit&&enabled()){try{onHit({targetId:result.hit.id,damage:result.hit.damage,at:sent.at});}catch{}}
   };
   worker.postMessage({type:'init',handsOnly:true});
@@ -80,7 +87,8 @@ export function createMeleeGame({video,container,getTargets=()=>[],onHit=()=>{},
    if(!worker&&attempts<2&&performance.now()>=retryAt)initWorker(token);
    if(ready&&!pending&&!capturing&&video.currentTime!==lastVideoTime){
     capturing=true;const version=generation,at=performance.now(),source={width:video.videoWidth,height:video.videoHeight},geometry={source,viewport:video.getBoundingClientRect(),container:container.getBoundingClientRect()};
-    const scale=Math.min(1,MAX_FRAME/Math.max(source.width,source.height));capture.width=Math.max(1,Math.round(source.width*scale));capture.height=Math.max(1,Math.round(source.height*scale));
+    const scale=Math.min(1,MAX_FRAME/Math.max(source.width,source.height)),width=Math.max(1,Math.round(source.width*scale)),height=Math.max(1,Math.round(source.height*scale));
+    if(capture.width!==width)capture.width=width;if(capture.height!==height)capture.height=height;
     let bitmap;
     try{
      captureContext.drawImage(video,0,0,capture.width,capture.height);lastVideoTime=video.currentTime;bitmap=await createImageBitmap(capture);
@@ -93,14 +101,17 @@ export function createMeleeGame({video,container,getTargets=()=>[],onHit=()=>{},
     finally{if(run===token)capturing=false;}
    }
   }
-  if(running&&run===token)captureTimer=setTimeout(()=>sample(token),SAMPLE_MS);
+  if(running&&run===token&&!document.hidden){clearTimeout(captureTimer);captureTimer=setTimeout(()=>sample(token),SAMPLE_MS);}
  }
  function start(){
   if(running)return true;
   if(typeof Worker!=='function'||typeof createImageBitmap!=='function'||!context||!captureContext)return false;
   running=true;attempts=0;retryAt=0;lastVideoTime=-1;const token=++run;void sample(token);return true;
  }
- document.addEventListener('visibilitychange',()=>{if(document.hidden)clear();});
+ function visibility(){if(document.hidden){clear();clearTimeout(captureTimer);captureTimer=0;}else if(running){clearTimeout(captureTimer);void sample(run);}}
+ document.addEventListener('visibilitychange',visibility);
  window.addEventListener('resize',clear);
- return{start,stop,clear};
+ const resizeObserver=typeof ResizeObserver==='function'?new ResizeObserver(clear):null;resizeObserver?.observe(container);resizeObserver?.observe(video);
+ function dispose(){stop();resizeObserver?.disconnect();document.removeEventListener('visibilitychange',visibility);window.removeEventListener('resize',clear);canvas.remove();}
+ return{start,stop,clear,dispose};
 }

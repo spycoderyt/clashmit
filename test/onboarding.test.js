@@ -1,18 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {STEPS,shouldOpen,shouldClose,frame,union} from '../dist/onboarding.js';
-import {PERSONAS,SPELLS} from '../dist/rules.js';
+import {STEPS,shouldOpen,shouldClose,frame,union,createOnboarding} from '../dist/onboarding.js';
 const fresh={seen:false,practice:false,faceReady:true,phase:'lobby',scanOpen:false,open:false};
-test('two skippable tips teach voice casting with no activation step',()=>{
- assert.deepEqual(STEPS.map(s=>s.anchor),['attack','defence']);
- for(const step of STEPS){
-  assert.ok(step.text.length>10&&step.text.length<70,`${step.key} stays a one-liner`);
-  assert.equal(step.text.split(/(?<=[.!?])\s+/).filter(Boolean).length,1,`${step.key} is a single sentence`);
-  assert.ok(!('title' in step)&&!('fine' in step),`${step.key} carries nothing but its line`);
- }
- for(const step of STEPS){assert.equal(step.gate,undefined);assert.match(step.text,/say/i);assert.doesNotMatch(step.text,/enable|tap|click/i);}
- assert.match(STEPS[1].text,/Shield/);assert.match(STEPS[1].text,/Heal/);
+test('four short steps explain targeting, voice, sword and the shop',()=>{
+ assert.deepEqual(STEPS.map(s=>s.anchor),['target','attack','melee','shop']);
+ for(const step of STEPS){assert.ok(step.text.length<120);assert.ok(step.title.length<30);assert.equal(step.gate,undefined);}
+ assert.match(STEPS[0].text,/name/);assert.match(STEPS[1].title,/\{spell\}/);
+ assert.match(STEPS[2].text,/Do not touch/);assert.match(STEPS[3].text,/Exit opens the shop/);
+ assert.doesNotMatch(STEPS.map(s=>s.text).join(' '),/enable voice|start recording/i);
 });
 test('the lit control stays tappable: only the dark panels and the card take taps',()=>{
  const css=readFileSync(new URL('../dist/onboarding.js',import.meta.url),'utf8');
@@ -63,27 +59,35 @@ test('the card drops below a control with no room above it, and nothing visible 
   assert.equal(plan.top,347,'centred when there is nothing to point at');
  }
 });
-test('the attack and defence steps light the right cards for every persona',()=>{
- const app=readFileSync(new URL('../dist/app.js',import.meta.url),'utf8'),html=readFileSync(new URL('../dist/index.html',import.meta.url),'utf8');
- const anchors=app.match(/anchors:\{(.*?)\},gates:/)[1];
- assert.ok(!anchors.includes('voice'),'there is no voice activation step');
- // The spell bar is emptied and rebuilt per persona, so these two steps must take slots, never spell names.
- assert.ok(html.includes('id="spells" class="spells"></div>'),'the spell bar is built at runtime');
- assert.match(anchors,/attack:\(\)=>spellCards\(\)\.slice\(0,2\)/);
- assert.ok(anchors.includes("$('inventory').querySelectorAll('[data-consumable=shield],[data-consumable=heal]')"),'defence tips point to consumable inventory rows');
- // Slot order is what makes "first pair attacks, last pair defends" true whoever the player picked.
- for(const [name,deck] of Object.entries(PERSONAS)){
-  assert.equal(deck.length,4,`${name} has four cards`);
-  assert.deepEqual(deck.slice(-2),['shield','heal'],`${name} defends with the last two cards`);
-  assert.ok(!SPELLS[deck[0]].bypassShield,`${name}'s first card is the blockable attack`);
-  assert.ok(SPELLS[deck[1]].bypassShield,`${name}'s second card is the piercing attack`);
- }
- // The things this HUD pass removed must stay gone.
- for(const gone of ['tracking-retry','YOUR HEALTH','how-to-play'])assert.ok(!html.includes(gone),`${gone} is gone from the HUD`);
-});
-
 test('continuous games allow first-time tips after scanning, but never repeat seen tips',()=>{
  assert.equal(shouldOpen({...fresh,phase:'playing',continuous:true}),true);
  assert.equal(shouldOpen({...fresh,phase:'playing',continuous:true,seen:true}),false);
  assert.equal(shouldClose('playing',true),false);
+});
+
+function fakeGuide(t,options={}){
+ const before={document:globalThis.document,addEventListener:globalThis.addEventListener,requestAnimationFrame:globalThis.requestAnimationFrame};
+ const node=tag=>({tag,children:[],style:{},attrs:{},hidden:false,textContent:'',setAttribute(k,v){this.attrs[k]=v;},append(...items){this.children.push(...items);},replaceChildren(...items){this.children=items;},getBoundingClientRect(){return{x:0,y:0,left:0,top:0,width:390,height:this.tag==='main'?844:180};}});
+ globalThis.document={head:node('head'),createElement:node};globalThis.addEventListener=()=>{};globalThis.requestAnimationFrame=fn=>{fn();return 1;};
+ t.after(()=>Object.assign(globalThis,before));t.mock.timers.enable({apis:['setInterval']});
+ const container=node('main');let finishes=0;const guide=createOnboarding({container,...options,onFinish(){finishes++;}});
+ const root=container.children[0],card=root.children.at(-1),row=card.children.at(-1),[skip,next]=row.children;
+ return{guide,root,card,skip,next,get finishes(){return finishes;}};
+}
+test('Skip ends first-visit tips once and the stored seen flag suppresses future visits',t=>{
+ const state=fakeGuide(t);state.guide.open();assert.equal(state.guide.isOpen,true);state.skip.onclick();state.skip.onclick();
+ assert.equal(state.finishes,1);assert.equal(state.root.hidden,true);assert.equal(shouldOpen({...fresh,seen:true}),false);
+ t.mock.timers.tick(1000);assert.equal(state.finishes,1);
+});
+test('Next visits four steps, uses the current starter spell, and completes once',t=>{
+ const state=fakeGuide(t,{getStarterSpell:()=> 'Poison'});state.guide.open();
+ assert.equal(state.card.children[0].textContent,'1 of 4');state.next.onclick();
+ assert.equal(state.card.children[1].textContent,'Say “Poison”');state.next.onclick();state.next.onclick();
+ assert.equal(state.next.textContent,'Play');state.next.onclick();state.guide.hide();
+ assert.equal(state.finishes,1);assert.equal(state.guide.isOpen,false);
+});
+test('missing, hidden and replaced anchors never block a step',t=>{
+ const state=fakeGuide(t,{anchors:{target:()=>null,attack:()=>[{getBoundingClientRect(){return{x:0,y:0,width:0,height:0};}}],melee:()=>{throw Error('replaced');}}});
+ state.guide.open();for(let i=0;i<4;i++){assert.equal(state.next.disabled,false);assert.ok(Number.parseFloat(state.card.style.top)>=12);state.next.onclick();}
+ assert.equal(state.finishes,1);
 });

@@ -29,7 +29,7 @@ test('caster, victim and observer receive kill and bounty notices, with the real
   if(streak>=3){const notices=await Promise.all(clients.map(client=>client.next('arena-event',m=>m.kind==='streak'&&m.actorId===a.id&&m.text.includes(`${streak}x killstreak`))));assert.equal(new Set(notices.map(event=>event.id)).size,1);assert.ok(notices.every(event=>event.text===`Streak Ace is on a ${streak}x killstreak. Bounty: ${streak>=5?3:2}x coins (${streak>=5?150:100})!`));}
   await b.next('state',m=>m.room.players.find(p=>p.id===b.id)?.respawnAt>0);await wait(25);b.send({type:'respawn'});await b.next('state',m=>m.room.players.find(p=>p.id===b.id)?.life===streak+1&&m.room.players.find(p=>p.id===b.id)?.health===70);
  }
- assert.equal(ace.airstrikeCharges,1);
+ assert.equal(ace.airstrikeCharges,2);
  const {events,shot}=await kill(b,a);assert.ok(events.every(event=>event.coins===150&&event.balance===150));
  const dead=await a.next('state',m=>m.room.players.find(p=>p.id===a.id)?.health===0&&m.room.players.find(p=>p.id===a.id)?.score.deaths===1);const score=dead.room.players.find(p=>p.id===a.id).score;
  assert.equal(score.currentStreak,0);assert.equal(score.bestStreak,6);assert.equal(score.deaths,1);

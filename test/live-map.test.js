@@ -25,3 +25,9 @@ test('history is bounded and isolated by room; missing GPS makes no invented pat
  for(let i=0;i<100;i++)map.record(room,{type:'spell',actorId:'a',spell:'shield'},1000);
  assert.equal(map.snapshot(room,1000).casts.length,80);assert.equal(map.snapshot(other,1000).casts.length,0);
 });
+
+test('live map includes only current valid portraits without recognition descriptors',()=>{
+ const map=createLiveMap(),portrait='data:image/jpeg;base64,/9j/AA==',room={players:[player('a'),player('b')],avatars:{a:portrait,b:'https://untrusted.invalid/face.jpg'},faces:{a:{samples:['private']}}};
+ const data=map.snapshot(room,1000);assert.equal(data.players[0].avatar,portrait);assert.equal(data.players[1].avatar,null);assert.equal(data.players[0].samples,undefined);assert.equal(data.players[0].faces,undefined);
+ delete room.avatars.a;assert.equal(map.snapshot(room,1000).players[0].avatar,null);
+});

@@ -7,14 +7,15 @@ async function until(predicate){const deadline=Date.now()+700;while(!predicate()
 
 test('camera tracker avoids duplicate frames and discards body results from an earlier tracking session',async()=>{
  const names=['document','window','Worker','createImageBitmap'],originals=new Map(names.map(name=>[name,Object.getOwnPropertyDescriptor(globalThis,name)]));
- const workers=[],descriptor=Array(512).fill(0);descriptor[0]=1;
+ let holdFaceReplies=false;const workers=[],descriptor=Array(512).fill(0);descriptor[0]=1;
  const face={box:{x:200,y:100,width:80,height:100},score:.99,pixels:80,descriptor};
  class FakeWorker{
   constructor(url){this.face=String(url).includes('face-worker');this.frames=0;workers.push(this);}
   postMessage(data){if(data.type==='init')queueMicrotask(()=>this.onmessage?.({data:{type:'ready'}}));else if(data.type==='frame'){
    this.frames++;
-   if(this.face)queueMicrotask(()=>this.onmessage?.({data:{type:'faces',seq:data.seq,faces:[face],ms:10}}));
+   if(this.face){this.pending=data;if(!holdFaceReplies)queueMicrotask(()=>this.respondFace());}
   }}
+  respondFace(){const data=this.pending;this.pending=null;if(data)this.onmessage?.({data:{type:'faces',seq:data.seq,faces:[face],ms:10}});}
   bodies(){this.onmessage?.({data:{type:'detections',detections:[{score:.99,box:{originX:160,originY:80,width:180,height:360}}]}});}
   terminate(){}
  }
@@ -34,7 +35,14 @@ test('camera tracker avoids duplicate frames and discards body results from an e
   bodyWorker.bodies();assert.equal(tracker.targets()[0].bodyBox,null,'late old body result cannot attach to newly recognized player');
   await wait(650);await advance();await wait(650);await advance();await until(()=>bodyWorker.frames===2);bodyWorker.bodies();
   assert.ok(tracker.targets()[0].bodyBox,'new session still accepts its own fresh body result');
-  document.hidden=true;const before=faceWorker.frames;video.currentTime+=.1;await wait(80);assert.equal(faceWorker.frames,before,'hidden pages suspend inference');
+  holdFaceReplies=true;let before=faceWorker.frames;video.currentTime+=.1;await until(()=>faceWorker.frames>before);
+  before=faceWorker.frames;tracker.stop();await tracker.start();await wait(80);
+  assert.equal(faceWorker.frames,before,'restart waits for old inference instead of overlapping expensive face work');
+  faceWorker.respondFace();await until(()=>faceWorker.frames>before);faceWorker.respondFace();await wait(10);
+  before=faceWorker.frames;video.currentTime+=.1;await until(()=>faceWorker.frames>before);
+  const lastSeen=tracker.lastFrameAt();document.hidden=true;faceWorker.respondFace();await wait(20);
+  assert.equal(tracker.lastFrameAt(),lastSeen,'a result finishing in the background cannot refresh face lock');
+  before=faceWorker.frames;video.currentTime+=.1;await wait(80);assert.equal(faceWorker.frames,before,'hidden pages suspend inference');
  }finally{
   tracker.dispose();
   for(const [name,descriptor] of originals){if(descriptor)Object.defineProperty(globalThis,name,descriptor);else delete globalThis[name];}

@@ -15,7 +15,7 @@ export const ATTACKS={
  soulReaper:{name:'Reaper',upgrade:'Soul Reaper',icon:'♜',damage:60,upDamage:67,manaCost:10,cooldown:15000,flightMs:1800,splash:true,ultimate:true,words:['reaper','reeper','ripper','soul reaper','sole reaper','soul reeper','soul ripper','grim reaper']},
  arrows:{name:'Arrows',upgrade:'Arrow Storm',upgradeMultiHit:{radius:5,maxExtraTargets:2,damageScale:.5},icon:'➶',damage:8,upDamage:12,manaCost:1,cooldown:650,flightMs:450,splash:true,words:['arrows','arrow','arrow storm']},
  bombArrow:{name:'Bomb Arrow',upgrade:'Explosive Arrow',icon:'➹',damage:25,upDamage:32,manaCost:4,cooldown:2400,flightMs:1200,splash:true,words:['bomb arrow','bomb arrows','bombarrow','explosive arrow','explosive arrows']},
- ballista:{name:'Ballista',upgrade:'Railgun',icon:'⌁',damage:60,upDamage:67,manaCost:10,cooldown:15000,flightMs:1700,splash:true,ultimate:true,words:['ballista','ballistic','ballister','railgun','rail gun']}
+ ballista:{name:'John',upgrade:'Railgun',icon:'⌁',damage:60,upDamage:67,manaCost:10,cooldown:15000,flightMs:1700,splash:true,ultimate:true,words:['john','jon','ballista','ballistic','ballister','railgun','rail gun']}
 };
 export function freshLoadout(){return{skills:Object.fromEntries(Object.values(CLASS_ATTACKS).map(deck=>[deck[0],1])),consumables:{shield:0,heal:0,flashbang:0}};}
 export const attacksFor=persona=>CLASS_ATTACKS[persona]||CLASS_ATTACKS.mage;

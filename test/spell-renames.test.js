@@ -40,3 +40,12 @@ test('interim revisions of Super Skeleton and Soul Reaper do not cause duplicate
   assert.deepEqual(casts,['skeletonArmy','soulReaper']);
  }finally{voice.stop();}
 });
+
+test('John and Jon use the saved ballista skill only when it is owned',()=>{
+ const player={persona:'archer',loadout:freshLoadout()};
+ for(const word of ['John','Jon','ballista'])assert.deepEqual(spellsFromText(word,wordsFor(player)),[]);
+ player.loadout.skills.ballista=1;assert.equal(skillName(player,'ballista'),'John');assert.equal(SPELL_INFO.ballista.label,'John');
+ for(const word of ['John','Jon','ballista','railgun'])assert.deepEqual(spellsFromText(word,wordsFor(player)),['ballista']);
+ assert.deepEqual(spellsFromText('John',deckWords(['ballista'])),['ballista']);
+ player.loadout.skills.ballista=2;assert.equal(skillName(player,'ballista'),'Railgun');
+});

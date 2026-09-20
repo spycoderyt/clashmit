@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {WebSocket} from 'ws';
 import {createGameServer} from '../server/index.js';
 import {encodeDescriptor,DESCRIPTOR_LENGTH} from '../dist/face-id.js';
-import {COINS_PER_KILL,UNLOCK_COST} from '../dist/economy.js';
+import {COINS_PER_KILL,UNLOCK_COST,UPGRADE_COST} from '../dist/economy.js';
 import {spawnPlayer} from '../dist/respawn.js';
 const samples=[encodeDescriptor(Array.from({length:DESCRIPTOR_LENGTH},()=>1/Math.sqrt(DESCRIPTOR_LENGTH)))];
 async function setup(t){
@@ -33,12 +33,17 @@ test('Exit settles already-due lethal damage before it handles voluntary retirem
  a.send({type:'retire'});await b.next('arena-event',m=>m.kind==='kill'&&m.targetId===a.id);const dead=await a.next('state',m=>m.room.players.find(p=>p.id===a.id)?.score?.deaths===1);assert.equal(dead.room.players.find(p=>p.id===a.id).score.deaths,1);assert.equal((await board()).find(p=>p.id===b.id).coins,COINS_PER_KILL);
  a.messages.length=0;a.send({type:'retire'});await a.next('state',m=>m.room.players.find(p=>p.id===a.id)?.health===0);assert.equal((await board()).find(p=>p.id===b.id).coins,COINS_PER_KILL);assert.equal((await board()).find(p=>p.id===a.id).deaths,1);
 });
-test('living players can buy ordered skills once, but cannot buy upgrades or consumables',async t=>{
+test('living players can unlock and upgrade once, but consumables stay in the death shop',async t=>{
  const {a,b,alice,bob,board}=await setup(t);
  a.send({type:'purchase',kind:'unlock',item:'meteor'});assert.match((await a.next('error')).message,/previous/);
  a.send({type:'purchase',kind:'unlock',item:'fireball'});assert.match((await a.next('error')).message,/coins/);
- for(let i=0;i<2;i++){if(i)spawnPlayer(bob);bob.health=1;alice.cooldowns={};alice.mana=10;a.send({type:'cast',spell:'lightning',targetId:b.id});const shot=await a.next('spell',m=>m.actorId===a.id);a.send({type:'impact',shotId:shot.shotId,tracked:true});await a.next('arena-event',m=>m.kind==='kill');}
- a.send({type:'purchase',kind:'unlock',item:'fireball'});const unlocked=await a.next('state',m=>m.room.players.find(p=>p.id===a.id)?.loadout?.skills?.fireball===1);const own=unlocked.room.players.find(p=>p.id===a.id);assert.equal(own.health,70);assert.equal(own.score.deaths,0);assert.equal(own.score.coins,2*COINS_PER_KILL-UNLOCK_COST[1]);
+ for(let i=0;i<3;i++){if(i)spawnPlayer(bob);bob.health=1;alice.cooldowns={};alice.mana=10;a.send({type:'cast',spell:'lightning',targetId:b.id});const shot=await a.next('spell',m=>m.actorId===a.id);a.send({type:'impact',shotId:shot.shotId,tracked:true});await a.next('arena-event',m=>m.kind==='kill');}
+ a.send({type:'purchase',kind:'unlock',item:'fireball'});const unlocked=await a.next('state',m=>m.room.players.find(p=>p.id===a.id)?.loadout?.skills?.fireball===1);const own=unlocked.room.players.find(p=>p.id===a.id);assert.equal(own.health,70);assert.equal(own.score.deaths,0);assert.equal(own.score.coins,3*COINS_PER_KILL-UNLOCK_COST[1]);
  a.send({type:'purchase',kind:'unlock',item:'fireball'});assert.match((await a.next('error')).message,/Already/);assert.equal((await board()).find(p=>p.id===a.id).coins,own.score.coins);
- for(const [kind,item] of [['upgrade','lightning'],['consumable','heal']]){a.send({type:'purchase',kind,item});assert.match((await a.next('error')).message,/Shop/);}
+ a.send({type:'purchase',kind:'upgrade',item:'meteor'});assert.match((await a.next('error')).message,/Unlock/);
+ a.send({type:'purchase',kind:'upgrade',item:'fireball'});assert.match((await a.next('error')).message,/coins/);
+ alice.mana=3;alice.manaUpdatedAt=Date.now();const health=alice.health,cooldowns={...alice.cooldowns};
+ a.send({type:'purchase',kind:'upgrade',item:'lightning'});const upgraded=await a.next('state',m=>m.room.players.find(p=>p.id===a.id)?.loadout?.skills?.lightning===2);const result=upgraded.room.players.find(p=>p.id===a.id);assert.equal(result.score.coins,own.score.coins-UPGRADE_COST[0]);assert.equal(result.health,health);assert.ok(result.mana>=3&&result.mana<4,'buying an upgrade does not spend mana');assert.deepEqual(result.cooldowns,cooldowns);
+ a.send({type:'purchase',kind:'upgrade',item:'lightning'});assert.match((await a.next('error')).message,/Already/);assert.equal((await board()).find(p=>p.id===a.id).coins,result.score.coins);
+ a.send({type:'purchase',kind:'consumable',item:'heal'});assert.match((await a.next('error')).message,/Shop/);
 });

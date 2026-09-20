@@ -4,7 +4,7 @@ import {ORBITAL,inOrbitalZone} from '../dist/orbital-rules.js';
 export {ORBITAL};
 export function launchOrbital(room,actor,point,now=Date.now()){
  if((actor.stunUntil||0)>now)return{error:'You are stunned.'};
- if(!room.economy||room.phase!=='playing'||!actor.connected||!actor.faceReady||actor.health<=0||!(actor.airstrikeCharges>0))return{error:'Earn a five-kill streak to summon an airstrike.'};
+ if(!room.economy||room.phase!=='playing'||!actor.connected||!actor.faceReady||actor.health<=0||!(actor.airstrikeCharges>0))return{error:`Earn a ${ORBITAL.streakStep}-kill streak to summon an airstrike.`};
  if(!validLocation({...point,accuracy:0})||!actor.location||now-actor.location.at>ORBITAL.freshMs)return{error:'Wait for a fresh location fix.'};
  const strike={id:randomUUID(),spell:'orbital',attackName:'Orbital Airstrike',actorId:actor.id,actorLife:actor.life,name:actor.name,avatar:room.avatars?.[actor.id]||null,point:{latitude:point.latitude,longitude:point.longitude},radius:ORBITAL.radius,victims:[],startsAt:now,endsAt:now+ORBITAL.durationMs};
  strike.victims=room.players.filter(p=>p.id!==actor.id&&p.connected&&p.faceReady&&p.health>0&&inOrbitalZone(strike,p.location,now)).map(p=>({id:p.id,life:p.life,location:{...p.location}}));

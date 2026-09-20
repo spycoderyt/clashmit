@@ -13,7 +13,7 @@ export function setupLeaderboard({root,lobby,url,getMyId}){
     for(const value of [rankLabel(p.rank),p.name+(p.id===myId?' (you)':''),(p.coins??0).toLocaleString(),p.knockouts||0,p.deaths||0]){const cell=document.createElement('td');cell.textContent=value;if(row.children.length===1&&p.avatar?.startsWith('data:image/jpeg;base64,')){const img=document.createElement('img');img.src=p.avatar;img.alt='';img.className='board-avatar';cell.prepend(img);}row.append(cell);}
     return row;
    }));}
-   hasData=true;status.textContent=players.length?'Ranked by coins':'No players yet.';
+   hasData=true;status.textContent=players.length?'':'No players yet.';
   }catch{status.textContent=hasData?'Reconnecting · showing last scores':'Leaderboard unavailable. Retrying…';}
   finally{clearTimeout(timer);busy=false;}
  }

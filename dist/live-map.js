@@ -18,13 +18,33 @@ export function projectLivePoint(point,view,width,height){
  return{x:width/2+(p.x-c.x)*scale,y:height/2-(p.y-c.y)*scale};
 }
 
+// Portraits change far less often than map snapshots. Keep one decoded image per player.
+export function createLivePortraitCache({makeImage=()=>new Image(),onLoad=()=>{}}={}){
+ const entries=new Map();
+ function release(entry){entry.image.onload=null;entry.image.onerror=null;entry.image.src='';}
+ function sync(players){
+  const ids=new Set(players.map(player=>player.id));
+  for(const [id,entry] of entries)if(!ids.has(id)){entries.delete(id);release(entry);}
+  for(const player of players){
+   const source=typeof player.avatar==='string'&&/^data:image\/(?:jpeg|png|webp);base64,/.test(player.avatar)?player.avatar:null;
+   const previous=entries.get(player.id);if(previous?.source===source)continue;
+   if(previous){entries.delete(player.id);release(previous);}if(!source)continue;
+   const image=makeImage(),entry={source,image,loaded:false};entries.set(player.id,entry);
+   image.onload=()=>{if(entries.get(player.id)!==entry)return;entry.loaded=image.naturalWidth>0&&image.naturalHeight>0;onLoad();};
+   image.onerror=()=>{if(entries.get(player.id)!==entry)return;entry.loaded=false;onLoad();};
+   image.src=source;
+  }
+ }
+ return{sync,get(id){const entry=entries.get(id);return entry?.loaded?entry.image:null;},clear(){for(const entry of entries.values())release(entry);entries.clear();}};
+}
+
 export function createLiveMap(host,{onCount=()=>{}}={}){
  const tiles=createTileMap(host,{theme:'midnight'}),canvas=document.createElement('canvas');canvas.className='live-map-overlay';canvas.setAttribute('aria-hidden','true');host.append(canvas);
  const empty=document.createElement('div');empty.className='live-map-empty';const title=document.createElement('strong'),hint=document.createElement('span');title.textContent='Waiting for player locations';hint.textContent='The map appears when players share their GPS location.';empty.append(title,hint);host.append(empty);
  const attribution=document.createElement('div');attribution.className='live-map-attribution';
  for(const [text,url] of [['OpenFreeMap','https://openfreemap.org/'],['OpenMapTiles','https://openmaptiles.org/'],['© OpenStreetMap','https://www.openstreetmap.org/copyright']]){if(attribution.childNodes.length)attribution.append(' · ');const a=document.createElement('a');a.href=url;a.target='_blank';a.rel='noopener';a.textContent=text;attribution.append(a);}host.append(attribution);
  const context=canvas.getContext('2d');let players=[],casts=new Map(),view=null,targetView=null,width=1,height=1,visible=true,raf=0,lastFrame=0,animateUntil=0,anchorServer=Date.now(),anchorLocal=performance.now(),loading=false;
- const positions=new Map(),clock=()=>anchorServer+performance.now()-anchorLocal;
+ const positions=new Map(),portraits=createLivePortraitCache({onLoad:()=>{animateUntil=performance.now()+100;request();}}),clock=()=>anchorServer+performance.now()-anchorLocal;
  const project=point=>tiles.ready?tiles.project(point.latitude,point.longitude):projectLivePoint(point,view,width,height);
  function resize(){const box=host.getBoundingClientRect();width=Math.max(1,box.width);height=Math.max(1,box.height);const dpr=Math.min(2,devicePixelRatio||1);canvas.width=Math.round(width*dpr);canvas.height=Math.round(height*dpr);context?.setTransform(dpr,0,0,dpr,0,0);tiles.resize();targetView=fitLiveView(players.map(p=>p.location),width,height);animateUntil=performance.now()+500;request();}
  function request(){if(visible&&!raf)raf=requestAnimationFrame(frame);}
@@ -58,10 +78,19 @@ export function createLiveMap(host,{onCount=()=>{}}={}){
   for(const player of players){
    const saved=positions.get(player.id);if(!saved)continue;saved.latitude+=(player.location.latitude-saved.latitude)*.3;saved.longitude+=(player.location.longitude-saved.longitude)*.3;
    const point=project(saved);if(!point)continue;const color=COLORS[player.persona]||COLORS.mage,hp=Math.max(0,Math.min(1,(player.health||0)/70));
-   context.beginPath();context.arc(point.x,point.y,12,0,Math.PI*2);context.fillStyle='#081c37';context.fill();context.beginPath();context.arc(point.x,point.y,11,-Math.PI/2,-Math.PI/2+Math.PI*2*hp);context.strokeStyle=hp>.5?'#a8dbaa':hp>.25?'#f3cc73':'#ef8a83';context.lineWidth=2;context.stroke();
-   context.beginPath();context.arc(point.x,point.y,5,0,Math.PI*2);context.fillStyle=player.health>0?color:'#75869d';context.fill();
+   context.beginPath();context.arc(point.x,point.y,18,0,Math.PI*2);context.fillStyle='#081c37';context.fill();
+   const portrait=portraits.get(player.id);
+   if(portrait){
+    const size=Math.min(portrait.naturalWidth,portrait.naturalHeight);context.save();context.beginPath();context.arc(point.x,point.y,14,0,Math.PI*2);context.clip();
+    context.drawImage(portrait,(portrait.naturalWidth-size)/2,(portrait.naturalHeight-size)/2,size,size,point.x-14,point.y-14,28,28);context.restore();
+   }else{
+    const words=String(player.name||'Player').trim().split(/\s+/);const initials=[words[0],...(words.length>1?[words.at(-1)]:[])].map(word=>Array.from(word)[0]||'').join('').toUpperCase();
+    context.fillStyle=player.health>0?color:'#75869d';context.font='600 12px "IBM Plex Sans", sans-serif';context.textAlign='center';context.fillText(initials,point.x,point.y+4);
+   }
+   context.beginPath();context.arc(point.x,point.y,16,0,Math.PI*2);context.strokeStyle='#39495e';context.lineWidth=2;context.stroke();
+   context.beginPath();context.arc(point.x,point.y,16,-Math.PI/2,-Math.PI/2+Math.PI*2*hp);context.strokeStyle=hp>.5?'#a8dbaa':hp>.25?'#f3cc73':'#ef8a83';context.stroke();
    const name=String(player.name||'Player').slice(0,20);context.font='500 12px "IBM Plex Sans", sans-serif';const labelWidth=context.measureText(name).width+12;
-   for(const offset of [{x:16,y:-10},{x:16,y:10},{x:-labelWidth-16,y:-10},{x:-labelWidth-16,y:10}]){
+   for(const offset of [{x:23,y:-10},{x:23,y:10},{x:-labelWidth-23,y:-10},{x:-labelWidth-23,y:10}]){
     const box={x:Math.max(3,Math.min(width-labelWidth-3,point.x+offset.x)),y:Math.max(3,Math.min(height-35,point.y+offset.y-8)),w:labelWidth,h:20};
     if(labels.some(p=>box.x<p.x+p.w+3&&box.x+box.w+3>p.x&&box.y<p.y+p.h+3&&box.y+box.h+3>p.y))continue;
     labels.push(box);context.fillStyle='#081c37e8';context.fillRect(box.x,box.y,box.w,box.h);context.fillStyle='#eef4fb';context.textAlign='left';context.fillText(name,box.x+6,box.y+14);break;
@@ -80,6 +109,7 @@ export function createLiveMap(host,{onCount=()=>{}}={}){
  function update(data={},serverTime=Date.now()){
   if(Number.isFinite(serverTime)){anchorServer=serverTime;anchorLocal=performance.now();}
   players=(data.players||[]).filter(p=>valid(p.location)&&Number.isFinite(p.location.at)&&serverTime-p.location.at>=-1000&&serverTime-p.location.at<=FRESH_MS);
+  portraits.sync(players);
   const ids=new Set(players.map(p=>p.id));for(const id of positions.keys())if(!ids.has(id))positions.delete(id);for(const p of players)if(!positions.has(p.id))positions.set(p.id,{...p.location});
   for(const cast of data.casts||[])if(cast.id!==undefined&&Number.isFinite(cast.at)&&serverTime-cast.at<12000)casts.set(cast.id,cast);
   targetView=fitLiveView(players.map(p=>p.location),width,height);empty.hidden=players.length>0;onCount(players.length);host.setAttribute('aria-label',`GPS map with ${players.length} players. Spell positions are estimates.`);
@@ -87,5 +117,5 @@ export function createLiveMap(host,{onCount=()=>{}}={}){
   animateUntil=performance.now()+450;request();
  }
  const observer=new ResizeObserver(resize);observer.observe(host);resize();
- return{update,setVisible(on){visible=on;if(!visible){cancelAnimationFrame(raf);raf=0;}else{resize();request();}},destroy(){visible=false;cancelAnimationFrame(raf);observer.disconnect();host.replaceChildren();}};
+ return{update,setVisible(on){visible=on;if(!visible){cancelAnimationFrame(raf);raf=0;}else{resize();request();}},destroy(){visible=false;cancelAnimationFrame(raf);observer.disconnect();portraits.clear();host.replaceChildren();}};
 }

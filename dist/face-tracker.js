@@ -10,7 +10,7 @@ const BODY_EVERY_MS=250,BODY_IDLE_MS=1200,MIN_TICK_MS=50;
 
 export function createFaceTracker(video,{getGallery,onStatus=()=>{},focus={x:.5,y:.4}}){
  const tracks=createFaceTracks(),search=createFaceSearch(),frameGate=createVideoFrameGate();
- let active=false,generation=0,timer=null,width=0,height=0,lastFrameAt=0,bodyWorker=null,bodyReady=false,bodyBusy=false,lastBodies=0,bodySeq=0,inferenceMs=0;
+ let active=false,generation=0,timer=null,width=0,height=0,lastFrameAt=0,bodyWorker=null,bodyReady=false,bodyBusy=false,lastBodies=0,bodySeq=0,inferenceMs=0,inFlight=false;
  function startBodyWorker(){
   if(bodyWorker||!window.Worker)return;
   try{bodyWorker=new Worker(new URL('./detection-worker.js?v=face13',import.meta.url));}catch{return;}
@@ -21,23 +21,27 @@ export function createFaceTracker(video,{getGallery,onStatus=()=>{},focus={x:.5,
    if(data.type==='ready'){bodyReady=true;return;}
    if(data.type==='error'){bodyBusy=false;return;}
    if(data.type==='detections'&&worker.sent){const {at,k,g}=worker.sent;worker.sent=null;bodyBusy=false;
-    if(!active||g!==generation||worker!==bodyWorker||Date.now()-at>LOCK.bodyFreshMs)return;
+    if(!active||document.hidden||g!==generation||worker!==bodyWorker||Date.now()-at>LOCK.bodyFreshMs)return;
     tracks.updateBodies(data.detections.map(d=>({score:d.score,box:{originX:d.box.originX*k,originY:d.box.originY*k,width:d.box.width*k,height:d.box.height*k}})),at);}
   };
   bodyWorker.postMessage({type:'init'});
  }
  async function requestBodies(at,every=BODY_EVERY_MS){
-  if(!bodyReady||bodyBusy||at-lastBodies<every)return;bodyBusy=true;lastBodies=at;const g=generation,worker=bodyWorker;
-  try{const bitmap=await grabRegion(video,{x:0,y:0,width,height},640);if(!active||g!==generation||worker!==bodyWorker){bitmap.close();if(worker===bodyWorker)bodyBusy=false;return;}worker.sent={at,k:width/bitmap.width,g};worker.postMessage({type:'frame',bitmap,time:++bodySeq*40,faceFrames:[]},[bitmap]);}
+  if(document.hidden||!bodyReady||bodyBusy||at-lastBodies<every)return;bodyBusy=true;lastBodies=at;const g=generation,worker=bodyWorker;
+  try{const bitmap=await grabRegion(video,{x:0,y:0,width,height},640);if(!active||document.hidden||g!==generation||worker!==bodyWorker){bitmap.close();if(worker===bodyWorker)bodyBusy=false;return;}worker.sent={at,k:width/bitmap.width,g};worker.postMessage({type:'frame',bitmap,time:++bodySeq*40,faceFrames:[]},[bitmap]);}
   catch{if(worker===bodyWorker)bodyBusy=false;}
  }
  async function tick(){
   if(!active)return;const g=generation,started=Date.now();
+  // A stop/start must not queue new inference over the old session still finishing.
+  if(inFlight){timer=setTimeout(tick,MIN_TICK_MS);return;}
   if(document.hidden||video.readyState<2||!video.videoWidth){timer=setTimeout(tick,120);return;}
   if(!frameGate.take(video)){timer=setTimeout(tick,MIN_TICK_MS);return;}
   width=video.videoWidth;height=video.videoHeight;const point={x:focus.x*width,y:focus.y*height},regions=search.next({width,height,at:started,point,follow:tracks.regions(started,inferenceMs>220?1:2,point),budgetMs:inferenceMs});
+  inFlight=true;
   try{
    const result=await detectFaces(video,regions,{known:tracks.knownBoxes(started),describeMax:2,focus:point,upper:true});if(!active||g!==generation)return;
+   if(document.hidden){timer=setTimeout(tick,120);return;}
    // A pass that only looked inside small windows says nothing about faces elsewhere, so tracks outside
    // those windows simply keep coasting until the next full-frame pass.
    const at=detectionTime(started,Date.now());
@@ -48,7 +52,7 @@ export function createFaceTracker(video,{getGallery,onStatus=()=>{},focus={x:.5,
    // On slower phones, reserve CPU and memory for faces until body fallback is actually needed.
    if(named.length&&(inferenceMs<160||tracks.needsBodies(at)))startBodyWorker();
    if(tracks.needsBodies(at))void requestBodies(at,Math.max(BODY_EVERY_MS,inferenceMs*4));else if(inferenceMs<160&&tracks.wantsBodies(at))void requestBodies(at,BODY_IDLE_MS);
-  }catch(e){if(active&&g===generation)onStatus('Face tracking paused · '+(e.message||'retrying'));}
+  }catch(e){if(active&&g===generation)onStatus('Face tracking paused · '+(e.message||'retrying'));}finally{inFlight=false;}
   if(active&&g===generation)timer=setTimeout(tick,Math.max(0,MIN_TICK_MS-(Date.now()-started)));
  }
  return{

@@ -2,7 +2,7 @@ import {resolveMelee} from './melee.js';
 import {createSharedMusicServer} from './music.js';
 import {createLiveMap} from './live-map.js';
 import {createPassiveCoins,PASSIVE_COINS} from './passive-coins.js';
-import {launchOrbital,resolveOrbitals,rememberOrbitalLocation} from './orbital.js';
+import {launchOrbital,resolveOrbitals,rememberOrbitalLocation,ORBITAL} from './orbital.js';
 import {COINS_PER_KILL,KILL_BOUNTY,bountyMultiplier,killReward,MAX_HEALTH,CONSUMABLES} from '../dist/economy.js';
 import {createAdmin} from './admin.js';
 import {createEventRounds} from './event-rounds.js';
@@ -41,7 +41,7 @@ export function createGameServer({maxPlayers=null,maxBufferedBytes=256*1024,coun
   const {actorId,targetId,assists=[],...publicEvent}=event;const at=Date.now(),actor=room.players.find(p=>p.id===actorId),target=room.players.find(p=>p.id===targetId);
   rounds.kill(room,event,at);
   if(room.enhanced&&actor&&target){if(actor.revengeTargetId===targetId&&actor.health>0){actor.mana=Math.min(10,(actor.mana||0)+2);actor.revengeTargetId=null;announce(room,{kind:'revenge',actorId,text:`Revenge! ${actor.name} defeated ${target.name} · +2 mana`});}target.revengeTargetId=actorId;}
-  if(room.economy&&actor&&event.streak>0&&event.streak%5===0){actor.airstrikeCharges=(actor.airstrikeCharges||0)+1;announce(room,{kind:'airstrike-ready',actorId,text:`${actor.name} earned an Orbital Airstrike!`});}
+  if(room.economy&&actor&&event.streak>0&&event.streak%ORBITAL.streakStep===0){actor.airstrikeCharges=(actor.airstrikeCharges||0)+1;announce(room,{kind:'airstrike-ready',actorId,text:`${actor.name} earned an Orbital Airstrike!`});}
   const cheers=['Huzzah!','Unstoppable!','What a streak!','Keep it going!'];if(event.streak>=3)announce(room,{kind:'streak',actorId,text:room.economy&&event.streak>=KILL_BOUNTY.minimumStreak?`${event.killer} is on a ${event.streak}x killstreak. Bounty: ${bountyMultiplier(event.streak)}x coins (${killReward(event.streak)})!`:`${event.killer} is on a ${event.streak} killstreak. ${cheers[event.streak%cheers.length]}`});
   kills.unshift({id:++killSequence,at,...publicEvent});if(kills.length>100)kills.length=100;
   for(const assist of assists){const assistant=room.players.find(p=>p.id===assist.actorId);if(assistant?.socket)send(assistant.socket,{type:'assist',id:`${eventEpoch}:assist:${killSequence}:${assist.actorId}`,at,victim:event.victim,targetId,coins:assist.coins,balance:assist.balance});}
@@ -102,13 +102,21 @@ export function createGameServer({maxPlayers=null,maxBufferedBytes=256*1024,coun
  }
  // The moment each player is knocked out is what the end-of-round leaderboard ranks by.
  function finish(room){if(room.phase!=='playing')return;if(room.continuous){for(const p of room.players)if(p.life&&(p.faceReady||p.eliminated||p.orbitalKilled)&&p.health<=0&&p.deathScoredLife!==p.life){scores.award(p.id,0,0,1);p.deathScoredLife=p.life;if((room.eventRound?.mode||'ffa')!=='ffa'){p.eliminated=true;p.respawnAt=null;p.poison=null;p.swarm=null;if(room.eventRound?.players[p.id])room.eventRound.players[p.id].eliminated=true;}}rounds.tick(room);if(room.phase!=='playing')return;advanceRespawns(room,Date.now(),respawnDelayMs);const ids=new Set(room.players.map(p=>p.id));for(const p of room.players)for(const id of Object.keys(p.damageCredit||{}))if(!ids.has(id))delete p.damageCredit[id];return;}const moment=Date.now();for(const p of room.scoreRound?.players||room.players)if(p.health<=0&&!p.diedAt)p.diedAt=moment;const alive=room.players.filter(p=>p.health>0);if(alive.length<=1||Date.now()>=room.endsAt){settleScores(room,scores);room.phase='finished';const best=Math.max(...alive.map(p=>p.health),0);room.winners=alive.filter(p=>p.health===best).map(p=>p.id);}}
- // The firing phone reports an impact once, timed by its estimate of this clock. If that estimate runs
- // ahead, the report arrives before the spell could have; dropping it would turn a true hit into a miss
- // when the shot later expires. Hold it until the spell arrives. The claim of tracking is trusted either way.
- const heldImpacts=new Set();
+ // The server owns every arrival deadline. Client reports can wake this same resolver,
+ // but cannot shorten flight time or cancel an already locked target.
+ const impactTimers=new Map();
+ function cancelImpact(shotId){clearTimeout(impactTimers.get(shotId));impactTimers.delete(shotId);}
+ function scheduleImpact(room,shot){
+  if(closing||!shot?.shotId||impactTimers.has(shot.shotId))return;
+  const timer=setTimeout(()=>{impactTimers.delete(shot.shotId);if(!closing)resolveImpact(room,{id:shot.actorId},shot.shotId,true,true);},Math.max(0,shot.impactAt-Date.now()));
+  timer.unref();impactTimers.set(shot.shotId,timer);
+ }
  function resolveImpact(room,player,shotId,tracked,automatic=false){
+  if(closing)return;
   const now=Date.now();settleScored(room,now);finish(room);const shot=(room.shots||[]).find(s=>s.shotId===shotId&&s.actorId===player.id),before=room.players.find(p=>p.id===shot?.targetId)?.health;
-  if(shot?.reflected&&!automatic)return;
+  if(!shot)return;
+  if(now<shot.impactAt){scheduleImpact(room,shot);return;}
+  if(shot.reflected&&!automatic)return;
   const event=impactProjectile(room,player.id,shotId,tracked,now);
   if(!event.error){
    for(const hit of [event,...event.secondaryHits||[]]){
@@ -116,9 +124,8 @@ export function createGameServer({maxPlayers=null,maxBufferedBytes=256*1024,coun
     if(!hit.missed&&!hit.blocked)damageEvent(room,{...hit,amount:healthBefore-(room.players.find(p=>p.id===hit.targetId)?.health??healthBefore)});
     if(room.continuous)announceStreak(room,scoreContinuousHit(room,scores,hit,healthBefore,kill=>recordKill(room,kill)));else recordScore(room,hit,healthBefore);
    }
-   if(event.parried)announce(room,{kind:'parry',actorId:event.targetId,text:`${room.players.find(p=>p.id===event.targetId)?.name||'Player'} parried ${SUPER_NAMES[event.spell]&&event.super?SUPER_NAMES[event.spell]:event.spell}`});heldImpacts.delete(shotId);finish(room);broadcast(room,event);return;}
-  if(!shot||closing||heldImpacts.has(shotId)||Date.now()>=shot.impactAt){heldImpacts.delete(shotId);return;}
-  heldImpacts.add(shotId);setTimeout(()=>{heldImpacts.delete(shotId);resolveImpact(room,player,shotId,tracked);},shot.impactAt-Date.now()).unref();
+   if(event.parried)announce(room,{kind:'parry',actorId:event.targetId,text:`${room.players.find(p=>p.id===event.targetId)?.name||'Player'} parried ${SUPER_NAMES[event.spell]&&event.super?SUPER_NAMES[event.spell]:event.spell}`});cancelImpact(shotId);if(event.reflection)scheduleImpact(room,event.reflection);finish(room);broadcast(room,event);return;}
+  cancelImpact(shotId);
  }
  wss.on('connection',ws=>{
   ws.on('error',()=>ws.terminate());
@@ -177,8 +184,8 @@ export function createGameServer({maxPlayers=null,maxBufferedBytes=256*1024,coun
      if(result.error)send(ws,{type:'error',message:result.error});else{finish(room);broadcast(room);}
     }else if(m.type==='respawn'){const result=requestRespawn(room,player);if(result.error)send(ws,{type:'error',message:result.error});else broadcast(room);
     }else if(m.type==='purchase'){
-     const aliveUnlock=m.kind==='unlock'&&player.health>0&&player.faceReady;
-     if(!room.economy||room.phase!=='playing'||(room.eventRound?.mode||'ffa')!=='ffa'||!player.life||(!aliveUnlock&&(player.health>0||!player.respawnAt))||(player.actionLockUntil||0)>Date.now())return send(ws,{type:'error',message:'Shop while waiting to respawn in FFA.'});
+     const aliveSkillPurchase=(m.kind==='unlock'||m.kind==='upgrade')&&player.health>0&&player.faceReady;
+     if(!room.economy||room.phase!=='playing'||(room.eventRound?.mode||'ffa')!=='ffa'||!player.life||(!aliveSkillPurchase&&(player.health>0||!player.respawnAt))||(player.actionLockUntil||0)>Date.now())return send(ws,{type:'error',message:'Shop while waiting to respawn in FFA.'});
      const purchase=scores.purchase(player.id,player.nextPersona||player.persona,m.kind,m.item);if(purchase.error)send(ws,{type:'error',message:purchase.error});else{player.loadout=purchase.loadout;broadcast(room);}
     }else if(m.type==='orbital'){settleScored(room);finish(room);const result=launchOrbital(room,player,m.point);if(result.error)send(ws,{type:'error',message:result.error});else{announce(room,{kind:'orbital',actorId:player.id,text:`${player.name} summoned an Orbital Airstrike!`});broadcast(room,result);}
     }else if(m.type==='persona'){
@@ -186,7 +193,7 @@ export function createGameServer({maxPlayers=null,maxBufferedBytes=256*1024,coun
     }else if(m.type==='cast'){
      const now=Date.now();settleScored(room,now);finish(room);const before=room.players.find(p=>p.id===m.targetId)?.health;
      const event=(typeof m.spell==='string'&&Object.hasOwn(SPELLS,m.spell)&&SPELLS[m.spell].flightMs)?launchProjectile(room,player.id,m.spell,m.targetId,randomUUID(),now):castSpell(room,player.id,m.spell,m.targetId,now);
-     if(event.error)send(ws,{type:'error',message:event.error});else{if(room.economy&&(room.players.some(p=>p.id===event.targetId&&p.id!==player.id&&p.connected&&p.faceReady&&p.health>0)||event.affectedIds?.length))participation.engage(player,now);if(room.economy&&Object.hasOwn(CONSUMABLES,m.spell))scores.saveLoadout(player.id,player.loadout);if(event.super)announce(room,{kind:'super',spell:event.spell,actorId:event.actorId,targetId:event.targetId,text:`${SUPER_NAMES[event.spell]} activated by ${player.name}`});if(room.continuous)announceStreak(room,scoreContinuousHit(room,scores,event,before,kill=>recordKill(room,kill)));else recordScore(room,event,before);finish(room);broadcast(room,event);}
+     if(event.error)send(ws,{type:'error',message:event.error});else{if(room.economy&&(room.players.some(p=>p.id===event.targetId&&p.id!==player.id&&p.connected&&p.faceReady&&p.health>0)||event.affectedIds?.length))participation.engage(player,now);if(room.economy&&Object.hasOwn(CONSUMABLES,m.spell))scores.saveLoadout(player.id,player.loadout);if(event.super)announce(room,{kind:'super',spell:event.spell,actorId:event.actorId,targetId:event.targetId,text:`${SUPER_NAMES[event.spell]} activated by ${player.name}`});if(room.continuous)announceStreak(room,scoreContinuousHit(room,scores,event,before,kill=>recordKill(room,kill)));else recordScore(room,event,before);if(event.shotId)scheduleImpact(room,event);finish(room);broadcast(room,event);}
     }else if(m.type==='melee'){
      const now=Date.now();settleScored(room,now);finish(room);const before=room.players.find(p=>p.id===m.targetId)?.health;
      const event=resolveMelee(room,player,m,now);
@@ -231,11 +238,11 @@ export function createGameServer({maxPlayers=null,maxBufferedBytes=256*1024,coun
   ws.on('close',()=>{const current=clients.get(ws);if(current){rememberOrbitalLocation(current.room,current.player);current.player.location=null;}}); // never keep a disconnected player's position
   ws.on('close',()=>{clearTimeout(timeout);const current=clients.get(ws);if(!current)return;const{room,player}=current;if(room.economy){deactivate(room,player);clients.delete(ws);broadcast(room);return;}rounds.account(room,Date.now());player.connected=false;player.disconnectedAt=Date.now();rounds.tick(room);clients.delete(ws);if(room.hostId===player.id)room.hostId=room.players.find(p=>p.connected)?.id||player.id;broadcast(room);});
  });
- const tick=setInterval(()=>{for(const [code,room]of rooms){for(const p of room.players)if(room.economy&&p.connected&&Date.now()-(p.lastSeen||0)>8000){deactivate(room,p);p.socket.terminate();}resolveOrbitals(room,Date.now(),dealt=>{damageEvent(room,dealt);announceStreak(room,creditContinuous(room,scores,dealt,event=>recordKill(room,event)));});for(const p of room.players)if(!p.connected&&Date.now()-p.disconnectedAt>60000){if(p.health>0&&room.phase==='playing'){p.health=0;p.diedAt=Date.now();p.forfeited=true;}p.expired=true;}room.players=room.players.filter(p=>!p.expired);if(room.faces)for(const id of Object.keys(room.faces))if(!room.players.some(p=>p.id===id))delete room.faces[id];if(room.avatars)for(const id of Object.keys(room.avatars))if(!room.players.some(p=>p.id===id))delete room.avatars[id];if(!room.players.some(p=>p.id===room.hostId&&p.connected))room.hostId=room.players.find(p=>p.connected)?.id||room.players[0]?.id;settleScored(room);finish(room);participation.tick(room,Date.now());for(const shot of [...room.shots||[]])if(shot.reflected&&Date.now()>=shot.impactAt){const actor=room.players.find(p=>p.id===shot.actorId);if(actor)resolveImpact(room,actor,shot.shotId,true,true);}if(!room.players.length&&!room.continuous){clearTimeout(room.startTimer);rooms.delete(code);continue;}for(const event of expireProjectiles(room))broadcast(room,event);broadcast(room);}},500);tick.unref();
+ const tick=setInterval(()=>{for(const [code,room]of rooms){for(const p of room.players)if(room.economy&&p.connected&&Date.now()-(p.lastSeen||0)>8000){deactivate(room,p);p.socket.terminate();}resolveOrbitals(room,Date.now(),dealt=>{damageEvent(room,dealt);announceStreak(room,creditContinuous(room,scores,dealt,event=>recordKill(room,event)));});for(const p of room.players)if(!p.connected&&Date.now()-p.disconnectedAt>60000){if(p.health>0&&room.phase==='playing'){p.health=0;p.diedAt=Date.now();p.forfeited=true;}p.expired=true;}room.players=room.players.filter(p=>!p.expired);if(room.faces)for(const id of Object.keys(room.faces))if(!room.players.some(p=>p.id===id))delete room.faces[id];if(room.avatars)for(const id of Object.keys(room.avatars))if(!room.players.some(p=>p.id===id))delete room.avatars[id];if(!room.players.some(p=>p.id===room.hostId&&p.connected))room.hostId=room.players.find(p=>p.connected)?.id||room.players[0]?.id;settleScored(room);finish(room);participation.tick(room,Date.now());for(const shot of [...room.shots||[]])if(Date.now()>=shot.impactAt){const actor=room.players.find(p=>p.id===shot.actorId);if(actor)resolveImpact(room,actor,shot.shotId,true,true);}if(!room.players.length&&!room.continuous){clearTimeout(room.startTimer);rooms.delete(code);continue;}for(const event of expireProjectiles(room))broadcast(room,event);broadcast(room);}},500);tick.unref();
  const heartbeat=setInterval(()=>{for(const ws of wss.clients){if(!ws.isAlive){ws.terminate();continue;}ws.isAlive=false;ws.ping();}},15000);heartbeat.unref();
  function close({graceMs=0}={}){
   if(closePromise)return closePromise;
-  closing=true;clearInterval(tick);clearInterval(heartbeat);for(const room of rooms.values())clearTimeout(room.startTimer);
+  closing=true;for(const timer of impactTimers.values())clearTimeout(timer);impactTimers.clear();clearInterval(tick);clearInterval(heartbeat);for(const room of rooms.values())clearTimeout(room.startTimer);
   closePromise=new Promise(resolve=>{
    const force=setTimeout(()=>{for(const ws of wss.clients)ws.terminate();server.closeAllConnections();},graceMs);force.unref();
    for(const ws of wss.clients){if(graceMs)ws.close(1012,'Server restarting');else ws.terminate();}

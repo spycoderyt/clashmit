@@ -1,8 +1,10 @@
-// Two skippable voice-casting tips, remembered on this device after skip or completion.
+// A short first-visit guide. The app remembers either Skip or completion.
 export const STEPS=Object.freeze([
- {key:'attack',anchor:'attack',text:"Aim at a player and say a spell’s name to attack."},
- {key:'defence',anchor:'defence',text:"Buy Shield and Heal after dying, then say their names to use them."},
-]);// A brand new player only: after their face is scanned, before any round is running, and never over the face scan.
+ {key:'target',anchor:'target',title:'Find a player',text:'Point your camera at their face. Wait for their name and the locked reticle.'},
+ {key:'attack',anchor:'attack',title:'Say “{spell}”',text:'Say the spell name to attack. Voice starts when you join.'},
+ {key:'melee',anchor:'melee',title:'Use your free hand',text:'Swing your hand across their face on screen to use your sword. Do not touch them.'},
+ {key:'shop',anchor:'shop',title:'Spend your coins',text:'Tap a skill to buy or upgrade it. Use ← to end this life and open the shop. Your face scan stays saved.'},
+]);
 export function shouldOpen({seen,practice,faceReady,phase,scanOpen,open,continuous=false}){
  return !seen&&!practice&&!!faceReady&&!open&&!scanOpen&&(phase==='lobby'||phase==='finished'||(continuous&&phase==='playing'));
 }
@@ -31,36 +33,36 @@ export function frame(hole,box,{height=150,gap:GAP=14,margin=12}={}){
 }
 const CSS='.coach{position:absolute;inset:0;z-index:6;font-size:1rem;pointer-events:none}.coach[hidden]{display:none}'
  +'.coach-block{position:absolute;background:#05070be0;pointer-events:auto}'
- +'.coach-hole{position:absolute;border-radius:14px;pointer-events:none;box-shadow:0 0 0 2px var(--orange,#63daca),0 0 26px #63daca85;animation:coach-glow 1.9s ease-in-out infinite}'
- +'.coach-card{position:absolute;left:12px;right:12px;max-width:380px;margin:0 auto;pointer-events:auto;padding:14px 16px 12px;border-radius:16px;background:#121722f7;border:1px solid #4a5468;box-shadow:0 18px 60px #000a;color:#f6f4ef}'
- +'.coach-text{margin:0 0 12px;font-size:1rem;font-weight:700;line-height:1.35}'
- +'.coach-dots{display:flex;gap:6px;margin:0 0 12px;padding:0;list-style:none}.coach-dots li{flex:1;height:5px;border-radius:3px;background:#3a4150}.coach-dots li.active{background:var(--orange,#63daca)}.coach-dots li.done{background:#7be0a0}'
+ +'.coach-hole{position:absolute;border-radius:4px;pointer-events:none;box-shadow:0 0 0 2px #f3cc73}'
+ +'.coach-card{position:absolute;left:12px;right:12px;max-width:380px;margin:0 auto;pointer-events:auto;padding:18px;border-radius:4px;background:#0c1c30;border:1px solid #425268;color:#f6f4ef}'
+ +'.coach-title{margin:0 0 8px;font-size:1.2rem;font-weight:600;line-height:1.2}.coach-count{margin:0 0 10px;font-size:.75rem;color:#aab9cb}.coach-text{margin:0 0 18px;font-size:.95rem;font-weight:400;line-height:1.45}'
+ +'.coach-dots{display:flex;gap:6px;margin:0 0 12px;padding:0;list-style:none}.coach-dots li{flex:1;height:5px;border-radius:3px;background:#3a4150}.coach-dots li.active{background:#f3cc73}.coach-dots li.done{background:#7be0a0}'
  +'.coach-row{display:flex;align-items:center;gap:12px}'
  +'.coach-skip{background:transparent;color:#d6d8df;text-decoration:underline;text-underline-offset:5px;font-size:.85rem;padding:6px 0;min-height:0}'
- +'.coach-next{margin-left:auto;background:var(--orange,#63daca);color:#24160e;border-radius:8px;font-weight:700;padding:11px 22px;font-size:.9rem;min-height:40px}'
- +'@keyframes coach-glow{50%{box-shadow:0 0 0 3px var(--orange,#63daca),0 0 34px #63dacab0}}'
- +'@media(prefers-reduced-motion:reduce){.coach-hole{animation:none}}';
+ +'.coach-next{margin-left:auto;background:#f3cc73;color:#24160e;border-radius:3px;font-weight:600;padding:11px 22px;font-size:.9rem;min-height:40px}'
+;
 // anchors: the real HUD elements each step lights up, one or several, by the step's `anchor` key. A function
 // is called each time the step is placed, for controls that are built or replaced while the game runs.
 // gates: named checks a step waits on, by the step's `gate` key.
-export function createOnboarding({container,anchors={},gates={},onFinish=()=>{}}){
+export function createOnboarding({container,anchors={},gates={},getStarterSpell=()=> 'your spell',onFinish=()=>{}}){
  const style=document.createElement('style');style.textContent=CSS;document.head.append(style);
  const root=document.createElement('div');root.className='coach';root.hidden=true;root.setAttribute('role','dialog');root.setAttribute('aria-label','How to play');
  const blocks=[0,1,2,3].map(()=>{const el=document.createElement('div');el.className='coach-block';return el;});
  const hole=document.createElement('div');hole.className='coach-hole';
  const card=document.createElement('div');card.className='coach-card';
- const text=document.createElement('p'),dots=document.createElement('ol'),row=document.createElement('div');
+ const heading=document.createElement('h2'),count=document.createElement('p'),text=document.createElement('p'),dots=document.createElement('ol'),row=document.createElement('div');
+ heading.className='coach-title';count.className='coach-count';
  text.className='coach-text';dots.className='coach-dots';dots.setAttribute('aria-hidden','true');row.className='coach-row';
  const skip=document.createElement('button'),next=document.createElement('button');
  skip.type=next.type='button';skip.className='coach-skip';next.className='coach-next';skip.textContent='Skip';
  dots.replaceChildren(...STEPS.map(()=>document.createElement('li')));
- row.append(skip,next);card.append(text,dots,row);root.append(...blocks,hole,card);container.append(root);
+ row.append(skip,next);card.append(count,heading,text,dots,row);root.append(...blocks,hole,card);container.append(root);
  let index=0,open=false,timer=null;
  const passed=step=>!step.gate||(gates[step.gate]?.()??true);
  function place(){
   if(!open)return;
   const step=STEPS[index],box=container.getBoundingClientRect();
-  const named=anchors[step.anchor],targets=[typeof named==='function'?named():named].flat().filter(Boolean).map(el=>el.getBoundingClientRect());
+  let targets=[];try{const named=anchors[step.anchor];targets=[typeof named==='function'?named():named].flat().filter(el=>typeof el?.getBoundingClientRect==='function').map(el=>el.getBoundingClientRect());}catch{}
   // 8px of breathing room, so a control's glow does not sit on its own edge.
   const spread=union(targets),lit=spread?{x:spread.x-box.left-8,y:spread.y-box.top-8,width:spread.width+16,height:spread.height+16}:null;
   const plan=frame(lit,{width:box.width,height:box.height},{height:card.getBoundingClientRect().height||150});
@@ -71,9 +73,9 @@ export function createOnboarding({container,anchors={},gates={},onFinish=()=>{}}
  // Reposition the tips if the HUD changes size.
  function sync(){if(!open)return;next.disabled=!passed(STEPS[index]);place();}
  function render(){
-  const step=STEPS[index];text.textContent=step.text;
+  const step=STEPS[index];let spell='your spell';try{spell=String(getStarterSpell()||spell);}catch{}heading.textContent=step.title.replace('{spell}',spell);text.textContent=step.text;count.textContent=`${index+1} of ${STEPS.length}`;
   for(const [i,dot] of [...dots.children].entries())dot.className=i===index?'active':i<index?'done':'';
-  next.textContent=index===STEPS.length-1?'Got it':'Next';skip.hidden=false;
+  next.textContent=index===STEPS.length-1?'Play':'Next';skip.hidden=false;
   sync();requestAnimationFrame(place);
  }
  function finish(){if(!open)return;open=false;clearInterval(timer);timer=null;root.hidden=true;onFinish();}

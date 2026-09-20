@@ -37,16 +37,16 @@ test('lightning arrives faster, bypasses an active shield, and applies once at i
  assert.equal(impactProjectile(room,'a','fire',true,fire.impactAt).blocked,true);assert.equal(target.health,80);
  assert.equal(castSpell(room,'b','heal',null,2800).spell,'heal');assert.equal(target.health,100);
 });
-test('shield is evaluated at impact, tracking losses miss and stale shots resolve for both clients',()=>{
+test('shield is evaluated at impact, tracking losses preserve the target and stale shots resolve for both clients',()=>{
  const room=arena(),b=room.players[1];
  const shot=launchProjectile(room,'a','fireball','b','fire',1000);
  castSpell(room,'b','shield',null,2000);assert.equal(impactProjectile(room,'a','fire',true,shot.impactAt).blocked,true);
  const bolt=launchProjectile(room,'a','lightning','b','bolt',2600);
- assert.equal(impactProjectile(room,'a','bolt',false,bolt.impactAt).missed,true);assert.equal(b.health,100);
+ assert.equal(impactProjectile(room,'a','bolt',false,bolt.impactAt).missed,false);assert.equal(b.health,80);
  const abandoned=launchProjectile(room,'a','fireball','b','abandoned',5000);
  assert.deepEqual(expireProjectiles(room,abandoned.expiresAt-1),[]);
  const [expired]=expireProjectiles(room,abandoned.expiresAt);assert.equal(expired.shotId,'abandoned');assert.equal(expired.missed,true);assert.equal(room.shots.length,0);
  assert.deepEqual(expireProjectiles(room,abandoned.expiresAt+1),[]);
  const ending=launchProjectile(room,'a','fireball','b','ending',10000);room.phase='finished';
- assert.equal(expireProjectiles(room,10001)[0].shotId,ending.shotId);assert.equal(b.health,100);
+ assert.equal(expireProjectiles(room,10001)[0].shotId,ending.shotId);assert.equal(b.health,80);
 });

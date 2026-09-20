@@ -136,6 +136,7 @@ test('a missed, blocked or parried primary creates no secondary hits, including 
   for (const outcome of ['miss','block','parry']) {
     const room=arena('arrows'); room.players.push(player('near-primary',21),player('near-caster',1));
     const shot=throwAtTarget(room,'arrows');
+    if (outcome==='miss') room.players[1].life++;
     if (outcome!=='miss') room.players[1].shieldUntil=shot.impactAt+7000;
     if (outcome==='parry') room.players[1].shieldStartedAt=shot.impactAt-50;
     const hit=impactProjectile(room,'caster',shot.shotId,outcome!=='miss',shot.impactAt);

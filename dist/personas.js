@@ -9,7 +9,7 @@ export const SPELL_INFO=Object.freeze({
  meteor:{label:'Meteor',symbol:'☄',blurb:'Ultimate',words:['meteor','extinction'],css:'fire',rgb:'255,113,32'},
  soulReaper:{label:'Reaper',symbol:'♜',blurb:'Ultimate',words:['reaper','reeper','ripper','soul reaper','sole reaper','soul reeper','soul ripper','grim reaper'],css:'poison',rgb:'125,255,74'},
  bombArrow:{label:'Bomb Arrow',symbol:'➹',blurb:'Heavy',words:['bomb arrow','explosive arrow'],css:'arrows',rgb:'255,232,170'},
- ballista:{label:'Ballista',symbol:'⌁',blurb:'Ultimate',words:['ballista','railgun'],css:'arrows',rgb:'255,232,170'},
+ ballista:{label:'John',symbol:'⌁',blurb:'Ultimate',words:['john','jon','ballista','railgun'],css:'arrows',rgb:'255,232,170'},
  flashbang:{label:'Flashbang',symbol:'✹',blurb:'Blind and stun',words:['flashbang','flash bang','flash bank'],css:'lightning',rgb:'255,255,255'},
  fireball:{label:'Fireball',symbol:'✷',blurb:'25 damage · splash',words:['fire ball'],css:'fire',rgb:'255,113,32'},
  lightning:{label:'Lightning',symbol:'ϟ',blurb:'Ignores shield',words:['lightning'],css:'lightning',rgb:'146,180,255',bolt:true},

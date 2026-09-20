@@ -60,7 +60,7 @@ export function createIncomingFireballs({container,renderer,describe=describeOri
   const look=describe(entry.shot.spell),rgb=blocked?'107,210,255':missed?'165,170,180':look.rgb;
   layer.style.opacity='1';layer.style.boxShadow=`inset 0 0 75px 22px rgba(${rgb},.85)`;layer.style.background=`rgba(${rgb},${missed ? .04 : .15})`;
   layer.dataset.phase=missed?'missed':blocked?'blocked':'hit';bolt.style.display='none';
-  label.textContent=missed?'Spell fizzled':blocked?'Shield blocked it':look.hit||look.label[0].toUpperCase()+look.label.slice(1)+' hit';outcomeUntil=clock()+(missed?350:600);ensureFrame();return true;
+  label.textContent=missed?'Attack ended':blocked?'Shield blocked it':look.hit||look.label[0].toUpperCase()+look.label.slice(1)+' hit';outcomeUntil=clock()+(missed?350:600);ensureFrame();return true;
  }
  function sync(shots=[]){
   const ids=new Set(shots.map(s=>s.shotId));for(const id of active.keys())if(!ids.has(id))remove(id,true);

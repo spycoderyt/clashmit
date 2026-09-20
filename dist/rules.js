@@ -3,7 +3,7 @@ import {ATTACKS,CONSUMABLES,attacksFor,ruleFor,skillLevel,skillName,MAX_HEALTH} 
 import {isSuperReady,upgradedRule,SUPER_NAMES} from './supers.js';
 // Prototype balance: ten whole spendable units; the fractional bar fills one unit every 1.5 seconds.
 export const MANA = Object.freeze({max:10,regenPerSecond:2/3});
-export const HEALTH_REGEN=Object.freeze({amount:5,intervalMs:4000,max:100});
+export const HEALTH_REGEN=Object.freeze({amount:5,intervalMs:8000,max:100});
 export const FLIGHT_MS=1400;
 export const SPELLS = Object.freeze({
  ...ATTACKS,flashbang:{...CONSUMABLES.flashbang,damage:0,manaCost:0,flash:true},
@@ -159,7 +159,8 @@ export function impactProjectile(room,actorId,shotId,tracked,now=Date.now()){
  // Damage already owed is paid before this hit is judged: a target it has killed cannot be hit, and a refreshed effect must not swallow it.
  if(target&&room.phase==='playing'){bleed(target,'poison',now);bleed(target,'swarm',now);}
  const actor=room.players.find(p=>p.id===actorId),staleLife=room.continuous&&(!actor?.faceReady||!target?.faceReady||actor.health<=0||actor.life!==shot.actorLife||target.life!==shot.targetLife);
- const missed=staleLife||(target?.actionLockUntil||0)>now||(actor?.actionLockUntil||0)>now||!tracked||now>shot.expiresAt||room.phase!=='playing'||!target?.connected||target.health<=0;
+ // Target identity is locked at launch; camera visibility after casting cannot cancel a paid spell.
+ const missed=staleLife||(target?.actionLockUntil||0)>now||(actor?.actionLockUntil||0)>now||!actor?.connected||actor.health<=0||now>shot.expiresAt||room.phase!=='playing'||!target?.connected||target.health<=0;
  const canBlock=target?.economy?shot.spell!=='lightning':!rule.bypassShield||(target?.superShieldUntil>now&&shot.spell!=='lightning');
  const parried=!!room.enhanced&&!missed&&!shot.reflected&&canBlock&&target.shieldUntil>now&&Number.isFinite(target.shieldStartedAt)&&now-target.shieldStartedAt>=0&&now-target.shieldStartedAt<=350;
  const blocked=parried||(!missed?damage(target,rule,now,shot.spell):false);

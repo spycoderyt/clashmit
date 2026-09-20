@@ -29,15 +29,15 @@ test('shirt profiles reject ambiguity and tolerate moderate brightness differenc
  const rect=coverRect({originX:320,originY:180,width:640,height:360},1280,720,400,800);
  assert.ok(Math.abs(rect.x+rect.width/2-.5)<.001);assert.equal(rect.y,.25);
 });
-test('fireball damage occurs at impact, expires, and respects tracking loss and shields',()=>{
+test('fireball damage occurs at impact, keeps its target through tracking loss and respects shields',()=>{
  const room={phase:'playing',players:[player('a'),player('b')]};
  launchFireball(room,'a','b','one',1000);assert.equal(room.players[1].health,100);
  assert.ok(impactFireball(room,'a','one',true,1100).error);
- assert.equal(impactFireball(room,'a','one',false,2400).missed,true);assert.equal(room.players[1].health,100);
+ assert.equal(impactFireball(room,'a','one',false,2400).missed,false);assert.equal(room.players[1].health,75);
  launchFireball(room,'a','b','two',3000);castSpell(room,'b','shield',null,4000);
  assert.equal(impactFireball(room,'a','two',true,4400).blocked,true);
  launchFireball(room,'a','b','three',8000);assert.equal(impactFireball(room,'b','three',true,9400).error,'Projectile expired.');
- impactFireball(room,'a','three',true,9400);assert.equal(room.players[1].health,75);
+ impactFireball(room,'a','three',true,9400);assert.equal(room.players[1].health,50);
  assert.ok(impactFireball(room,'a','three',true,9401).error);
  launchFireball(room,'a','b','four',10000);assert.equal(impactFireball(room,'a','four',true,14000).missed,true);
 });

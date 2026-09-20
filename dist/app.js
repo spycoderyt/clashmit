@@ -92,10 +92,9 @@ const flashScreen=document.createElement('div');flashScreen.className='flashbang
 const haptics=createHaptics({isMuted:()=>audio.muted,stage:$('arena'),shakeTarget:$('camera')});if(new URLSearchParams(location.search).get('test')==='haptics')haptics.showTestPanel();
 // Synchronised 5-4-3-2-1 before every round and the leaderboard after it; a tick is felt on each second.
 const roundOverlay=createRoundOverlay({container:$('arena'),now:()=>serverClock.now(),onTick:second=>haptics.play(second?'tap':'hit'),onPersonaChange:id=>{if(hudPreview){me().nextPersona=id;roundOverlay.update(room,myId);}else send({type:'persona',persona:id});},onPurchase:(kind,item)=>{if(hudPreview){const p=me(),q=shopQuote(p.loadout,p.nextPersona||p.persona,kind,item);if(q.error||p.score.coins<q.cost)return;p.score.coins-=q.cost;for(const leader of room.leaders||[])if(leader.id===p.id)leader.coins=p.score.coins;if(kind==='consumable')p.loadout.consumables[item]++;else p.loadout.skills[item]=(p.loadout.skills[item]||0)+1;roundOverlay.update(room,myId);renderState();}else send({type:'purchase',kind,item});},onRespawn:()=>{if(hudPreview){requestRespawn(room,me(),now());roundOverlay.update(room,myId);renderState();}else send({type:'respawn'});},onOut:(player,mine)=>{if(!mine)haptics.play('hit');}});$('leave').addEventListener('click',()=>roundOverlay.hide());
-// Two voice-casting tips for a first-time player, once, while they wait for the host. The spell bar is drawn from
-// their persona, so the last two steps light up its first and last pair of cards rather than named spells.
+// First-visit tips use the current character and real HUD controls.
 const spellCards=()=>[...$('spells').querySelectorAll('.spell')];
-const onboarding=createOnboarding({container:$('arena'),anchors:{attack:()=>spellCards().slice(0,2),defence:()=>[...$('inventory').querySelectorAll('[data-consumable=shield],[data-consumable=heal]')]},gates:{},onFinish:()=>{if(!hudPreview)safeWrite('fieldspell-coached','1');}});$('leave').addEventListener('click',()=>onboarding.hide());
+const onboarding=createOnboarding({container:$('arena'),getStarterSpell:()=>{const id=attacksFor(myPersona())[0];return room?.economy?skillName(me(),id):labelOf(id);},anchors:{target:()=>$('reticle'),attack:()=>spellCards().slice(0,1),shop:()=>spellCards()},gates:{},onFinish:()=>{if(!hudPreview)safeWrite('fieldspell-coached','1');}});$('leave').addEventListener('click',()=>onboarding.hide());
 const flights=new Map(),completedShots=new Set();let dummyTimer,dummyShots=0;
 function rememberShot(id){completedShots.add(id);if(completedShots.size>512)completedShots.delete(completedShots.values().next().value);}
 const army=createSkeletonArmy($('arena'));
@@ -103,11 +102,12 @@ const describeIncoming=spell=>{const info=SPELL_INFO[spell]||SPELL_INFO.fireball
 const incoming=createIncomingFireballs({container:$('arena'),renderer:()=>fireScene,describe:describeIncoming,getAttacker:id=>{if(simulated())return{x:.5,y:.4};const p=matchedPerson(id);return p?.fresh?{x:p.x,y:p.y}:null;},now});
 const faceTracker=createFaceTracker($('camera'),{getGallery:gallery,onStatus:status=>{trackingStatus=status;}});
 const damageFlash=createDamageFlash({container:$('arena'),video:$('camera'),getTracks:()=>faceTracker.targets(),getSize:()=>faceTracker.size(),getMyId:()=>myId});
-let meleeSequence=0;
+const savedMeleeSequence=Number(safeRead('clashmit-melee-sequence'));
+let meleeSequence=Number.isSafeInteger(savedMeleeSequence)&&savedMeleeSequence>=0&&savedMeleeSequence<999999999999?savedMeleeSequence:0;
 const meleeEnabled=()=>{const p=me(),at=now();return joined&&!practice&&!document.hidden&&!$('arena').hidden&&!faceScan.isOpen&&room?.phase==='playing'&&!!p?.connected&&!!p.faceReady&&p.health>0&&!p.eliminated&&!p.waitingForRound&&!(p.stunUntil>at)&&!(p.flashUntil>at)&&!(p.actionLockUntil>at);};
 const melee=createMeleeGame({video:$('camera'),container:$('arena'),isEnabled:meleeEnabled,
  getTargets:()=>visibleTracks().filter(t=>t.fresh&&t.confirmed&&t.source!=='body').map(t=>({id:t.id,...t.box})),
- onHit:({targetId})=>{if(!meleeEnabled())return;const actor=me(),target=room.players.find(p=>p.id===targetId);if(!target?.connected||!target.faceReady||target.health<=0)return;damageFlash.prepare(targetId);send({type:'melee',targetId,actorLife:actor.life,targetLife:target.life,hitId:`${actor.life}:${++meleeSequence}`});}
+ onHit:({targetId})=>{if(!meleeEnabled())return;const actor=me(),target=room.players.find(p=>p.id===targetId);if(!target?.connected||!target.faceReady||target.health<=0)return;damageFlash.prepare(targetId);meleeSequence++;safeWrite('clashmit-melee-sequence',String(meleeSequence));send({type:'melee',targetId,actorLife:actor.life,targetLife:target.life,hitId:`${actor.life}:${meleeSequence}`});}
 });
 
 function loadGraphics(){graphicsLoading??=import('./fireball.js?v=supers1').then(m=>{fireScene=m.createFireballRenderer($('arena'));}).catch(()=>{fireScene=null;});return graphicsLoading;}
@@ -143,12 +143,12 @@ function effect(spell,{shot,projectile=true}={}){
  const target=targetPoint(shot?.targetId)||{x:.5,y:.4};let depth=false;
  if(isThrown(spell)&&projectile&&shot?.shotId){
   const flightMs=shot.flightMs||FLIGHT_MS,elapsedMs=Math.max(0,flightMs-((shot.impactAt??((shot.at||now())+flightMs))-now())),startedAt=performance.now()-elapsedMs,roundEndsAt=room.endsAt,actor=myId,flight=createFlight({startedAt,flightMs});
-  const timer=setInterval(()=>{const active=!!room&&room.endsAt===roundEndsAt&&myId===actor&&!document.hidden;const result=flight.step(performance.now(),simulated()||!!matchedPerson(shot.targetId)?.fresh,active);if(result){clearInterval(timer);flights.delete(shot.shotId);if(!result.cancelled)rememberShot(shot.shotId);if(!result.cancelled)finishShot(shot,result.tracked);}},25);flights.set(shot.shotId,timer);
+  const timer=setInterval(()=>{const active=!!room&&room.endsAt===roundEndsAt&&myId===actor&&!document.hidden;const result=flight.step(performance.now(),true,active);if(result){clearInterval(timer);flights.delete(shot.shotId);if(!result.cancelled)rememberShot(shot.shotId);if(!result.cancelled)finishShot(shot,result.tracked);}},25);flights.set(shot.shotId,timer);
   // Bolts are streaks, the army walks on its own ground layer, and everything else is thrown in the 3D scene.
   if(SPELL_INFO[spell]?.bolt)lightningEffect(target,spell,shot.super||shot.upgraded);
   else if(spell==='soulReaper'){depth=reaperEffect.fire({...target,getTarget:()=>targetPoint(shot.targetId),flightMs,elapsedMs,upgraded:!!shot.upgraded});}
   else if(spell!=='skeletonArmy'){try{depth=!!fireScene?.fire({...target,style:visualStyle(spell),super:shot.super||shot.upgraded||!!ATTACKS[spell]?.ultimate,upgraded:!!shot.upgraded,getTarget:()=>targetPoint(shot.targetId),flightMs,elapsedMs});}catch(e){console.warn('Spell graphics fallback',e);}}
-  notify(spell==='skeletonArmy'?'Skeletons marching · keep them in view':`${room.economy?skillName(me(),spell):labelOf(spell)} launched${SPELLS[spell].bypassShield?' · pierces shields':''}${shot.clearedSwarm?' · skeletons cleared':''}`);
+  notify(spell==='skeletonArmy'?'Skeletons sent to the locked target':`${room.economy?skillName(me(),spell):labelOf(spell)} launched${SPELLS[spell].bypassShield?' · pierces shields':''}${shot.clearedSwarm?' · skeletons cleared':''}`);
  }else if(shot?.clearedSwarm)notify('Skeletons cleared');
  layer.className='cast-effect '+spell+(depth?' has-depth':'');effectTimer=setTimeout(()=>{layer.className='';layer.replaceChildren();},SPELL_INFO[spell]?.bolt?450:2200);
 }
@@ -165,7 +165,7 @@ function handleImpact(m){
  if(!m.missed&&!m.blocked&&m.targetId===myId&&(me()?.health??100)-damage<=0)deathFelt=true;
  if(!m.missed){if(m.targetId===myId)haptics.play(m.blocked?'shielded':(me()?.health??100)-damage<=0?'death':SPELL_INFO[spell]?.bolt?'hurtLightning':'hurt');else if(m.actorId===myId)haptics.play(m.blocked?'deflected':'hit');}
  if(m.actorId===myId||m.targetId===myId)audio.play(spell,m.parried?'parry':m.missed?'miss':m.blocked?'block':m.spell==='fireball'&&m.attackRule?.upgraded?'upgrade-impact':'impact');
- if(m.actorId===myId)notify(m.missed?`Target lost · ${name} missed`:m.parried?`${name} reflected back at you!`:m.blocked?`${name} blocked`:`${name} ${rule.swarm?'landed':'hit'} · ${dealt}`);
+ if(m.actorId===myId)notify(m.missed?`${name} ended · target no longer active`:m.parried?`${name} reflected back at you!`:m.blocked?`${name} blocked`:`${name} ${rule.swarm?'landed':'hit'} · ${dealt}`);
  if(m.targetId===myId&&!m.missed)notify(m.parried?`Parried! ${name} sent back`:m.blocked?`Your shield blocked ${name}`:`${rule.swarm?'Skeletons on you':'Hit by '+name} · ${taken}`);
 }
 function showArena(){loadGraphics();void orbitalView.warm();requestAnimationFrame(placeHud);$('lobby').hidden=true;$('arena').hidden=false;$('camera-instructions').textContent=trackingPractice?'Scan your face, then step back and see how far the lock holds.':practice?'Practice a 3D fireball over your camera with a simulated target.':'Scan your face once, then point the camera at another player.';$('camera-privacy').textContent='Camera video stays on your phone.';$('camera-prompt').hidden=!!stream?.active;}
@@ -216,7 +216,7 @@ const connection=createGameConnection({
   }
   if(m.type==='spell'&&m.spell!=='flashbang'){if(m.actorId===myId){castPending=false;effect(m.spell,{shot:m});}else if(m.targetId===myId&&m.shotId){incoming.launch(m);if(!m.super)audio.play(m.spell);}else if(m.spell==='shield')notify(`Opponent shield active · Lightning pierces it`);else if(m.spell==='heal'){healed.set(m.actorId,Date.now()+900);notify(`${room?.players.find(p=>p.id===m.actorId)?.name||'Opponent'} healed +${m.healedAmount??(room.economy?50:m.super?35:20)}`);}else if(m.clearedSwarm)notify('Your skeletons were cleared');}
   if(m.type==='impact')handleImpact(m);
-  if(m.type==='round-start')notify('Round started. Keep your opponent in view.');
+  if(m.type==='round-start')notify('Round started. Lock a player and say a spell.');
   if(m.type==='error'){castPending=false;setError(m.message);}
   if(m.type==='pong'){const receivedAt=Date.now();serverClock.pong(m.serverTime,m.at,receivedAt);$('connection').textContent=`Live · ${receivedAt-m.at}ms`;}
  }
@@ -299,12 +299,13 @@ function renderDeck(){
  const deck=myDeck(),signature=JSON.stringify([myPersona(),room.economy,me()?.loadout]);if(signature===deckSignature)return;deckSignature=signature;
  $('arena').style.setProperty('--persona-accent',PERSONA_INFO[myPersona()].accent);
  $('spells').classList.toggle('economy-spells',!!room.economy);$('spells').replaceChildren();
- for(const spell of deck){if(room.economy&&CONSUMABLES[spell])continue;const info=SPELL_INFO[spell],rule=room.economy?ruleFor(me(),spell):SPELLS[spell],name=room.economy?skillName(me(),spell):info.label,button=document.createElement(room.economy&&ATTACKS[spell]&&!skillLevel(me(),spell)?'button':'div');button.id=spell;button.className='spell '+info.css;button.setAttribute('role','group');button.setAttribute('aria-label',`Say ${name} to cast`);
+ for(const spell of deck){if(room.economy&&CONSUMABLES[spell])continue;const info=SPELL_INFO[spell],rule=room.economy?ruleFor(me(),spell):SPELLS[spell],name=room.economy?skillName(me(),spell):info.label,button=document.createElement(room.economy&&ATTACKS[spell]&&skillLevel(me(),spell)<2?'button':'div');button.id=spell;button.className='spell '+info.css;button.setAttribute('role','group');button.setAttribute('aria-label',`Say ${name} to cast`);
   const stat=room.economy?(ATTACKS[spell]?`♥ ${+(totalDamage(rule)/10).toFixed(1)}  ◆ ${rule.manaCost}  ◷ ${rule.cooldown/1000}s`:`${me().loadout?.consumables?.[spell]||0} left · ${spell==='shield'?`${rule.duration/1000}s`:'5 ♥'}`):info.blurb;
   for(const [tag,cls,value] of [['span','spell-symbol',info.symbol],['b','',name],['span','mana-cost',rule.manaCost],['span','super-progress',''],['small','skill-stats',stat],['span','cooldown','']]){const el=document.createElement(tag);if(cls)el.className=cls;el.textContent=value;button.append(el);}
   button.querySelector('.spell-symbol').replaceChildren(uiIcon(iconNames[spell]||'zap'));
   if(room.economy&&ATTACKS[spell]){const stats=button.querySelector('.skill-stats');stats.replaceChildren(...[['swords',+(totalDamage(rule)/10).toFixed(1),'hearts damage'],['droplet',rule.manaCost,'mana'],['hourglass',rule.cooldown/1000+'s','delay']].map(([icon,value,label])=>{const span=document.createElement('span');span.className='skill-stat';span.setAttribute('aria-label',`${value} ${label}`);span.append(uiIcon(icon),String(value));return span;}));}
   button.classList.toggle('upgraded',skillLevel(me(),spell)>1);if(room.economy&&ATTACKS[spell]&&!skillLevel(me(),spell)){button.classList.add('skill-locked');const lock=document.createElement('span');lock.className='skill-lock';const price=UNLOCK_COST[attacksFor(myPersona()).indexOf(spell)];lock.textContent=`Unlock · ${price} coins`;button.append(lock);button.type='button';button.removeAttribute('role');button.setAttribute('aria-label',`Unlock ${name} for ${price} coins`);button.onclick=()=>{const p=me(),quote=shopQuote(p.loadout,myPersona(),'unlock',spell);if(quote.error){notify(quote.error);return;}if((p.score?.coins||0)<quote.cost){notify(`You need ${quote.cost} coins to unlock ${name}.`);return;}if(hudPreview){p.score.coins-=quote.cost;p.loadout.skills[spell]=1;renderState();}else send({type:'purchase',kind:'unlock',item:spell});};}
+  if(room.economy&&ATTACKS[spell]&&skillLevel(me(),spell)===1){const quote=shopQuote(me().loadout,myPersona(),'upgrade',spell),label=document.createElement('span');label.className='skill-lock';label.textContent=`${quote.cost} coins to upgrade`;button.append(label);button.type='button';button.removeAttribute('role');button.setAttribute('aria-label',`Upgrade ${name} to ${ATTACKS[spell].upgrade} for ${quote.cost} coins`);button.onclick=()=>{const p=me(),current=shopQuote(p.loadout,myPersona(),'upgrade',spell);if(current.error){notify(current.error);return;}if((p.score?.coins||0)<current.cost){notify(`You need ${current.cost} coins to upgrade ${name}.`);return;}if(hudPreview){p.score.coins-=current.cost;p.loadout.skills[spell]=2;renderState();}else send({type:'purchase',kind:'upgrade',item:spell});};}
   if(rule.multiHit){const badge=document.createElement('span');badge.className='skill-multi';badge.textContent='Up to 3 targets';badge.title='Two extra opponents within 5m take half damage';button.append(badge);}
   $('spells').append(button);
  }
