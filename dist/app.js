@@ -19,7 +19,7 @@ import {createMinimap} from './minimap.js?v=map8';
 import {createHaptics} from './haptics.js?v=haptic4';
 import {requestAllPermissions} from './permissions.js?v=perm1';
 import {createRoundOverlay} from './round-overlay.js?v=scores2';
-import {createOnboarding,shouldOpen,shouldClose} from './onboarding.js?v=coach3';
+import {createOnboarding,shouldOpen,shouldClose} from './onboarding.js?v=coach5';
 const $=id=>document.getElementById(id);
 setupLobbyVideo({video:$('lobby-background'),lobby:$('lobby'),button:$('background-toggle'),headline:$('lobby-headline')});
 const targetOverlay=createTargetOverlay($('arena'),$('boxes'));

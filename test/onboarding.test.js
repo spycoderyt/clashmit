@@ -17,6 +17,16 @@ test('three one-line coach marks run voice, then the attacking pair, then the de
  assert.match(STEPS[0].text,/Enable voice/);
  assert.match(STEPS[2].text,/Shield/);assert.match(STEPS[2].text,/Heal/);
 });
+test('the lit control stays tappable: only the dark panels and the card take taps',()=>{
+ const css=readFileSync(new URL('../dist/onboarding.js',import.meta.url),'utf8');
+ const rule=name=>css.match(new RegExp(`\\.${name}\\{([^']*?)\\}`))?.[1]??'';
+ // The root spans the whole arena. If it takes taps, the hole is decoration and a gated step can never
+ // be satisfied, because the control the step tells you to press is unreachable.
+ assert.match(rule('coach'),/pointer-events:none/,'the full-arena root must let taps through');
+ assert.match(rule('coach-hole'),/pointer-events:none/,'the glow around the control must not sit on top of it');
+ for(const part of ['coach-block','coach-card'])
+  assert.match(rule(part),/pointer-events:auto/,`${part} still takes its own taps`);
+});
 test('the coach marks open once for a scanned newcomer and never over a round or the face scan',()=>{
  assert.equal(shouldOpen(fresh),true);
  assert.equal(shouldOpen({...fresh,phase:'finished'}),true,'someone who joined after a round still gets taught');

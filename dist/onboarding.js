@@ -33,10 +33,10 @@ export function frame(hole,box,{height=150,gap:GAP=14,margin=12}={}){
  const above=y-GAP-height;
  return{blocks,top:above>=margin?above:Math.max(margin,Math.min(y+depth+GAP,box.height-height-margin))};
 }
-const CSS='.coach{position:absolute;inset:0;z-index:6;font-size:1rem}.coach[hidden]{display:none}'
- +'.coach-block{position:absolute;background:#05070be0}'
+const CSS='.coach{position:absolute;inset:0;z-index:6;font-size:1rem;pointer-events:none}.coach[hidden]{display:none}'
+ +'.coach-block{position:absolute;background:#05070be0;pointer-events:auto}'
  +'.coach-hole{position:absolute;border-radius:14px;pointer-events:none;box-shadow:0 0 0 2px var(--orange,#ff9958),0 0 26px #ff995885;animation:coach-glow 1.9s ease-in-out infinite}'
- +'.coach-card{position:absolute;left:12px;right:12px;max-width:380px;margin:0 auto;padding:14px 16px 12px;border-radius:16px;background:#121722f7;border:1px solid #4a5468;box-shadow:0 18px 60px #000a;color:#f6f4ef}'
+ +'.coach-card{position:absolute;left:12px;right:12px;max-width:380px;margin:0 auto;pointer-events:auto;padding:14px 16px 12px;border-radius:16px;background:#121722f7;border:1px solid #4a5468;box-shadow:0 18px 60px #000a;color:#f6f4ef}'
  +'.coach-text{margin:0 0 12px;font-size:1rem;font-weight:700;line-height:1.35}'
  +'.coach-dots{display:flex;gap:6px;margin:0 0 12px;padding:0;list-style:none}.coach-dots li{flex:1;height:5px;border-radius:3px;background:#3a4150}.coach-dots li.active{background:var(--orange,#ff9958)}.coach-dots li.done{background:#7be0a0}'
  +'.coach-row{display:flex;align-items:center;gap:12px}'
