@@ -1,3 +1,5 @@
+import {RESPAWN_MS,spawnPlayer,advanceRespawns} from '../dist/respawn.js';
+import {creditContinuous,scoreContinuousHit} from './continuous-scores.js';
 import http from 'node:http';
 import {readFile} from 'node:fs/promises';
 import {fileURLToPath} from 'node:url';
@@ -15,15 +17,16 @@ const root=fileURLToPath(new URL('../dist/',import.meta.url));
 const mime={'.html':'text/html; charset=utf-8','.css':'text/css','.js':'text/javascript','.svg':'image/svg+xml','.wasm':'application/wasm','.jpg':'image/jpeg'};
 const allowedOrigins=(process.env.ALLOWED_ORIGINS||'').split(',').filter(Boolean);
 // countdownMs: how long every phone shows the synchronised countdown before a round begins (0 starts at once).
-export function createGameServer({maxPlayers=null,maxBufferedBytes=256*1024,countdownMs=5000,scoreFile=null}={}){
+export function createGameServer({maxPlayers=null,maxBufferedBytes=256*1024,countdownMs=5000,scoreFile=null,continuous=false,respawnDelayMs=RESPAWN_MS}={}){
  if(maxPlayers!==null&&(!Number.isInteger(maxPlayers)||maxPlayers<2))throw new Error('Invalid player capacity');
+ if(!Number.isFinite(respawnDelayMs)||respawnDelayMs<=0)throw new Error('Invalid respawn delay');
  let closing=false,closePromise;
- const rooms=new Map(), clients=new Map(),scores=createScoreStore(scoreFile);
+ const rooms=new Map(), clients=new Map(),scores=createScoreStore(scoreFile,{ranking:continuous?'killstreak':'points'});
  const server=http.createServer(async(req,res)=>{
   try{
   const url=new URL(req.url,'http://localhost');
   if(url.pathname==='/health'){res.writeHead(closing?503:200,{'Content-Type':'application/json','Cache-Control':'no-store'});return res.end(JSON.stringify({ok:!closing}));}
-  if(url.pathname==='/api/leaderboard'&&['GET','HEAD'].includes(req.method)){res.writeHead(200,{'Content-Type':'application/json','Cache-Control':'no-store'});return res.end(req.method==='HEAD'?undefined:JSON.stringify({players:scores.standings(),rules:POINTS}));}
+  if(url.pathname==='/api/leaderboard'&&['GET','HEAD'].includes(req.method)){res.writeHead(200,{'Content-Type':'application/json','Cache-Control':'no-store'});return res.end(req.method==='HEAD'?undefined:JSON.stringify({players:scores.standings(),rules:continuous?{...POINTS,win:0,finish:0,damageCapScope:'life',ranking:'bestStreak'}:POINTS}));}
   if(closing){res.writeHead(503,{'Retry-After':'2'});return res.end('Server restarting');}
   if(!['GET','HEAD'].includes(req.method)){res.writeHead(405);return res.end();}
    const path=resolve(root,'.'+decodeURIComponent(url.pathname==='/'?'/index.html':url.pathname));
@@ -41,8 +44,9 @@ export function createGameServer({maxPlayers=null,maxBufferedBytes=256*1024,coun
  }
  const send=(ws,msg)=>sendEncoded(ws,JSON.stringify(msg));
  // Poison and skeletons deal damage between hits. Settle it and credit whoever cast it before anything measures health.
- function settleScored(room,now=Date.now()){for(const dealt of settleRoom(room,now))recordLingering(room,dealt);}
- function view(room){const board=scores.standings(),byId=new Map(board.map(p=>[p.id,p]));const now=Date.now();settleScored(room,now);return {maxPlayers,code:room.code,hostId:room.hostId,phase:room.phase,startsAt:room.startsAt||0,endsAt:room.endsAt,winners:room.winners,results:room.results||null,players:room.players.map(({token,socket,disconnectedAt,...p})=>({...p,score:byId.get(p.id)})),shots:room.shots||[],combat:{mana:MANA,spells:SPELLS},serverTime:now};}
+ function announceStreak(room,event){if(event)for(const p of room.players)send(p.socket,event);}
+ function settleScored(room,now=Date.now()){for(const dealt of settleRoom(room,now))if(room.continuous)announceStreak(room,creditContinuous(room,scores,dealt));else recordLingering(room,dealt);}
+ function view(room){const now=Date.now();settleScored(room,now);if(room.continuous)finish(room);const board=scores.standings(),byId=new Map(board.map(p=>[p.id,p]));return {continuous:!!room.continuous,respawnDelayMs,maxPlayers,code:room.code,hostId:room.hostId,phase:room.phase,startsAt:room.startsAt||0,endsAt:room.endsAt,winners:room.winners,results:room.results||null,players:room.players.map(({token,socket,disconnectedAt,damageCredit,koScoredLife,...p})=>({...p,score:byId.get(p.id)})),shots:room.shots||[],combat:{mana:MANA,spells:SPELLS},serverTime:now};}
  function broadcast(room,event){if(closing)return;const state=JSON.stringify({type:'state',room:view(room)}),encodedEvent=event?JSON.stringify(event):null;for(const p of room.players){if(encodedEvent)sendEncoded(p.socket,encodedEvent);sendEncoded(p.socket,state);}}
  // Begins the round once the countdown is over, or returns to the lobby if too few players are still connected.
  function begin(room){
@@ -53,7 +57,7 @@ export function createGameServer({maxPlayers=null,maxBufferedBytes=256*1024,coun
   startScoring(room);room.phase='playing';room.startsAt=now;room.endsAt=now+180000;broadcast(room,{type:'round-start'});
  }
  // The moment each player is knocked out is what the end-of-round leaderboard ranks by.
- function finish(room){if(room.phase!=='playing')return;const moment=Date.now();for(const p of room.scoreRound?.players||room.players)if(p.health<=0&&!p.diedAt)p.diedAt=moment;const alive=room.players.filter(p=>p.health>0);if(alive.length<=1||Date.now()>=room.endsAt){settleScores(room,scores);room.phase='finished';const best=Math.max(...alive.map(p=>p.health),0);room.winners=alive.filter(p=>p.health===best).map(p=>p.id);}}
+ function finish(room){if(room.phase!=='playing')return;if(room.continuous){for(const p of room.players)if(p.life&&p.faceReady&&p.health<=0&&!p.respawnAt)scores.award(p.id,0,0,1);advanceRespawns(room,Date.now(),respawnDelayMs);const ids=new Set(room.players.map(p=>p.id));for(const p of room.players)for(const id of Object.keys(p.damageCredit||{}))if(!ids.has(id))delete p.damageCredit[id];return;}const moment=Date.now();for(const p of room.scoreRound?.players||room.players)if(p.health<=0&&!p.diedAt)p.diedAt=moment;const alive=room.players.filter(p=>p.health>0);if(alive.length<=1||Date.now()>=room.endsAt){settleScores(room,scores);room.phase='finished';const best=Math.max(...alive.map(p=>p.health),0);room.winners=alive.filter(p=>p.health===best).map(p=>p.id);}}
  // The firing phone reports an impact once, timed by its estimate of this clock. If that estimate runs
  // ahead, the report arrives before the spell could have; dropping it would turn a true hit into a miss
  // when the shot later expires. Hold it until the spell arrives. The claim of tracking is trusted either way.
@@ -61,7 +65,7 @@ export function createGameServer({maxPlayers=null,maxBufferedBytes=256*1024,coun
  function resolveImpact(room,player,shotId,tracked){
   const now=Date.now();settleScored(room,now);finish(room);const shot=(room.shots||[]).find(s=>s.shotId===shotId&&s.actorId===player.id),before=room.players.find(p=>p.id===shot?.targetId)?.health;
   const event=impactProjectile(room,player.id,shotId,tracked,now);
-  if(!event.error){heldImpacts.delete(shotId);recordScore(room,event,before);finish(room);broadcast(room,event);return;}
+  if(!event.error){heldImpacts.delete(shotId);if(room.continuous)announceStreak(room,scoreContinuousHit(room,scores,event,before));else recordScore(room,event,before);finish(room);broadcast(room,event);return;}
   if(!shot||closing||heldImpacts.has(shotId)||Date.now()>=shot.impactAt){heldImpacts.delete(shotId);return;}
   heldImpacts.add(shotId);setTimeout(()=>{heldImpacts.delete(shotId);resolveImpact(room,player,shotId,tracked);},shot.impactAt-Date.now()).unref();
  }
@@ -85,7 +89,7 @@ export function createGameServer({maxPlayers=null,maxBufferedBytes=256*1024,coun
 
      if(!room){
       const newCode='ARENA';
-      room={code:newCode,players:[],phase:'lobby',hostId:null,endsAt:0,winners:[]};rooms.set(newCode,room);
+      room={code:newCode,players:[],continuous,phase:continuous?'playing':'lobby',startsAt:continuous?Date.now():0,hostId:null,endsAt:0,winners:[]};rooms.set(newCode,room);
      }
      if(typeof m.token==='string')player=room.players.find(p=>p.token===m.token);
      if(player){
@@ -93,16 +97,17 @@ export function createGameServer({maxPlayers=null,maxBufferedBytes=256*1024,coun
       if(m.persona!=null&&room.phase!=='playing'&&room.phase!=='countdown')player.persona=persona;
       if(player.socket!==ws){clients.delete(player.socket);player.socket.close(4000,'Opened on another connection');}player.socket=ws;player.connected=true;player.disconnectedAt=null;}
      else{
-      if(room.phase==='playing'||room.phase==='countdown')return send(ws,{type:'error',message:'A round is running. Join when it finishes.'});
+      if(!continuous&&(room.phase==='playing'||room.phase==='countdown'))return send(ws,{type:'error',message:'A round is running. Join when it finishes.'});
       if(maxPlayers!==null&&room.players.length>=maxPlayers)return send(ws,{type:'error',message:`The arena is full (${maxPlayers} players).`});
       if(room.players.some(p=>p.name.toLowerCase()===name.toLowerCase()))return send(ws,{type:'error',message:'That mage name is taken. Choose another.'});
       const identity=scores.register(name,m.token);if(identity.error)return send(ws,{type:'error',message:identity.error});
-      player={...identity,persona,health:100,mana:MANA.max,manaUpdatedAt:Date.now(),shieldUntil:0,cooldowns:{},connected:true,shirt:null,socket:ws};room.players.push(player);if(!room.players.some(p=>p.id===room.hostId&&p.connected))room.hostId=player.id;
+      player={...identity,persona,health:continuous?0:100,life:0,respawnAt:null,mana:MANA.max,manaUpdatedAt:Date.now(),shieldUntil:0,cooldowns:{},connected:true,shirt:null,socket:ws};room.players.push(player);if(!room.players.some(p=>p.id===room.hostId&&p.connected))room.hostId=player.id;
      }
      clients.set(ws,{room,player});clearTimeout(timeout);send(ws,{type:'welcome',id:player.id,token:player.token,code:room.code});send(ws,{type:'faces',faces:room.faces||{}});send(ws,{type:'avatars',avatars:room.avatars||{}});broadcast(room);return;
     }
     const current=clients.get(ws);if(!current)return;const {room,player}=current;
     if(m.type==='start'){
+     if(continuous)return;
      if(player.id!==room.hostId)return send(ws,{type:'error',message:'Only the host can start a round.'});
      if(room.phase==='playing'||room.phase==='countdown')return;
      room.players=room.players.filter(p=>p.connected);
@@ -117,7 +122,7 @@ export function createGameServer({maxPlayers=null,maxBufferedBytes=256*1024,coun
     }else if(m.type==='cast'){
      const now=Date.now();settleScored(room,now);finish(room);const before=room.players.find(p=>p.id===m.targetId)?.health;
      const event=(typeof m.spell==='string'&&Object.hasOwn(SPELLS,m.spell)&&SPELLS[m.spell].flightMs)?launchProjectile(room,player.id,m.spell,m.targetId,randomUUID(),now):castSpell(room,player.id,m.spell,m.targetId,now);
-     if(event.error)send(ws,{type:'error',message:event.error});else{recordScore(room,event,before);finish(room);broadcast(room,event);}
+     if(event.error)send(ws,{type:'error',message:event.error});else{if(room.continuous)announceStreak(room,scoreContinuousHit(room,scores,event,before));else recordScore(room,event,before);finish(room);broadcast(room,event);}
     }else if(m.type==='impact'){
      resolveImpact(room,player,m.shotId,m.tracked===true);
     }else if(m.type==='shirt'){
@@ -131,10 +136,11 @@ export function createGameServer({maxPlayers=null,maxBufferedBytes=256*1024,coun
     }else if(m.type==='face'){
      // Face signatures live beside the room, not on the player, so the frequent state broadcast stays small.
      // They are held in memory only and removed when the player leaves or expires.
-     if(room.phase==='playing'||room.phase==='countdown')return send(ws,{type:'error',message:'Scan your face before the round starts.'});
+     if(!continuous&&(room.phase==='playing'||room.phase==='countdown'))return send(ws,{type:'error',message:'Scan your face before the round starts.'});
+     if(continuous&&player.faceReady)return send(ws,{type:'error',message:'Your face is already registered.'});
      if(!validEncodedSamples(m.samples)||(m.upper!==undefined&&!validEncodedSamples(m.upper)))return send(ws,{type:'error',message:'That face scan was not readable. Scan again.'});
      // upper: the same scan described from the eyes and forehead only, for players aiming with a phone over their face.
-     (room.faces??={})[player.id]={samples:[...m.samples],upper:[...(m.upper||[])]};player.faceReady=true;for(const p of room.players)send(p.socket,{type:'faces',faces:{[player.id]:room.faces[player.id]}});broadcast(room);
+     (room.faces??={})[player.id]={samples:[...m.samples],upper:[...(m.upper||[])]};player.faceReady=true;if(continuous&&!player.life){scores.resetStreak(player.id);spawnPlayer(player);}for(const p of room.players)send(p.socket,{type:'faces',faces:{[player.id]:room.faces[player.id]}});broadcast(room);
     }else if(m.type==='avatar'){
      // The player's map marker. Relayed once like a face signature, kept in memory only, removed when they leave.
      if(!validAvatar(m.image))return send(ws,{type:'error',message:'That photo could not be used as your map marker.'});
@@ -143,7 +149,9 @@ export function createGameServer({maxPlayers=null,maxBufferedBytes=256*1024,coun
      // Opt-in minimap position; null stops sharing. The 500ms tick broadcasts it.
      if(m.location===null)player.location=null;
      else if(validLocation(m.location)&&Date.now()-(player.location?.at||0)>=500)player.location={latitude:m.location.latitude,longitude:m.location.longitude,accuracy:Math.round(m.location.accuracy),at:Date.now()};
-    }else if(m.type==='leave'){if(room.phase==='playing'&&player.health>0){player.health=0;player.diedAt=Date.now();player.forfeited=true;}if(room.faces)delete room.faces[player.id];if(room.avatars){delete room.avatars[player.id];for(const p of room.players)if(p.id!==player.id)send(p.socket,{type:'avatars',avatars:{[player.id]:null}});}room.players=room.players.filter(p=>p.id!==player.id);clients.delete(ws);if(room.hostId===player.id)room.hostId=room.players.find(p=>p.connected)?.id;finish(room);broadcast(room);ws.close(1000);}
+    }else if(m.type==='leave'){
+     if(continuous){player.connected=false;player.disconnectedAt=Date.now();player.location=null;player.faceReady=false;if(room.faces)delete room.faces[player.id];if(room.avatars)delete room.avatars[player.id];clients.delete(ws);for(const p of room.players){send(p.socket,{type:'faces',faces:{[player.id]:null}});send(p.socket,{type:'avatars',avatars:{[player.id]:null}});}finish(room);broadcast(room);ws.close(1000);return;}
+     if(room.phase==='playing'&&player.health>0){player.health=0;player.diedAt=Date.now();player.forfeited=true;}if(room.faces)delete room.faces[player.id];if(room.avatars){delete room.avatars[player.id];for(const p of room.players)if(p.id!==player.id)send(p.socket,{type:'avatars',avatars:{[player.id]:null}});}room.players=room.players.filter(p=>p.id!==player.id);clients.delete(ws);if(room.hostId===player.id)room.hostId=room.players.find(p=>p.connected)?.id;finish(room);broadcast(room);ws.close(1000);}
    }catch{send(ws,{type:'error',message:'Invalid request.'});}
   });
   ws.on('close',()=>{const current=clients.get(ws);if(current)current.player.location=null;}); // never keep a disconnected player's position
@@ -163,7 +171,7 @@ export function createGameServer({maxPlayers=null,maxBufferedBytes=256*1024,coun
  return {server,rooms,close};
 }
 if(process.argv[1]===fileURLToPath(import.meta.url)){
- const game=createGameServer({scoreFile:resolve(process.env.DATA_DIR||'data','leaderboard.json')});const port=Number(process.env.PORT||3000);
+ const game=createGameServer({continuous:true,scoreFile:resolve(process.env.DATA_DIR||'data','leaderboard.json')});const port=Number(process.env.PORT||3000);
  game.server.listen(port,'0.0.0.0',()=>console.log(`ClashMIT ready on port ${port}`));
  for(const signal of ['SIGTERM','SIGINT'])process.once(signal,()=>{void game.close({graceMs:3000}).then(()=>process.exit(0));});
 }

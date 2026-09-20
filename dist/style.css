@@ -193,3 +193,19 @@
 
 /* Leave the upper-right corner free for the map. */
 .arena:has(.minimap:not([hidden])) .hud-top{right:146px}
+
+/* Plain standings, with the same typography and spacing as the join form. */
+.lobby-leaderboard{padding:18px 0 0;margin-top:22px;border:0;border-top:1px solid #ffffff35;border-radius:0;background:transparent}
+.lobby-leaderboard h2{font-size:.95rem;font-weight:600;margin:0 0 10px}
+.lobby-leaderboard table{font-size:.78rem}.lobby-leaderboard th{background:#121722dc;font-size:.65rem;color:#bfc5cc;font-weight:500}
+.lobby-leaderboard th,.lobby-leaderboard td{padding:9px 4px;border-color:#ffffff1c}
+.lobby-leaderboard th:first-child{width:26px}.lobby-leaderboard td:nth-child(2){max-width:120px}
+.lobby-leaderboard p{font-size:.66rem;color:#bfc5cc;line-height:1.4;margin-top:9px}.lobby-leaderboard .points-note{color:#a8aeb8}
+.lobby .join-panel #join{justify-content:center;font-size:.85rem}.lobby .join-panel input{margin-bottom:12px}
+.killstreak-pop{position:absolute;top:26%;left:50%;transform:translateX(-50%);z-index:7;pointer-events:none;display:flex;flex-direction:column;align-items:center;color:#ffcd73;text-shadow:0 3px 14px #000,0 0 22px #ff7c3044}
+.killstreak-pop b{font:900 4.5rem/1 'Barlow Condensed',Impact,sans-serif}.killstreak-pop span{font-size:.8rem;letter-spacing:.16em;font-weight:700}
+.killstreak-pop.show{animation:streak-arrive 2.3s ease-out both}
+@keyframes streak-arrive{0%{opacity:0;transform:translateX(-50%) scale(1.6)}12%,75%{opacity:1;transform:translateX(-50%) scale(1)}100%{opacity:0;transform:translateX(-50%) translateY(-20px)}}
+
+.lobby-leaderboard td:first-child{white-space:nowrap;font-size:.85rem}.lobby-leaderboard th:first-child{width:38px}
+.killstreak-global{position:absolute;top:22%;left:12px;right:12px;z-index:7;text-align:center;color:#ffd17f;font-size:.9rem;font-weight:700;pointer-events:none;text-shadow:0 2px 8px #000;background:#211a13dd;padding:9px 12px;border-radius:5px;border-bottom:2px solid #ffb651}

@@ -1,3 +1,4 @@
+import {respawnSeconds} from './respawn.js?v=1';
 // Round start, knock-out and end screens. Before a round every phone counts down to the same server moment; when it
 // ends the view darkens and a leaderboard shows who lasted longest, with medals for the top three.
 // Builds its own elements and styles, and sits under the HUD so the host can still tap New round.
@@ -12,6 +13,7 @@ export function createRoundOverlay({container,now=()=>Date.now(),onTick=()=>{},o
  const style=document.createElement('style');style.textContent=CSS+OUT_CSS+'.round-score-total,.round-breakdown{grid-column:2/-1}.round-board .round-earned{color:#ffcb83;font-weight:700;font-size:.9rem}.round-board .round-score-total{font-size:.72rem}.round-breakdown{font-size:.7rem;color:#a5a9b5}.round-breakdown summary{cursor:pointer}.round-board .round-breakdown small{display:block;white-space:normal;font-size:.7rem;line-height:1.6}.round-board li{row-gap:4px}';document.head.append(style);
  const root=document.createElement('div');root.className='round-overlay';root.setAttribute('aria-live','polite');container.append(root);
  const feed=document.createElement('div');feed.className='round-feed';feed.setAttribute('aria-live','assertive');const outScreen=document.createElement('div');outScreen.className='round-out';container.append(outScreen,feed);
+ let respawnTimer=null,respawning=null;
  let timer=null,shown='',lastSecond=null,goUntil=0,round=null;const health=new Map(),lastHitBy=new Map();
  function announce(player,myId,players){
   const by=players.find(p=>p.id===lastHitBy.get(player.id))?.name,mine=player.id===myId,line=document.createElement('div');if(mine)line.className='me';
@@ -52,6 +54,15 @@ export function createRoundOverlay({container,now=()=>Date.now(),onTick=()=>{},o
   }
   board.append(title,subtitle,list);root.replaceChildren(board);root.classList.add('show','dim');
  }
+ function clearRespawn(){clearInterval(respawnTimer);respawnTimer=null;respawning=null;}
+ function showRespawn(player,players){
+  container.classList.add('round-dead');
+  if(respawning===player.respawnAt)return;clearRespawn();respawning=player.respawnAt;
+  const title=document.createElement('b'),who=document.createElement('span'),note=document.createElement('small');
+  title.textContent='KNOCKED OUT';const by=players.find(p=>p.id===lastHitBy.get(player.id))?.name;who.textContent=by?`by ${by}`:'';
+  outScreen.replaceChildren(title,who,note);
+  const tick=()=>{const seconds=respawnSeconds(respawning,now());note.textContent=seconds?`Respawning in ${seconds}…`:'Waiting for server to respawn…';};tick();respawnTimer=setInterval(tick,100);
+ }
  return{
   // Call with every server state. Anything other than a countdown or a finished round clears the screen.
   // Who landed the hit that knocked someone out, remembered from impact events until the state shows the knock-out.
@@ -60,9 +71,12 @@ export function createRoundOverlay({container,now=()=>Date.now(),onTick=()=>{},o
    // A new round forgets the old one; within a round, anyone whose health has just reached zero is announced.
    if(room&&round!==room.startsAt){round=room.startsAt;health.clear();lastHitBy.clear();}
    if(room&&(room.phase==='playing'||room.phase==='finished'))for(const player of newlyOut(health,room.players))announce(player,myId,room.players);
-   if(room)for(const p of room.players)health.set(p.id,p.health);
+   if(room)for(const p of room.players){if(p.health>0&&health.get(p.id)<=0)lastHitBy.delete(p.id);health.set(p.id,p.health);}
+   const mine=room?.players.find(p=>p.id===myId);
+   if(room?.continuous&&mine?.health<=0&&mine.respawnAt)showRespawn(mine,room.players);
+   else if(mine?.health>0||!room||room.phase!=='playing'){clearRespawn();container.classList.remove('round-dead');outScreen.replaceChildren();}
    if(!room||room.phase!=='playing')container.classList.remove('round-dead');
    if(room?.phase==='countdown'&&room.startsAt)countdown(room.startsAt);else if(room?.phase==='finished')leaderboard(room,myId);else if(shown.startsWith('board:')||(shown.startsWith('count:')&&!goUntil&&room?.phase!=='playing'))hide();},
-  hide(){hide();container.classList.remove('round-dead');feed.replaceChildren();health.clear();},
+  hide(){hide();clearRespawn();container.classList.remove('round-dead');feed.replaceChildren();health.clear();},
  };
 }

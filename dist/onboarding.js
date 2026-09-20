@@ -3,11 +3,11 @@ export const STEPS=Object.freeze([
  {key:'attack',anchor:'attack',text:"Aim at a player and say a spell’s name to attack."},
  {key:'defence',anchor:'defence',text:"Say “Shield” to block or “Heal” to recover health."},
 ]);// A brand new player only: after their face is scanned, before any round is running, and never over the face scan.
-export function shouldOpen({seen,practice,faceReady,phase,scanOpen,open}){
- return !seen&&!practice&&!!faceReady&&!open&&!scanOpen&&(phase==='lobby'||phase==='finished');
+export function shouldOpen({seen,practice,faceReady,phase,scanOpen,open,continuous=false}){
+ return !seen&&!practice&&!!faceReady&&!open&&!scanOpen&&(phase==='lobby'||phase==='finished'||(continuous&&phase==='playing'));
 }
 // The countdown and the live round own the screen; a coach mark must never compete with them.
-export function shouldClose(phase){return phase==='countdown'||phase==='playing';}
+export function shouldClose(phase,continuous=false){return phase==='countdown'||(!continuous&&phase==='playing');}
 // One box around every control a step points at, ignoring any that is hidden or swapped out.
 export function union(rects){
  const live=(rects||[]).filter(r=>r&&r.width>0&&r.height>0);if(!live.length)return null;

@@ -81,3 +81,9 @@ test('the attack and defence steps light the right cards for every persona',()=>
  // The things this HUD pass removed must stay gone.
  for(const gone of ['tracking-retry','YOUR HEALTH','how-to-play'])assert.ok(!html.includes(gone),`${gone} is gone from the HUD`);
 });
+
+test('continuous games allow first-time tips after scanning, but never repeat seen tips',()=>{
+ assert.equal(shouldOpen({...fresh,phase:'playing',continuous:true}),true);
+ assert.equal(shouldOpen({...fresh,phase:'playing',continuous:true,seen:true}),false);
+ assert.equal(shouldClose('playing',true),false);
+});

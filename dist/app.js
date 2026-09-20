@@ -1,9 +1,11 @@
+import {createKillStreak} from './killstreak.js?v=1';
+import {respawnSeconds,advanceRespawns} from './respawn.js?v=1';
 import {createHealthHud} from './health-hud.js?v=1';
-import {setupLeaderboard} from './leaderboard.js?v=scores2';
+import {setupLeaderboard} from './leaderboard.js?v=kd1';
 import {setupLobbyVideo} from './lobby-video.js?v=2';
 import {createGameConnection} from './connection.js?v=hosting1';
 import {createTargetOverlay} from './target-overlay.js?v=health2';
-import {piercerOf,SPELLS,MANA,manaAt,castSpell,launchProjectile,impactProjectile,FLIGHT_MS,PERSONAS,DEFAULT_PERSONA,personaOf,settleRoom,lingeringKiller} from './rules.js?v=regen1';
+import {piercerOf,SPELLS,MANA,manaAt,castSpell,launchProjectile,impactProjectile,FLIGHT_MS,PERSONAS,DEFAULT_PERSONA,personaOf,settleRoom,lingeringKiller} from './rules.js?v=continuous1';
 import {PERSONA_INFO,SPELL_INFO,deckWords,labelOf} from './personas.js?v=heel1';
 import {createSkeletonArmy,feetOf} from './skeleton-army.js?v=persona1';
 import {createServerClock} from './server-clock.js?v=combat1';
@@ -19,12 +21,13 @@ import {encodeDescriptor,decodeDescriptor} from './face-id.js?v=face13';
 import {createMinimap} from './minimap.js?v=topright3';
 import {createHaptics} from './haptics.js?v=haptic4';
 import {requestAllPermissions} from './permissions.js?v=perm1';
-import {createRoundOverlay} from './round-overlay.js?v=scores2';
-import {createOnboarding,shouldOpen,shouldClose} from './onboarding.js?v=voiceguide3';
+import {createRoundOverlay} from './round-overlay.js?v=respawn1';
+import {createOnboarding,shouldOpen,shouldClose} from './onboarding.js?v=continuous1';
 const $=id=>document.getElementById(id);
-const previewMode=new URLSearchParams(location.search).get('test'),hudPreview=['hud','coach'].includes(previewMode);
+const previewMode=new URLSearchParams(location.search).get('test'),hudPreview=['hud','coach','respawn'].includes(previewMode);
 const previewGps={watchPosition(onFix){queueMicrotask(()=>onFix({coords:{latitude:42.3601,longitude:-71.0942,accuracy:4}}));return 1;},clearWatch(){}};
 setupLobbyVideo({video:$('lobby-background'),lobby:$('lobby'),button:$('background-toggle'),headline:$('lobby-headline')});
+const killStreak=createKillStreak($('arena'));$('leave').addEventListener('click',()=>killStreak.clear());
 const targetOverlay=createTargetOverlay($('arena'),$('boxes'));
 const audio=createSpellAudio();document.addEventListener('pointerdown',()=>{void audio.unlock();},{passive:true});
 const safeRead=key=>{try{return localStorage.getItem(key)||'';}catch{return '';}};
@@ -63,6 +66,7 @@ const roundOverlay=createRoundOverlay({container:$('arena'),now:()=>serverClock.
 const spellCards=()=>[...$('spells').children];
 const onboarding=createOnboarding({container:$('arena'),anchors:{attack:()=>spellCards().slice(0,2),defence:()=>spellCards().slice(-2)},gates:{},onFinish:()=>{if(!hudPreview)safeWrite('fieldspell-coached','1');}});$('leave').addEventListener('click',()=>onboarding.hide());
 const flights=new Map(),completedShots=new Set();let dummyTimer,dummyShots=0;
+function rememberShot(id){completedShots.add(id);if(completedShots.size>512)completedShots.delete(completedShots.values().next().value);}
 const army=createSkeletonArmy($('arena'));
 const describeIncoming=spell=>{const info=SPELL_INFO[spell]||SPELL_INFO.fireball;return{label:info.label.toLowerCase(),rgb:info.rgb,bolt:!!info.bolt,thrown:spell!=='skeletonArmy',hit:spell==='skeletonArmy'?'Skeletons on you':undefined};};
 const incoming=createIncomingFireballs({container:$('arena'),renderer:()=>fireScene,describe:describeIncoming,getAttacker:id=>{if(simulated())return{x:.5,y:.4};const p=matchedPerson(id);return p?.fresh?{x:p.x,y:p.y}:null;},now});
@@ -100,7 +104,7 @@ function effect(spell,{shot,projectile=true}={}){
  const target=targetPoint(shot?.targetId)||{x:.5,y:.4};let depth=false;
  if(isThrown(spell)&&projectile&&shot?.shotId){
   const flightMs=shot.flightMs||FLIGHT_MS,elapsedMs=Math.max(0,flightMs-((shot.impactAt??((shot.at||now())+flightMs))-now())),startedAt=performance.now()-elapsedMs,roundEndsAt=room.endsAt,actor=myId,flight=createFlight({startedAt,flightMs});
-  const timer=setInterval(()=>{const active=!!room&&room.endsAt===roundEndsAt&&myId===actor&&!document.hidden;const result=flight.step(performance.now(),simulated()||!!matchedPerson(shot.targetId)?.fresh,active);if(result){clearInterval(timer);flights.delete(shot.shotId);if(!result.cancelled)completedShots.add(shot.shotId);if(!result.cancelled)finishShot(shot,result.tracked);}},25);flights.set(shot.shotId,timer);
+  const timer=setInterval(()=>{const active=!!room&&room.endsAt===roundEndsAt&&myId===actor&&!document.hidden;const result=flight.step(performance.now(),simulated()||!!matchedPerson(shot.targetId)?.fresh,active);if(result){clearInterval(timer);flights.delete(shot.shotId);if(!result.cancelled)rememberShot(shot.shotId);if(!result.cancelled)finishShot(shot,result.tracked);}},25);flights.set(shot.shotId,timer);
   // Bolts are streaks, the army walks on its own ground layer, and everything else is thrown in the 3D scene.
   if(SPELL_INFO[spell]?.bolt)lightningEffect(target,spell);
   else if(spell!=='skeletonArmy'){try{depth=!!fireScene?.fire({...target,style:spell,getTarget:()=>targetPoint(shot.targetId),flightMs,elapsedMs});}catch(e){console.warn('Spell graphics fallback',e);}}
@@ -109,7 +113,7 @@ function effect(spell,{shot,projectile=true}={}){
  layer.className='cast-effect '+spell+(depth?' has-depth':'');effectTimer=setTimeout(()=>{layer.className='';layer.replaceChildren();},SPELL_INFO[spell]?.bolt?450:2200);
 }
 function handleImpact(m){
- const shown=incoming.resolve(m);completedShots.add(m.shotId);if(m.targetId===myId&&!shown&&!m.missed){$('arena').classList.add('incoming-hit-fallback');setTimeout(()=>$('arena').classList.remove('incoming-hit-fallback'),250);}const spell=m.spell||'fireball',name=labelOf(spell),rule=SPELLS[spell]||SPELLS.fireball,damage=rule.damage,linger=rule.dot||rule.swarm,after=linger?linger.perSecond*linger.duration/1000:0;
+ const shown=incoming.resolve(m);rememberShot(m.shotId);if(m.targetId===myId&&!shown&&!m.missed){$('arena').classList.add('incoming-hit-fallback');setTimeout(()=>$('arena').classList.remove('incoming-hit-fallback'),250);}const spell=m.spell||'fireball',name=labelOf(spell),rule=SPELLS[spell]||SPELLS.fireball,damage=rule.damage,linger=rule.dot||rule.swarm,after=linger?linger.perSecond*linger.duration/1000:0;
  const dealt=[damage?`${damage} damage`:'',after?`${after} more over ${linger.duration/1000}s`:'',rule.stun?'stunned':''].filter(Boolean).join(' · '),taken=[damage?`−${damage} HP`:'',rule.dot?'poisoned':'',rule.swarm?'say a splash spell to clear them':'',rule.stun?'stunned':''].filter(Boolean).join(' · ');
  // The impact event arrives before the state that applies it, so a lethal hit is predicted from current health.
  if(!m.missed&&!m.blocked&&m.targetId===myId&&(me()?.health??100)-damage<=0)deathFelt=true;
@@ -129,22 +133,23 @@ const connection=createGameConnection({
  onDisconnect:()=>{selected=null;lockId=null;castPending=false;clearFlights();},
  onError:message=>{setError(message);$('connection').textContent='Disconnected · rejoin the arena';},
  onMessage:m=>{
+  if(m.type==='killstreak'&&m.actorId!==myId)killStreak.announce(m.name,m.streak);
   if(m.type==='welcome'){if(myId&&myId!==m.id){clearFlights();completedShots.clear();faceTracker.reset();room=null;notify('The arena restarted. Rejoining with your face scan.');}serverClock.reset();joined=true;myId=m.id;sessionStorage.setItem('fieldspell-token',m.token);safeWrite('clashmit-player-token',m.token);safeWrite('clashmit-player-id',m.id);showArena();startJoinedSensors();$('join').disabled=false;}
   // The knock-out banner names whoever landed the last hit. A death that no hit announced since the last state was
   // dealt by poison or skeletons, so name their caster instead of whoever happened to hit that player last.
-  if(m.type==='state'){if(room)for(const p of m.room.players){const was=room.players.find(o=>o.id===p.id);if(was?.health>0&&!(p.health>0)&&!hitSinceState.has(p.id)){const by=lingeringKiller(was);if(by)roundOverlay.impact({targetId:p.id,actorId:by});}}hitSinceState.clear();}
-  if(m.type==='state'){if(room&&room.endsAt!==m.room.endsAt)clearFlights();room=m.room;serverClock.bootstrap(room.serverTime);incoming.sync((room.shots||[]).filter(s=>s.targetId===myId));for(const shot of room.shots||[])if(shot.actorId===myId&&room.phase==='playing'&&now()<(shot.expiresAt??Infinity))effect(shot.spell||'fireball',{shot});renderState();}
+  if(m.type==='state'){const previous=me()?.score?.currentStreak,next=m.room.players.find(p=>p.id===myId)?.score?.currentStreak;if(previous!==undefined&&next>previous)killStreak.show(next);if(room)for(const p of m.room.players){const was=room.players.find(o=>o.id===p.id);if(was?.health>0&&!(p.health>0)&&!hitSinceState.has(p.id)){const by=lingeringKiller(was);if(by)roundOverlay.impact({targetId:p.id,actorId:by});}}hitSinceState.clear();}
+  if(m.type==='state'){if(room&&room.endsAt!==m.room.endsAt)clearFlights();if(m.room.continuous&&me()&&(me().life!==m.room.players.find(p=>p.id===myId)?.life||me().health>0&&m.room.players.find(p=>p.id===myId)?.health<=0)){clearFlights();completedShots.clear();castPending=false;selected=null;lockId=null;}room=m.room;serverClock.bootstrap(room.serverTime);incoming.sync((room.shots||[]).filter(s=>s.targetId===myId));for(const shot of room.shots||[])if(shot.actorId===myId&&room.phase==='playing'&&now()<(shot.expiresAt??Infinity))effect(shot.spell||'fireball',{shot});renderState();}
   if(m.type==='state')minimap.update(m.room,myId);
   if(m.type==='impact'){roundOverlay.impact(m);if(!m.missed&&!m.blocked&&m.targetId)hitSinceState.add(m.targetId);}
   if(m.type==='state'){roundOverlay.update(m.room,myId);if(m.room.phase==='countdown')$('phase').textContent='Round starting…';}
-  if(m.type==='state'){if(shouldClose(m.room.phase))onboarding.hide();else if(shouldOpen({seen:safeRead('fieldspell-coached')==='1',practice,faceReady:me()?.faceReady,phase:m.room.phase,scanOpen:faceScan.isOpen,open:onboarding.isOpen}))onboarding.open();}
+  if(m.type==='state'){if(shouldClose(m.room.phase,m.room.continuous)||me()?.respawnAt)onboarding.hide();else if(shouldOpen({seen:safeRead('fieldspell-coached')==='1',practice,continuous:m.room.continuous,faceReady:me()?.faceReady,phase:m.room.phase,scanOpen:faceScan.isOpen,open:onboarding.isOpen}))onboarding.open();}
   // Each player's scan: whole-face samples plus upper-face ones for when a phone hides their nose and mouth.
   if(m.type==='faces')for(const [id,scan] of Object.entries(m.faces||{})){const decode=list=>(list||[]).map(decodeDescriptor).filter(Boolean),samples=decode(scan?.samples);if(samples.length)faces.set(id,{samples,upper:decode(scan.upper)});else faces.delete(id);}
   if(m.type==='avatars'){for(const [id,image] of Object.entries(m.avatars||{})){if(typeof image==='string'&&image.startsWith('data:image/jpeg;base64,'))avatars.set(id,image);else avatars.delete(id);}minimap.setAvatars(avatars);}
   // First thing a new player sees after the permission prompts: the face scan, without having to find a button.
   // A player who already scanned (the server restarted, or they rejoined) silently sends the same signature again.
   if(m.type==='welcome')faceResent=false;
-  if(m.type==='state'&&joined&&me()&&!me().faceReady&&room.phase!=='playing'){if(mySamples){if(!faceResent){faceResent=true;send({type:'face',...mySamples});if(myAvatar)send({type:'avatar',image:myAvatar});}}else if(!autoScanOffered){autoScanOffered=true;void permissionsReady.then(()=>{if(joined&&!practice&&!$('arena').hidden&&!me()?.faceReady&&!faceScan.isOpen)faceScan.open();});}}
+  if(m.type==='state'&&joined&&me()&&!me().faceReady&&(room.continuous||room.phase!=='playing')){if(mySamples){if(!faceResent){faceResent=true;send({type:'face',...mySamples});if(myAvatar)send({type:'avatar',image:myAvatar});}}else if(!autoScanOffered){autoScanOffered=true;void permissionsReady.then(()=>{if(joined&&!practice&&!$('arena').hidden&&!me()?.faceReady&&!faceScan.isOpen)faceScan.open();});}}
   if(m.type==='spell'){if(m.actorId===myId){castPending=false;effect(m.spell,{shot:m});}else if(m.targetId===myId&&m.shotId){incoming.launch(m);audio.play(m.spell);}else if(m.spell==='shield')notify(`Opponent shield active · ${labelOf(piercerOf(myDeck()))} pierces it`);else if(m.spell==='heal'){healed.set(m.actorId,Date.now()+900);notify(`${room?.players.find(p=>p.id===m.actorId)?.name||'Opponent'} healed +20`);}else if(m.clearedSwarm)notify('Your skeletons were cleared');}
   if(m.type==='impact')handleImpact(m);
   if(m.type==='round-start')notify('Round started. Keep your opponent in view.');
@@ -191,8 +196,8 @@ $('camera-start').onclick=()=>{if((trackingPractice&&!localFace)||(!practice&&!m
 function renderState(){if(!me())return;renderDeck();
  // Poison and skeletons kill between impacts, on the server's tick, so no impact announces that death. Feel it here, once.
  {const health=trackingPractice?100:me().health;if(lastHealth>0&&health<=0&&!deathFelt){deathFelt=true;haptics.play('death');}if(health>0)deathFelt=false;lastHealth=health;}
-$('arena').classList.toggle('round-live',room.phase==='playing');const p=me(),displayHealth=trackingPractice?opponent()?.health:p.health;healthHud.update(room.players,myId,displayHealth,trackingPractice?'Target health':'Your health');$('room-label').textContent=hudPreview?'HUD PREVIEW':trackingPractice?'ONE PERSON FACE TEST':practice?'SOLO PRACTICE':'MULTIPLAYER ARENA';$('start-round').hidden=room.hostId!==myId;$('start-round').disabled=!trackingPractice&&room.phase==='playing';$('start-round').textContent=trackingPractice?'Reset target':room.phase==='finished'?'New round':'Start round';
- $('player-score').hidden=practice||!p.score;$('player-score').textContent=p.score?`Overall #${p.score.rank} · ${p.score.points} pts · ${p.score.wins} wins${room.phase==='playing'?` · +${p.roundPoints||0} this round`:''}`:'';
+$('arena').classList.toggle('round-live',room.phase==='playing');const p=me(),displayHealth=trackingPractice?opponent()?.health:p.health;healthHud.update(room.players,myId,displayHealth,trackingPractice?'Target health':'Your health');$('room-label').textContent=hudPreview?'HUD PREVIEW':trackingPractice?'ONE PERSON FACE TEST':practice?'SOLO PRACTICE':'MULTIPLAYER ARENA';$('start-round').hidden=room.continuous||room.hostId!==myId;$('start-round').disabled=!trackingPractice&&room.phase==='playing';$('start-round').textContent=trackingPractice?'Reset target':room.phase==='finished'?'New round':'Start round';
+ $('player-score').hidden=practice||!p.score;$('player-score').textContent=p.score?`#${p.score.rank} · Streak ${p.score.currentStreak||0} · Best ${p.score.bestStreak||0} · ${p.score.knockouts} kills · ${p.score.deaths||0} deaths`:'';
  if(room.phase==='finished'){const winners=room.players.filter(p=>room.winners.includes(p.id)).map(p=>p.name);$('phase').textContent=room.results?(room.results.winnerId?`${room.results.players.find(p=>p.id===room.results.winnerId)?.name} wins`:'Time up · no last-standing win'):(winners.length===1?`${winners[0]} wins`:winners.length?'Round tied':'Round ended');}else if(room.phase==='lobby')$('phase').textContent=room.hostId===myId?`${room.players.length}${room.maxPlayers?`/${room.maxPlayers}`:''} joined · you control the arena`:`Waiting for the host (${room.players.find(player=>player.id===room.hostId)?.name||'reconnecting…'})`;
 }
 function renderAim(){
@@ -211,7 +216,7 @@ function renderAim(){
  renderArmy();
 }
 const hitSinceState=new Set();let castPending=false,castRequest=0,wasStunned=false,lastBeat=0,lastHealth=100,deathFelt=false,deckSignature='';const healed=new Map();
-function cast(spell){void audio.unlock();if(!room||!myDeck().includes(spell))return;if(room.phase!=='playing'){notify('The host needs to start the round first.');return;}renderAim();if((me().stunUntil||0)>now()){notify('You’re stunned.');return;}
+function cast(spell){void audio.unlock();if(!room||!myDeck().includes(spell))return;if(me()?.health<=0){notify(me()?.respawnAt?`Respawning in ${respawnSeconds(me().respawnAt,now())}…`:'Complete your face scan first.');return;}if(room.phase!=='playing'){notify('The host needs to start the round first.');return;}renderAim();if((me().stunUntil||0)>now()){notify('You’re stunned.');return;}
  // Skeletons are on you, not across the field: a splash spell may be spent on them with nobody locked.
  const clearing=!!SPELLS[spell].splash&&active(me().swarm,now());
  if(isThrown(spell)&&!clearing&&(!selected||Date.now()-lockSince<200||(!simulated()&&!matchedPerson()?.fresh))){notify('Aim at another player until their face locks.');return;}if(practice){const event=isThrown(spell)?launchProjectile(room,myId,spell,selected,crypto.randomUUID()):castSpell(room,myId,spell,selected);if(event.error){notify(event.error);return;}effect(spell,{shot:event});renderState();}else if(connection.ready){if(castPending)return;castPending=true;const request=++castRequest;send({type:'cast',spell,targetId:selected});notify('Casting '+labelOf(spell)+'…');setTimeout(()=>{if(castPending&&request===castRequest){castPending=false;notify('Cast not confirmed. Check the connection.');}},2500);}else notify('Reconnecting. Casting is paused.');}
@@ -263,8 +268,8 @@ function renderCombat(){
 }
 function renderAimFrame(){if(room&&!document.hidden&&!$('arena').hidden)renderAim();requestAnimationFrame(renderAimFrame);}
 requestAnimationFrame(renderAimFrame);
-setInterval(()=>{if(!room)return;if(practice){const before=room.players.map(p=>p.health).join();settleRoom(room,Date.now());if(room.phase==='playing'&&opponent()?.health<=0){room.phase='finished';room.winners=[myId];}if(before!==room.players.map(p=>p.health).join()||room.phase==='finished')renderState();}renderCombat();
- if(room.phase==='playing'&&trackingPractice){$('phase').textContent='Real face tracking · local test';}else if(room.phase==='playing'){const seconds=Math.max(0,Math.ceil((room.endsAt-now())/1000));$('phase').textContent=`${Math.floor(seconds/60)}:${String(seconds%60).padStart(2,'0')} remaining`;if(practice&&seconds===0){room.phase='finished';room.winners=[];renderState();}}
+setInterval(()=>{if(!room)return;if(practice){if(room.continuous){if(advanceRespawns(room,Date.now()).length)renderState();roundOverlay.update(room,myId);}const before=room.players.map(p=>p.health).join();settleRoom(room,Date.now());if(room.phase==='playing'&&opponent()?.health<=0){room.phase='finished';room.winners=[myId];}if(before!==room.players.map(p=>p.health).join()||room.phase==='finished')renderState();}renderCombat();
+ if(room.continuous){$('phase').textContent=me()?.respawnAt?`Respawning in ${respawnSeconds(me().respawnAt,now())}…`:`Live arena · ${room.players.filter(p=>p.connected&&p.faceReady).length} players`;}else if(room.phase==='playing'&&trackingPractice){$('phase').textContent='Real face tracking · local test';}else if(room.phase==='playing'){const seconds=Math.max(0,Math.ceil((room.endsAt-now())/1000));$('phase').textContent=`${Math.floor(seconds/60)}:${String(seconds%60).padStart(2,'0')} remaining`;if(practice&&seconds===0){room.phase='finished';room.winners=[];renderState();}}
 },100);
 document.addEventListener('visibilitychange',()=>{if(document.hidden){voice.pause();faceTracker.reset();}else if(joined&&!practice){if(!faceScan.isOpen)voice.resume();connection.check();notify('Find your opponent again before casting.');}});
 window.addEventListener('online',()=>{if(joined&&!practice)connection.check();});
@@ -290,6 +295,7 @@ if(hudPreview){
  room={phase:'lobby',hostId:'dummy',serverTime:Date.now(),endsAt:Date.now()+180000,winners:[],players:[make(myId,'You',75,42.3601,-71.0942),make('dummy','Alex',100,42.36025,-71.09405),make('preview-leon','Leon',50,42.36003,-71.0944),make('preview-john','John',20,42.35985,-71.0941)]};
  showArena();$('camera-prompt').hidden=true;$('camera').hidden=true;
  $('connection').textContent='Preview · simulated players';$('voice-status').textContent='Preview only · in a game, voice and location start on Join.';
+ if(previewMode==='respawn'){room.continuous=true;room.phase='playing';room.endsAt=0;for(const p of room.players)p.life=1;me().health=0;me().diedAt=Date.now();me().respawnAt=Date.now()+10000;roundOverlay.update(room,myId);}
  renderState();minimap.update(room,myId);void minimap.enable({requestCompass:false});if(previewMode==='coach')onboarding.open();
- let step=0;setInterval(()=>{if(!hudPreview||$('arena').hidden||!room)return;step++;const values=[[75,100,50,20],[40,60,90,20],[20,30,50,80],[95,100,50,20]][step%4];room.players.forEach((p,i)=>{p.health=values[i];p.location.at=Date.now();});renderState();minimap.update(room,myId);},3500);
+ let step=0;setInterval(()=>{if(!hudPreview||$('arena').hidden||!room||previewMode==='respawn')return;step++;const values=[[75,100,50,20],[40,60,90,20],[20,30,50,80],[95,100,50,20]][step%4];room.players.forEach((p,i)=>{p.health=values[i];p.location.at=Date.now();});renderState();minimap.update(room,myId);},3500);
 }

@@ -50,14 +50,14 @@ test('saved scores survive restart and only the same private browser token resto
  assert.ok(!(await readFile(file,'utf8')).includes(ada.token),'raw credentials are not saved');
  loaded.settle('round-1',[{id:ada.id,earnedPoints:225,won:true,knockouts:0}]);assert.equal(loaded.standings()[0].points,225);
 });
-test('equal points, Wins and knockouts share rank; exact ties skip the next place',()=>{
+test('equal points, kills and deaths share rank; exact ties skip the next place',()=>{
  const s=createScoreStore();const a=s.register('A'),b=s.register('B'),c=s.register('C');s.settle('one',[{id:a.id,earnedPoints:25,won:false,knockouts:0},{id:b.id,earnedPoints:25,won:false,knockouts:0},{id:c.id,earnedPoints:0,won:false,knockouts:0}]);
  assert.deepEqual(s.standings().map(p=>p.rank),[1,1,3]);
 });
 test('public standings never expose private state and reconnecting after leaving preserves identity',async t=>{
  const game=createGameServer();await new Promise(r=>game.server.listen(0,'127.0.0.1',r));t.after(()=>game.close());const base=`http://127.0.0.1:${game.server.address().port}`;
  async function enter(token){const ws=new WebSocket(base.replace('http','ws')+'/ws');t.after(()=>ws.terminate());const welcome=new Promise((resolve,reject)=>{ws.on('error',reject);ws.on('message',b=>{const m=JSON.parse(b);if(m.type==='welcome')resolve(m);});});ws.on('open',()=>ws.send(JSON.stringify({type:'join',name:'Ada',token,points:999999,wins:100})));return {ws,w:await welcome};}
- const a=await enter();const response=await fetch(base+'/api/leaderboard'),body=await response.json();assert.equal(response.headers.get('cache-control'),'no-store');assert.equal(body.players[0].points,0);assert.equal(body.players[0].wins,0);assert.equal(body.rules.win,200);assert.deepEqual(Object.keys(body.players[0]).sort(),['id','knockouts','name','points','rank','rounds','wins']);
+ const a=await enter();const response=await fetch(base+'/api/leaderboard'),body=await response.json();assert.equal(response.headers.get('cache-control'),'no-store');assert.equal(body.players[0].points,0);assert.equal(body.players[0].wins,0);assert.equal(body.rules.win,200);assert.deepEqual(Object.keys(body.players[0]).sort(),['bestStreak','currentStreak','deaths','id','knockouts','name','points','rank','rounds','wins']);
  const closed=new Promise(r=>a.ws.once('close',r));a.ws.send(JSON.stringify({type:'leave'}));await closed;
  const b=await enter(a.w.token);assert.equal(b.w.id,a.w.id);
 });

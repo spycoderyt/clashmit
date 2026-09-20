@@ -37,10 +37,10 @@ export function replenishMana(player,now=Date.now()){
 function bleed(player,key,now,dealt){
  const effect=player[key];if(!effect)return;
  const due=Math.floor((Math.min(now,effect.until)-effect.startedAt)*effect.perSecond/1000)-effect.applied;
- if(due>0){const amount=Math.min(due,player.health);player.health-=amount;effect.applied+=due;if(amount>0)dealt?.push({actorId:effect.by,targetId:player.id,amount,lethal:player.health<=0});}
+ if(due>0){const amount=Math.min(due,player.health);player.health-=amount;effect.applied+=due;if(amount>0)dealt?.push({actorId:effect.by,targetId:player.id,amount,lethal:player.health<=0,...(Number.isFinite(effect.life)?{actorLife:effect.life}:{})});}
  if(now>=effect.until||player.health<=0)player[key]=null;
 }
-const lingering=(rule,now,by)=>({by,perSecond:rule.perSecond,startedAt:now,until:now+rule.duration,applied:0});
+const lingering=(rule,now,by,life)=>({by,...(Number.isFinite(life)?{life}:{}),perSecond:rule.perSecond,startedAt:now,until:now+rule.duration,applied:0});
 // Who to name for a knock-out that no impact announced: the caster of the lingering damage that was on the
 // player when last seen alive. With both on them, the skeletons out-damage the poison and most likely landed it.
 export function lingeringKiller(before){
@@ -74,14 +74,14 @@ function prepareCast(room,casterId,spell,targetId,now){
  const actor=room.players.find(p=>p.id===casterId),rule=Object.hasOwn(SPELLS,spell)?SPELLS[spell]:null;
  // Lingering damage is settled first so a dead or freshly cleared caster is judged correctly; mana waits until the cast is otherwise valid.
  if(actor&&room.phase==='playing'){bleed(actor,'poison',now);bleed(actor,'swarm',now);}
- if(!rule||!actor?.connected||actor.health<=0||room.phase!=='playing')return{error:'Wait for a live round.'};
+ if(!rule||!actor?.connected||actor.health<=0||(room.continuous&&!actor.faceReady)||room.phase!=='playing')return{error:'Wait for a live round.'};
  if(!deckOf(actor).includes(spell))return{error:'Not in your deck.'};
  if((actor.stunUntil||0)>now)return{error:"You're stunned."};
  if((actor.cooldowns?.[spell]||0)>now)return{error:'That spell is recharging.'};
  let target;
  if(rule.damage||rule.flightMs){
   target=room.players.find(p=>p.id===targetId);
-  if(!target?.connected||target.health<=0||target.id===casterId){
+  if(!target?.connected||target.health<=0||(room.continuous&&!target.faceReady)||target.id===casterId){
    // Skeletons are on the caster, not across the field: splash may be spent on them with nobody locked.
    if(rule.splash&&actor.swarm)target=null;else return{error:'Aim at an active opponent.'};
   }
@@ -114,7 +114,7 @@ export function launchProjectile(room,actorId,spell,targetId,shotId,now=Date.now
  const{actor,rule,target}=cast;spend(actor,spell,rule,now);
  const clearedSwarm=rule.splash&&actor.swarm?true:undefined;if(clearedSwarm)actor.swarm=null;
  if(!target)return{type:'spell',spell,actorId,clearedSwarm,at:now};
- const shot={spell,shotId,actorId,targetId,at:now,flightMs:rule.flightMs,impactAt:now+rule.flightMs,expiresAt:now+rule.flightMs+2100};
+ const shot={spell,shotId,actorId,targetId,...(room.continuous?{actorLife:actor.life,targetLife:target.life}:{}),at:now,flightMs:rule.flightMs,impactAt:now+rule.flightMs,expiresAt:now+rule.flightMs+2100};
  (room.shots??=[]).push(shot);
  return{type:'spell',...shot,clearedSwarm};
 }
@@ -128,11 +128,12 @@ export function impactProjectile(room,actorId,shotId,tracked,now=Date.now()){
  room.shots.splice(i,1);const target=room.players.find(p=>p.id===shot.targetId);
  // Damage already owed is paid before this hit is judged: a target it has killed cannot be hit, and a refreshed effect must not swallow it.
  if(target&&room.phase==='playing'){bleed(target,'poison',now);bleed(target,'swarm',now);}
- const missed=!tracked||now>shot.expiresAt||room.phase!=='playing'||!target?.connected||target.health<=0;
+ const actor=room.players.find(p=>p.id===actorId),staleLife=room.continuous&&(!actor?.faceReady||!target?.faceReady||actor.health<=0||actor.life!==shot.actorLife||target.life!==shot.targetLife);
+ const missed=staleLife||!tracked||now>shot.expiresAt||room.phase!=='playing'||!target?.connected||target.health<=0;
  const blocked=!missed?damage(target,rule,now):false;
  if(!missed&&!blocked){
-  if(rule.dot)target.poison=lingering(rule.dot,now,shot.actorId);
-  if(rule.swarm)target.swarm=lingering(rule.swarm,now,shot.actorId);
+  if(rule.dot)target.poison=lingering(rule.dot,now,shot.actorId,shot.actorLife);
+  if(rule.swarm)target.swarm=lingering(rule.swarm,now,shot.actorId,shot.actorLife);
   if(rule.stun)target.stunUntil=now+rule.stun;
  }
  return{type:'impact',...shot,resolvedAt:now,missed,blocked};
