@@ -43,6 +43,9 @@ test('the server enforces decks and delivers skeleton damage on its own tick',as
  const swarmed=await m.next('state',s=>s.room.players.find(p=>p.id===mw.id).swarm);assert.ok(swarmed);
  // No further messages from either client: the tick alone must move health.
  const hurt=await m.next('state',s=>s.room.players.find(p=>p.id===mw.id).health<100);assert.ok(hurt.room.players.find(p=>p.id===mw.id).health<100);
+ // The leaderboard must pay for that damage too: it happens between hits, where no impact event is scored.
+ const paid=await w.next('state',s=>s.room.players.find(p=>p.id===ww.id).roundPoints>0),witch=paid.room.players.find(p=>p.id===ww.id),mage=paid.room.players.find(p=>p.id===mw.id);
+ assert.equal(witch.roundPoints,100-mage.health,'one point per health the skeletons have taken');
  m.send({type:'cast',spell:'fireball',targetId:null});const clear=await m.next('spell',e=>e.clearedSwarm);assert.equal(clear.shotId,undefined);
  const cleared=await m.next('state',s=>!s.room.players.find(p=>p.id===mw.id).swarm);assert.ok(cleared);
 });

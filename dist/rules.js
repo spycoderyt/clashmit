@@ -32,16 +32,21 @@ export function replenishMana(player,now=Date.now()){
  player.mana=manaAt(player,now);player.manaUpdatedAt=Math.max(player.manaUpdatedAt??now,now);return player.mana;
 }
 // Whole points fall due against the effect's own clock, so any settling cadence totals the same damage.
-function bleed(player,key,now){
+// `dealt`, when given, collects what was taken and by whom, so damage done between hits can still be credited.
+function bleed(player,key,now,dealt){
  const effect=player[key];if(!effect)return;
  const due=Math.floor((Math.min(now,effect.until)-effect.startedAt)*effect.perSecond/1000)-effect.applied;
- if(due>0){player.health=Math.max(0,player.health-due);effect.applied+=due;}
+ if(due>0){const amount=Math.min(due,player.health);player.health-=amount;effect.applied+=due;if(amount>0)dealt?.push({actorId:effect.by,targetId:player.id,amount,lethal:player.health<=0});}
  if(now>=effect.until||player.health<=0)player[key]=null;
 }
-const lingering=(rule,now)=>({perSecond:rule.perSecond,startedAt:now,until:now+rule.duration,applied:0});
-export function settle(player,now=Date.now()){replenishMana(player,now);bleed(player,'poison',now);bleed(player,'swarm',now);return player;}
+const lingering=(rule,now,by)=>({by,perSecond:rule.perSecond,startedAt:now,until:now+rule.duration,applied:0});
+export function settle(player,now=Date.now(),dealt){replenishMana(player,now);bleed(player,'poison',now,dealt);bleed(player,'swarm',now,dealt);return player;}
+// Returns the lingering damage just dealt as [{actorId,targetId,amount,lethal}]. A server that scores should settle
+// with the same `now` it then passes to a cast or an impact, so nothing is dealt unseen inside those calls.
 export function settleRoom(room,now=Date.now()){
- for(const p of room.players){if(room.phase==='playing')settle(p,now);else{replenishMana(p,now);p.poison=null;p.swarm=null;}}
+ const dealt=[];
+ for(const p of room.players){if(room.phase==='playing')settle(p,now,dealt);else{replenishMana(p,now);p.poison=null;p.swarm=null;}}
+ return dealt;
 }
 function prepareCast(room,casterId,spell,targetId,now){
  const actor=room.players.find(p=>p.id===casterId),rule=Object.hasOwn(SPELLS,spell)?SPELLS[spell]:null;
@@ -104,8 +109,8 @@ export function impactProjectile(room,actorId,shotId,tracked,now=Date.now()){
  const missed=!tracked||now>shot.expiresAt||room.phase!=='playing'||!target?.connected||target.health<=0;
  const blocked=!missed?damage(target,rule,now):false;
  if(!missed&&!blocked){
-  if(rule.dot)target.poison=lingering(rule.dot,now);
-  if(rule.swarm)target.swarm=lingering(rule.swarm,now);
+  if(rule.dot)target.poison=lingering(rule.dot,now,shot.actorId);
+  if(rule.swarm)target.swarm=lingering(rule.swarm,now,shot.actorId);
   if(rule.stun)target.stunUntil=now+rule.stun;
  }
  return{type:'impact',...shot,resolvedAt:now,missed,blocked};

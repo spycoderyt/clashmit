@@ -9,7 +9,7 @@ import {profileId} from '../dist/shirt.js';
 import {validLocation} from '../dist/geo.js';
 import {validEncodedSamples,validAvatar} from '../dist/face-id.js';
 import {serveVideo} from './video.js';
-import {createScoreStore,startScoring,recordScore,settleScores,POINTS} from './scores.js';
+import {createScoreStore,startScoring,recordScore,recordLingering,settleScores,POINTS} from './scores.js';
 
 const root=fileURLToPath(new URL('../dist/',import.meta.url));
 const mime={'.html':'text/html; charset=utf-8','.css':'text/css','.js':'text/javascript','.svg':'image/svg+xml','.wasm':'application/wasm','.jpg':'image/jpeg'};
@@ -40,7 +40,9 @@ export function createGameServer({maxPlayers=null,maxBufferedBytes=256*1024,coun
   try{ws.send(payload,error=>{if(error)ws.terminate();});}catch{ws.terminate();}
  }
  const send=(ws,msg)=>sendEncoded(ws,JSON.stringify(msg));
- function view(room){const board=scores.standings(),byId=new Map(board.map(p=>[p.id,p]));const now=Date.now();settleRoom(room,now);return {maxPlayers,code:room.code,hostId:room.hostId,phase:room.phase,startsAt:room.startsAt||0,endsAt:room.endsAt,winners:room.winners,results:room.results||null,players:room.players.map(({token,socket,disconnectedAt,...p})=>({...p,score:byId.get(p.id)})),shots:room.shots||[],combat:{mana:MANA,spells:SPELLS},serverTime:now};}
+ // Poison and skeletons deal damage between hits. Settle it and credit whoever cast it before anything measures health.
+ function settleScored(room,now=Date.now()){for(const dealt of settleRoom(room,now))recordLingering(room,dealt);}
+ function view(room){const board=scores.standings(),byId=new Map(board.map(p=>[p.id,p]));const now=Date.now();settleScored(room,now);return {maxPlayers,code:room.code,hostId:room.hostId,phase:room.phase,startsAt:room.startsAt||0,endsAt:room.endsAt,winners:room.winners,results:room.results||null,players:room.players.map(({token,socket,disconnectedAt,...p})=>({...p,score:byId.get(p.id)})),shots:room.shots||[],combat:{mana:MANA,spells:SPELLS},serverTime:now};}
  function broadcast(room,event){if(closing)return;const state=JSON.stringify({type:'state',room:view(room)}),encodedEvent=event?JSON.stringify(event):null;for(const p of room.players){if(encodedEvent)sendEncoded(p.socket,encodedEvent);sendEncoded(p.socket,state);}}
  // Begins the round once the countdown is over, or returns to the lobby if too few players are still connected.
  function begin(room){
@@ -57,8 +59,8 @@ export function createGameServer({maxPlayers=null,maxBufferedBytes=256*1024,coun
  // when the shot later expires. Hold it until the spell arrives. The claim of tracking is trusted either way.
  const heldImpacts=new Set();
  function resolveImpact(room,player,shotId,tracked){
-  finish(room);const shot=(room.shots||[]).find(s=>s.shotId===shotId&&s.actorId===player.id),before=room.players.find(p=>p.id===shot?.targetId)?.health;
-  const event=impactProjectile(room,player.id,shotId,tracked);
+  const now=Date.now();settleScored(room,now);finish(room);const shot=(room.shots||[]).find(s=>s.shotId===shotId&&s.actorId===player.id),before=room.players.find(p=>p.id===shot?.targetId)?.health;
+  const event=impactProjectile(room,player.id,shotId,tracked,now);
   if(!event.error){heldImpacts.delete(shotId);recordScore(room,event,before);finish(room);broadcast(room,event);return;}
   if(!shot||closing||heldImpacts.has(shotId)||Date.now()>=shot.impactAt){heldImpacts.delete(shotId);return;}
   heldImpacts.add(shotId);setTimeout(()=>{heldImpacts.delete(shotId);resolveImpact(room,player,shotId,tracked);},shot.impactAt-Date.now()).unref();
@@ -113,8 +115,8 @@ export function createGameServer({maxPlayers=null,maxBufferedBytes=256*1024,coun
      room.winners=[];room.phase='countdown';room.startsAt=Date.now()+countdownMs;room.endsAt=room.startsAt+180000;
      if(countdownMs>0){broadcast(room,{type:'countdown',startsAt:room.startsAt});room.startTimer=setTimeout(()=>begin(room),countdownMs);room.startTimer.unref();}else begin(room);
     }else if(m.type==='cast'){
-     finish(room);const before=room.players.find(p=>p.id===m.targetId)?.health;
-     const event=(typeof m.spell==='string'&&Object.hasOwn(SPELLS,m.spell)&&SPELLS[m.spell].flightMs)?launchProjectile(room,player.id,m.spell,m.targetId,randomUUID()):castSpell(room,player.id,m.spell,m.targetId);
+     const now=Date.now();settleScored(room,now);finish(room);const before=room.players.find(p=>p.id===m.targetId)?.health;
+     const event=(typeof m.spell==='string'&&Object.hasOwn(SPELLS,m.spell)&&SPELLS[m.spell].flightMs)?launchProjectile(room,player.id,m.spell,m.targetId,randomUUID(),now):castSpell(room,player.id,m.spell,m.targetId,now);
      if(event.error)send(ws,{type:'error',message:event.error});else{recordScore(room,event,before);finish(room);broadcast(room,event);}
     }else if(m.type==='impact'){
      resolveImpact(room,player,m.shotId,m.tracked===true);
@@ -147,7 +149,7 @@ export function createGameServer({maxPlayers=null,maxBufferedBytes=256*1024,coun
   ws.on('close',()=>{const current=clients.get(ws);if(current)current.player.location=null;}); // never keep a disconnected player's position
   ws.on('close',()=>{clearTimeout(timeout);const current=clients.get(ws);if(!current)return;const{room,player}=current;player.connected=false;player.disconnectedAt=Date.now();clients.delete(ws);if(room.hostId===player.id)room.hostId=room.players.find(p=>p.connected)?.id||player.id;broadcast(room);});
  });
- const tick=setInterval(()=>{for(const [code,room]of rooms){for(const p of room.players)if(!p.connected&&Date.now()-p.disconnectedAt>60000){if(p.health>0&&room.phase==='playing'){p.health=0;p.diedAt=Date.now();p.forfeited=true;}p.expired=true;}room.players=room.players.filter(p=>!p.expired);if(room.faces)for(const id of Object.keys(room.faces))if(!room.players.some(p=>p.id===id))delete room.faces[id];if(room.avatars)for(const id of Object.keys(room.avatars))if(!room.players.some(p=>p.id===id))delete room.avatars[id];if(!room.players.some(p=>p.id===room.hostId&&p.connected))room.hostId=room.players.find(p=>p.connected)?.id||room.players[0]?.id;settleRoom(room);finish(room);if(!room.players.length){clearTimeout(room.startTimer);rooms.delete(code);continue;}for(const event of expireProjectiles(room))broadcast(room,event);broadcast(room);}},500);tick.unref();
+ const tick=setInterval(()=>{for(const [code,room]of rooms){for(const p of room.players)if(!p.connected&&Date.now()-p.disconnectedAt>60000){if(p.health>0&&room.phase==='playing'){p.health=0;p.diedAt=Date.now();p.forfeited=true;}p.expired=true;}room.players=room.players.filter(p=>!p.expired);if(room.faces)for(const id of Object.keys(room.faces))if(!room.players.some(p=>p.id===id))delete room.faces[id];if(room.avatars)for(const id of Object.keys(room.avatars))if(!room.players.some(p=>p.id===id))delete room.avatars[id];if(!room.players.some(p=>p.id===room.hostId&&p.connected))room.hostId=room.players.find(p=>p.connected)?.id||room.players[0]?.id;settleScored(room);finish(room);if(!room.players.length){clearTimeout(room.startTimer);rooms.delete(code);continue;}for(const event of expireProjectiles(room))broadcast(room,event);broadcast(room);}},500);tick.unref();
  const heartbeat=setInterval(()=>{for(const ws of wss.clients){if(!ws.isAlive){ws.terminate();continue;}ws.isAlive=false;ws.ping();}},15000);heartbeat.unref();
  function close({graceMs=0}={}){
   if(closePromise)return closePromise;

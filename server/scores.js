@@ -46,9 +46,20 @@ export function recordScore(room,event,healthBefore){
  if(!actor||!target||actor===target||!Number.isFinite(healthBefore)||healthBefore<=0)return;
  const actual=Math.max(0,healthBefore-target.health);if(!actual)return;
  if(event.shotId)round.scoredShots.add(event.shotId);
+ credit(round,actor,target,actual,target.health<=0);
+}
+function credit(round,actor,target,actual,knockedOut){
  const key=actor.id+':'+target.id,previous=round.damage.get(key)||0,credited=Math.min(actual,Math.max(0,POINTS.damageCap-previous));round.damage.set(key,previous+credited);
  actor.roundPoints+=credited*POINTS.damage;
- if(target.health<=0){actor.roundKnockouts++;actor.roundPoints+=POINTS.knockout;}
+ if(knockedOut){actor.roundKnockouts++;actor.roundPoints+=POINTS.knockout;}
+}
+// Poison and skeletons deal their damage between hits, where no impact event exists to score. `dealt` is one entry
+// from settleRoom(); it counts toward the same per-opponent cap, and the point that kills earns the knockout.
+export function recordLingering(room,dealt){
+ const round=room.scoreRound;if(!round||round.settled||!dealt||!(dealt.amount>0))return;
+ const actor=round.players.find(p=>p.id===dealt.actorId),target=round.players.find(p=>p.id===dealt.targetId);
+ if(!actor||!target||actor===target)return;
+ credit(round,actor,target,dealt.amount,dealt.lethal===true);
 }
 export function settleScores(room,store){
  const round=room.scoreRound;if(!round||round.settled)return;
