@@ -8,10 +8,12 @@ const messages={
  'language-not-supported':'English speech recognition is unavailable on this device.',
  'no-speech':'No speech heard yet. Say “Fireball”, “Lightning”, “Shield” or “Heal”.'
 };
-export function setupVoice({Recognition,button,status,onSpell}){
+// onActive(listening) fires whenever the microphone starts or stops, including when an error stops it,
+// so the caller can swap the Enable voice button for the live transcript and back.
+export function setupVoice({Recognition,button,status,onSpell,onActive=()=>{}}){
  let active=false,recognition=null,restartTimer,startTimer;
  const show=text=>status.textContent=text;
- function stop(){active=false;clearTimeout(restartTimer);clearTimeout(startTimer);recognition?.abort();button.classList.remove('listening');button.textContent='◎ Enable voice';}
+ function stop(){const was=active;active=false;clearTimeout(restartTimer);clearTimeout(startTimer);recognition?.abort();button.classList.remove('listening');button.textContent='◎ Enable voice';if(was)onActive(false);}
  function start(){
   if(!active)return;
   const session=new Recognition(),handled=new Map();recognition=session;
@@ -36,6 +38,6 @@ export function setupVoice({Recognition,button,status,onSpell}){
   try{recognition.start();startTimer=setTimeout(()=>{stop();show('Speech did not start. Open this link in Safari or Chrome, allow the microphone, then try again.');},7000);}catch{stop();show('Speech is unavailable here. Open the game in Safari or Chrome.');}
  }
  if(!Recognition){button.disabled=true;button.textContent='Voice unavailable';show('This browser has no speech recognition. Open in Safari or Chrome, or use the spell buttons.');}
- else button.onclick=()=>{if(active){stop();show('Voice off. Tap Enable voice to listen again.');}else{active=true;button.textContent='Starting microphone…';show('Allow microphone and speech access if asked.');start();}};
+ else button.onclick=()=>{if(active){stop();show('Voice off. Tap Enable voice to listen again.');}else{active=true;button.textContent='Starting microphone…';show('Allow microphone and speech access if asked.');onActive(true);start();}};
  return{stop,isActive:()=>active};
 }

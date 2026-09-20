@@ -16,6 +16,7 @@ import {createMinimap} from './minimap.js?v=map5';
 import {createHaptics} from './haptics.js?v=haptic4';
 import {requestAllPermissions} from './permissions.js?v=perm1';
 import {createRoundOverlay} from './round-overlay.js?v=round1';
+import {createOnboarding,shouldOpen,shouldClose} from './onboarding.js?v=coach2';
 const $=id=>document.getElementById(id);
 setupLobbyVideo({video:$('lobby-background'),lobby:$('lobby'),button:$('background-toggle'),headline:$('lobby-headline')});
 const targetOverlay=createTargetOverlay($('arena'),$('boxes'));
@@ -41,6 +42,10 @@ $('leave').addEventListener('click',()=>{faces.clear();avatars.clear();minimap.s
 const haptics=createHaptics({isMuted:()=>audio.muted,stage:$('arena'),shakeTarget:$('camera')});document.querySelectorAll('.spell').forEach(button=>haptics.attachTap(button));if(new URLSearchParams(location.search).get('test')==='haptics')haptics.showTestPanel();
 // Synchronised 5-4-3-2-1 before every round and the leaderboard after it; a tick is felt on each second.
 const roundOverlay=createRoundOverlay({container:$('arena'),now:()=>serverClock.now(),onTick:second=>haptics.play(second?'tap':'hit')});$('leave').addEventListener('click',()=>roundOverlay.hide());
+// Three coach marks for a first-time player, once, while they wait for the host. Skipping or finishing
+// remembers them on this phone; How to play brings them back between rounds.
+const onboarding=createOnboarding({container:$('arena'),anchors:{voice:[$('voice'),$('voice-status')],health:$('health-track'),mana:$('mana-track'),attack:[$('fireball'),$('lightning')],defence:[$('shield'),$('heal')]},gates:{voice:()=>voice.isActive()||$('voice').disabled},onFinish:()=>safeWrite('fieldspell-coached','1')});$('leave').addEventListener('click',()=>onboarding.hide());
+$('how-to-play').onclick=()=>{if(room&&shouldClose(room.phase)){notify('The round is running. Tap How to play once it ends.');return;}onboarding.open();};
 const flights=new Map(),completedShots=new Set();
 const incoming=createIncomingFireballs({container:$('arena'),renderer:()=>fireScene,getAttacker:id=>{const p=matchedPerson(id);return p?.fresh?{x:p.x,y:p.y}:null;},now});
 const faceTracker=createFaceTracker($('camera'),{getGallery:gallery,onStatus:status=>{trackingStatus=status;}});
@@ -92,7 +97,7 @@ function handleImpact(m){
  if(m.actorId===myId)notify(m.missed?`Target lost · ${spell} missed`:m.blocked?`${name} blocked`:`${name} hit · ${damage} damage`);
  if(m.targetId===myId&&!m.missed)notify(m.blocked?`Your shield blocked the ${spell}`:`Hit by ${spell} · −${damage} HP`);
 }
-function showArena(){loadGraphics();$('lobby').hidden=true;$('arena').hidden=false;$('shirt-open').hidden=simulated();$('tracking-retry').hidden=simulated();$('camera-instructions').textContent=trackingPractice?'Scan your face, then step back and see how far the lock holds.':practice?'Practice a 3D fireball over your camera with a simulated target.':'Scan your face once, then point the camera at another player.';$('camera-privacy').textContent='Camera video stays on your phone.';$('camera-prompt').hidden=!!stream?.active;}
+function showArena(){loadGraphics();$('lobby').hidden=true;$('arena').hidden=false;$('shirt-open').hidden=simulated();$('camera-instructions').textContent=trackingPractice?'Scan your face, then step back and see how far the lock holds.':practice?'Practice a 3D fireball over your camera with a simulated target.':'Scan your face once, then point the camera at another player.';$('camera-privacy').textContent='Camera video stays on your phone.';$('camera-prompt').hidden=!!stream?.active;}
 function setError(text){$('join-status').textContent=text;$('join').disabled=false;notify(text);}
 function endpoint(){const url=new URL(location.hostname.endsWith('.chatgpt.site')?'https://clashmit-production.up.railway.app':location.origin);url.protocol=url.protocol==='https:'?'wss:':'ws:';url.pathname='/ws';url.search='';url.hash='';return url.href;}
 const connection=createGameConnection({
@@ -106,6 +111,7 @@ const connection=createGameConnection({
   if(m.type==='state'){if(room&&room.endsAt!==m.room.endsAt)clearFlights();room=m.room;serverClock.bootstrap(room.serverTime);incoming.sync((room.shots||[]).filter(s=>s.targetId===myId));for(const shot of room.shots||[])if(shot.actorId===myId&&room.phase==='playing'&&now()<(shot.expiresAt??Infinity))effect(shot.spell||'fireball',{shot});renderState();}
   if(m.type==='state')minimap.update(m.room,myId);
   if(m.type==='state'){roundOverlay.update(m.room,myId);if(m.room.phase==='countdown')$('phase').textContent='Round starting…';}
+  if(m.type==='state'){if(shouldClose(m.room.phase))onboarding.hide();else if(shouldOpen({seen:safeRead('fieldspell-coached')==='1',practice,faceReady:me()?.faceReady,phase:m.room.phase,scanOpen:faceScan.isOpen,open:onboarding.isOpen}))onboarding.open();}
   // Each player's scan: whole-face samples plus upper-face ones for when a phone hides their nose and mouth.
   if(m.type==='faces')for(const [id,scan] of Object.entries(m.faces||{})){const decode=list=>(list||[]).map(decodeDescriptor).filter(Boolean),samples=decode(scan?.samples);if(samples.length)faces.set(id,{samples,upper:decode(scan.upper)});else faces.delete(id);}
   if(m.type==='avatars'){for(const [id,image] of Object.entries(m.avatars||{})){if(typeof image==='string'&&image.startsWith('data:image/jpeg;base64,'))avatars.set(id,image);else avatars.delete(id);}minimap.setAvatars(avatars);}
@@ -139,8 +145,7 @@ async function startCamera(){
 const faceScan=setupFaceScan({beforeOpen:()=>{voice.stop();stopCamera();fireScene?.clear();},onSample:()=>haptics.play('tap'),onSave:(samples,upper,avatar)=>{if(trackingPractice){localFace={samples,upper};renderState();notify('Face saved. Step back and watch the lock follow you.');}else{mySamples={samples:samples.map(encodeDescriptor),upper:upper.map(encodeDescriptor)};send({type:'face',...mySamples});myAvatar=avatar;if(avatar)send({type:'avatar',image:avatar});notify('Face saved. Point your camera at another player.');}},onClose:()=>{if(!$('arena').hidden)startCamera();}});
 $('shirt-open').onclick=()=>{if(!practice&&room?.phase==='playing'){notify('Wait until the round ends to rescan your face.');return;}faceScan.open();};
 $('camera-start').onclick=()=>{if((trackingPractice&&!localFace)||(!practice&&!me()?.faceReady))faceScan.open();else startCamera();};
-$('tracking-retry').onclick=()=>{if(stream?.active)faceTracker.start();else startCamera();};
-function renderState(){if(!me())return;$('arena').classList.toggle('round-live',room.phase==='playing');const p=me(),displayHealth=trackingPractice?opponent()?.health:p.health;$('health-title').textContent=trackingPractice?'TARGET HEALTH':'YOUR HEALTH';$('health-value').innerHTML=`${displayHealth} <small>/ 100</small>`;$('health-fill').style.width=displayHealth+'%';$('room-label').textContent=trackingPractice?'ONE PERSON FACE TEST':practice?'SOLO PRACTICE':'MULTIPLAYER ARENA';$('start-round').hidden=room.hostId!==myId;$('start-round').disabled=!trackingPractice&&room.phase==='playing';$('start-round').textContent=trackingPractice?'Reset target':room.phase==='finished'?'New round':'Start round';$('shirt-open').textContent=(trackingPractice?localFace:p.faceReady)?'Rescan face':'Scan face';$('shirt-open').disabled=!practice&&room.phase==='playing';
+function renderState(){if(!me())return;$('arena').classList.toggle('round-live',room.phase==='playing');const p=me(),displayHealth=trackingPractice?opponent()?.health:p.health;$('health-title').textContent=trackingPractice?'TARGET':'HEALTH';$('health-value').textContent=`${displayHealth} / 100`;$('health-fill').style.width=displayHealth+'%';$('health-track').setAttribute('aria-valuenow',String(displayHealth));$('room-label').textContent=trackingPractice?'ONE PERSON FACE TEST':practice?'SOLO PRACTICE':'MULTIPLAYER ARENA';$('start-round').hidden=room.hostId!==myId;$('start-round').disabled=!trackingPractice&&room.phase==='playing';$('start-round').textContent=trackingPractice?'Reset target':room.phase==='finished'?'New round':'Start round';$('shirt-open').textContent=(trackingPractice?localFace:p.faceReady)?'Rescan face':'Scan face';$('shirt-open').disabled=!practice&&room.phase==='playing';
  const signature=JSON.stringify(room.players.map(p=>[p.id,p.name,p.health,p.connected,!!p.faceReady]));if(signature!==rosterSignature){rosterSignature=signature;$('players').replaceChildren(...room.players.filter(p=>p.id!==myId).map(p=>{const el=document.createElement('div');el.className='player'+(p.health<=0?' dead':'');const name=document.createElement('b');name.textContent=p.name;const status=document.createElement('small');status.textContent=!p.connected?'Reconnecting…':`${p.health} HP · ${practice?'simulated':p.faceReady?'face scanned':'needs face scan'}`;el.append(name,status);return el;}));}
  if(room.phase==='finished'){const winners=room.players.filter(p=>room.winners.includes(p.id)).map(p=>p.name);$('phase').textContent=winners.length===1?`${winners[0]} wins`:winners.length?'Round tied':'Round ended';}else if(room.phase==='lobby')$('phase').textContent=room.hostId===myId?`${room.players.length}${room.maxPlayers?`/${room.maxPlayers}`:''} joined · you control the arena`:'Waiting for the host';
 }
@@ -162,7 +167,8 @@ let castPending=false,castRequest=0;
 function cast(spell){void audio.unlock();if(!room)return;if(room.phase!=='playing'){notify('The host needs to start the round first.');return;}renderAim();if(['fireball','lightning'].includes(spell)&&(!selected||Date.now()-lockSince<200||(!simulated()&&!matchedPerson()?.fresh))){notify('Aim at another player until their face locks.');return;}if(practice){const event=['fireball','lightning'].includes(spell)?launchProjectile(room,myId,spell,selected,crypto.randomUUID()):castSpell(room,myId,spell,selected);if(event.error){notify(event.error);return;}effect(spell,{shot:event});renderState();}else if(connection.ready){if(castPending)return;castPending=true;const request=++castRequest;send({type:'cast',spell,targetId:selected});notify('Casting '+spell+'…');setTimeout(()=>{if(castPending&&request===castRequest){castPending=false;notify('Cast not confirmed. Check the connection.');}},2500);}else notify('Reconnecting. Casting is paused.');}
 for(const spell of Object.keys(SPELLS))$(spell).onclick=()=>cast(spell);
 $('start-round').onclick=()=>{if(practice){clearFlights();if(trackingPractice){opponent().health=100;room.phase='playing';room.endsAt=Date.now()+180000;room.winners=[];room.shots=[];me().cooldowns={};me().mana=MANA.max;me().manaUpdatedAt=Date.now();me().shieldUntil=0;renderState();}else beginPractice(false);return;}send({type:'start'});};
-const voice=setupVoice({Recognition:window.SpeechRecognition||window.webkitSpeechRecognition,button:$('voice'),status:$('voice-status'),onSpell:cast});
+const voice=setupVoice({Recognition:window.SpeechRecognition||window.webkitSpeechRecognition,button:$('voice'),status:$('voice-status'),onSpell:cast,onActive:listening=>{$('voice').hidden=listening;$('voice-status').hidden=!listening;if(listening&&!$('voice-status').textContent)$('voice-status').textContent='Listening…';}});
+$('voice-status').onclick=()=>voice.stop();
 function renderCombat(){
  const p=me();if(!p)return;const at=now(),mana=Math.min(MANA.max,Math.max(0,manaAt(p,at))),shieldRemaining=Math.max(0,p.shieldUntil-at);
  $('mana-fill').style.width=100*mana/MANA.max+'%';$('mana-value').textContent=`${Math.floor(mana)} / ${MANA.max}`;$('mana-track').setAttribute('aria-valuenow',mana.toFixed(1));
@@ -184,3 +190,5 @@ window.addEventListener('pageshow',event=>{if(event.persisted&&joined&&!practice
 window.addEventListener('pagehide',()=>{$('arena').hidden=true;stopSensors();connection.stop();});
 
 if(new URLSearchParams(location.search).get('test')==='face')beginPractice(true);
+// ?test=coach shows the coach marks over an idle HUD, with no server, scan or camera, to check their wording and fit.
+if(new URLSearchParams(location.search).get('test')==='coach'){$('lobby').hidden=true;$('arena').hidden=false;$('camera-prompt').hidden=true;onboarding.open();}
