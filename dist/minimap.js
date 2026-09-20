@@ -5,17 +5,18 @@
 // Every player is a round face marker (their scan photo, or their initial). Positions are shared only once a
 // player allows location, and are cleared when they stop, leave or disconnect.
 import {relativePosition,cameraHeading,smoothHeading,radarPoint} from './geo.js?v=map1';
-import {createTileMap} from './minimap-tiles.js?v=map6';
+import {createTileMap} from './minimap-tiles.js?v=map9';
 const SVG='http://www.w3.org/2000/svg',SCALE=100,VIEW=115,CORNER_METRES=50,FULL_METRES=50,FRESH_MS=10000,STALE_MS=30000,SEND_MS=1000,RESEND_MS=3000;
 const el=(tag,attrs={},parent)=>{const node=document.createElementNS(SVG,tag);for(const [k,v] of Object.entries(attrs))node.setAttribute(k,v);parent?.append(node);return node;};
 // A stable, well separated color per player, derived from their id.
 const colorFor=id=>{let hash=0;for(const ch of String(id))hash=(hash*31+ch.charCodeAt(0))>>>0;return `hsl(${hash%360} 85% 62%)`;};
 export function createMinimap({container,send,notify=()=>{},geolocation=globalThis.navigator?.geolocation}){
- if(!document.querySelector('link[data-minimap]')){const link=document.createElement('link');link.rel='stylesheet';link.href='minimap.css?v=map7';link.dataset.minimap='';document.head.append(link);}
+ if(!document.querySelector('link[data-minimap]')){const link=document.createElement('link');link.rel='stylesheet';link.href='minimap.css?v=map8';link.dataset.minimap='';document.head.append(link);}
  const root=document.createElement('div');root.className='minimap';root.hidden=true;
  root.innerHTML='<div class="minimap-frame" role="button" tabindex="0"><span class="minimap-cta"></span></div><span class="minimap-range"></span><button type="button" class="minimap-close" aria-label="Close map">✕</button><button type="button" class="minimap-recenter" aria-label="Centre the map on me">◎</button><div class="minimap-foot"><button type="button" class="minimap-stop">Stop sharing</button><span class="minimap-gps"></span><span class="minimap-credit"></span></div>';
  const frame=root.querySelector('.minimap-frame'),cta=root.querySelector('.minimap-cta'),rangeLabel=root.querySelector('.minimap-range'),gpsLabel=root.querySelector('.minimap-gps'),credit=root.querySelector('.minimap-credit'),recenter=root.querySelector('.minimap-recenter');
- const svg=el('svg',{'aria-hidden':'true'});frame.prepend(svg);const tiles=createTileMap(frame);credit.textContent=tiles.attribution;
+ // ?map=<theme> previews another map theme without changing the default in minimap-tiles.js.
+ const svg=el('svg',{'aria-hidden':'true'});frame.prepend(svg);const tiles=createTileMap(frame,{theme:new URLSearchParams(location.search).get('map')||undefined});credit.textContent=tiles.attribution;
  const north=el('text',{class:'minimap-north','text-anchor':'middle','dominant-baseline':'central'},svg);north.textContent='N';
  // One shared clip path rounds every photo.
  const defs=el('defs',{},svg),clip=el('clipPath',{id:'minimap-face-clip',clipPathUnits:'objectBoundingBox'},defs);el('circle',{cx:.5,cy:.5,r:.5},clip);
