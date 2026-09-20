@@ -9,7 +9,9 @@ export function createFaceSearch(){
   const full=()=>{lastFull=at;return{x:0,y:0,width,height,maxSize:detectSize,detectSize,full:true,minScore:.45};};
   const crop=()=>{lastReticle=at;tight=width>2000&&!tight;const w=Math.min(width,slow?480:tight?640:Math.max(640,width/3)),h=Math.min(height,w*.75);return{...clampRegion({x:point.x-w/2,y:point.y-h/2,width:w,height:h},width,height),maxSize:severe?320:slow?416:640,detectSize,minScore:.45};};
   if(!regions.length){regions.push(lastFull<=lastReticle?full():crop());}
-  else if(at-lastFull>Math.min(2000,Math.max(700,budgetMs*3))){regions.length=slow?0:1;regions.push(full());}
+  // On a slow phone, keep the close-up follow pass while a face is present. A full-frame
+  // pass can lose a small face and forces acquisition to start again. Search resumes on loss.
+  else if(!slow&&at-lastFull>Math.min(2000,Math.max(700,budgetMs*3))){regions.length=1;regions.push(full());}
   else if(!slow&&regions.length<2&&at-lastReticle>500&&!regions.some(r=>point.x>r.x&&point.x<r.x+r.width&&point.y>r.y&&point.y<r.y+r.height))regions.push(crop());
   return regions;
  }};

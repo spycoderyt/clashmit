@@ -40,7 +40,7 @@ export function createFaceTracker(video,{getGallery,onStatus=()=>{},focus={x:.5,
   width=video.videoWidth;height=video.videoHeight;const point={x:focus.x*width,y:focus.y*height},regions=search.next({width,height,at:started,point,follow:tracks.regions(started,inferenceMs>220?1:2,point),budgetMs:inferenceMs});
   inFlight=true;tracks.beginFrame(started);
   try{
-   const result=await detectFaces(video,regions,{known:inferenceMs>220?[]:tracks.knownBoxes(started),describeMax:inferenceMs>220?1:2,focus:point,upper:true});if(!active||g!==generation)return;
+   const result=await detectFaces(video,regions,{known:tracks.knownBoxes(started),describeMax:inferenceMs>220?1:2,focus:point,upper:true});if(!active||g!==generation)return;
    if(document.hidden){timer=setTimeout(tick,120);return;}
    // A pass that only looked inside small windows says nothing about faces elsewhere, so tracks outside
    // those windows simply keep coasting until the next full-frame pass.

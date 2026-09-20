@@ -59,7 +59,7 @@ test('discarded slow passes immediately reduce search work before a first face e
 });
 test('slow tracked searches never stack a full-frame and follow detection in one pass',()=>{
  const search=createFaceSearch(),follow=[{x:400,y:100,width:200,height:200},{x:800,y:100,width:200,height:200}];
- const full=search.next({...scene,at:0,follow,budgetMs:450});assert.equal(full.length,1);assert.equal(full[0].full,true);assert.equal(full[0].detectSize,416);
+ const full=search.next({...scene,at:0,follow,budgetMs:450});assert.equal(full.length,1);assert.equal(full[0].full,undefined);assert.equal(full[0].detectSize,320);
  const next=search.next({...scene,at:500,follow,budgetMs:450});assert.equal(next.length,1);assert.equal(next[0].full,undefined);
 });
 test('1.5-second inferences retain consecutive identity votes while hiding expired boxes',()=>{
@@ -79,4 +79,14 @@ test('a stalled inference cannot retain identity votes indefinitely',()=>{
  assert.deepEqual(tracks.list(2200),[]);tracks.endFrame();tracks.updateFaces([face],2300,gallery);
  assert.equal(tracks.list(2300)[0].votes,1);assert.equal(tracks.list(2300)[0].id,null);
  for(const [start,end] of [[0,NaN],[Infinity,0],[100,90]])assert.equal(detectionTime(start,end),null);
+});
+
+test('slow phones keep a small face in close-up across overdue broad searches',()=>{
+ const search=createFaceSearch(),follow=[{x:850,y:330,width:180,height:180}];
+ for(const at of [0,500,1500,5000,10000]){
+  const [region]=search.next({...scene,at,follow,budgetMs:700});
+  assert.equal(region.full,undefined);assert.equal(region.width,180);
+ }
+ const [lost]=search.next({...scene,at:11000,budgetMs:700});
+ assert.equal(lost.full,true,'loss restarts discovery instead of following an empty patch');
 });

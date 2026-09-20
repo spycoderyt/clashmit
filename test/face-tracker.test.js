@@ -29,8 +29,14 @@ test('camera tracker avoids duplicate frames and discards body results from an e
   assert.equal(faceWorker.frames,1,'no repeated inference over an unchanged camera frame');
   async function advance(){const before=faceWorker.frames;video.currentTime+=.1;await until(()=>faceWorker.frames>before);await wait(5);}
   await advance();await advance();assert.equal(tracker.targets()[0].id,'ada');
+  // Slow recognition must still reuse a verified identity on the next detection pass.
+  holdFaceReplies=true;let slowBefore=faceWorker.frames;video.currentTime+=.1;await until(()=>faceWorker.frames>slowBefore);
+  const actualNow=Date.now;try{Date.now=()=>actualNow()+300;faceWorker.respondFace();await wait(5);}finally{Date.now=actualNow;}
+  slowBefore=faceWorker.frames;video.currentTime+=.1;await until(()=>faceWorker.frames>slowBefore);
+  assert.equal(faceWorker.pending.describeMax,1);assert.equal(faceWorker.pending.known.length,1,'slow phones skip repeated descriptors for the verified face');
+  faceWorker.respondFace();holdFaceReplies=false;await wait(5);
   await advance();const bodyWorker=workers.find(w=>!w.face);await until(()=>bodyWorker?.frames===1);
-  tracker.stop();await tracker.start();await until(()=>faceWorker.frames===5);await advance();await advance();
+  tracker.stop();await tracker.start();await until(()=>faceWorker.frames===7);await advance();await advance();
   assert.equal(tracker.targets()[0].id,'ada');
   bodyWorker.bodies();assert.equal(tracker.targets()[0].bodyBox,null,'late old body result cannot attach to newly recognized player');
   await wait(650);await advance();await wait(650);await advance();await until(()=>bodyWorker.frames===2);bodyWorker.bodies();
