@@ -127,3 +127,6 @@ export function rankPlayers(players){
  const alive=players.filter(p=>p.health>0).sort((a,b)=>b.health-a.health),out=players.filter(p=>!(p.health>0)).sort((a,b)=>(b.diedAt||0)-(a.diedAt||0));
  return [...alive,...out].map((p,i)=>({...p,place:i+1}));
 }
+// Players knocked out since the last look: `before` maps player id to the health seen previously.
+// Someone seen for the first time already at zero is not news, so they are not reported.
+export function newlyOut(before,players){return players.filter(p=>!(p.health>0)&&before.get(p.id)>0);}
