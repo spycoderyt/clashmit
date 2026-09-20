@@ -1,21 +1,21 @@
-// Guided face scan that replaces the headband dialog. It runs itself: the player only has to
+// Guided face scan shown right after joining. It runs itself: the player only has to
 // follow one short instruction at a time while a ring fills up. Builds its own dialog and styles.
-import {startFaceEngine,detectFaces} from './face-client.js?v=face10';
-import {MATCH,MAX_SAMPLES,addSample,headTurn} from './face-id.js?v=face10';
+import {startFaceEngine,detectFaces} from './face-client.js?v=face11';
+import {MATCH,MAX_SAMPLES,addSample,headTurn} from './face-id.js?v=face11';
 // need: samples to collect in this step. turn: which way the head must face. settle: a short pause so
 // the player can get into the pose first. Every step gives up after `limit` and moves on, so nobody gets stuck.
 const STEPS=[
  {key:'front',text:'Look straight at the camera',need:2,turn:'front',limit:9000},
  {key:'side',text:'Slowly turn your head to one side',need:1,turn:'side',limit:8000},
  {key:'other',text:'Now slowly turn the other way',need:1,turn:'other',limit:8000},
- {key:'aim',text:'Last one: raise your phone like you’re aiming at someone',need:2,turn:'any',settle:1200,limit:7000},
+ {key:'aim',text:'Last one: raise your phone like you’re aiming at someone',need:1,turn:'any',settle:1200,limit:7000},
 ];
 const TARGET=STEPS.reduce((n,s)=>n+s.need,0),MIN_TO_PASS=3,SAMPLE_GAP_MS=450;
 const CSS='.face-dialog{text-align:center}.face-dialog h2{margin:0 0 4px}.face-sub{margin:0 0 12px}.face-stage{position:relative;width:min(68vw,250px);aspect-ratio:1;margin:0 auto 12px}.face-stage video{position:absolute;inset:7%;width:86%;height:86%;object-fit:cover;border-radius:50%;transform:scaleX(-1);background:#090d13}.face-ring{position:absolute;inset:0;width:100%;height:100%;transform:rotate(-90deg)}.face-ring circle{fill:none;stroke-width:4}.face-ring .track{stroke:#3a4150}.face-ring .progress{stroke:#ff9958;stroke-linecap:round;stroke-dasharray:295.3;stroke-dashoffset:295.3;transition:stroke-dashoffset .35s ease}.face-dialog.done .face-ring .progress{stroke:#7be0a0}.face-stage.pulse{animation:face-pulse .3s ease}.face-check{position:absolute;inset:7%;display:none;align-items:center;justify-content:center;border-radius:50%;background:#0d131cc9;color:#7be0a0;font-size:4.5rem}.face-dialog.done .face-check{display:flex}.face-step{min-height:3.2em;margin:0 0 10px;font-size:1.15rem;font-weight:700;color:#f6f4ef!important;line-height:1.3}.face-step.warn{color:#ffd0a8!important}.face-dots{display:flex;justify-content:center;gap:6px;margin:0 0 14px;padding:0;list-style:none}.face-dots li{width:26px;height:5px;border-radius:3px;background:#3a4150}.face-dots li.active{background:#ff9958}.face-dots li.complete{background:#7be0a0}.face-dialog .primary{width:100%}.face-dialog [hidden]{display:none}@keyframes face-pulse{50%{transform:scale(1.04)}}@media(prefers-reduced-motion:reduce){.face-stage.pulse{animation:none}.face-ring .progress{transition:none}}';
 export function setupFaceScan({beforeOpen=()=>{},onSave,onClose=()=>{},onSample=()=>{}}){
  const style=document.createElement('style');style.textContent=CSS;document.head.append(style);
  const dialog=document.createElement('dialog');dialog.className='face-dialog';dialog.setAttribute('aria-labelledby','face-title');
- dialog.innerHTML='<h2 id="face-title">Scan your face</h2><p class="face-sub">This is how other players’ phones recognise you. No headband needed.</p><div class="face-stage"><video autoplay muted playsinline></video><svg class="face-ring" viewBox="0 0 100 100" aria-hidden="true"><circle class="track" cx="50" cy="50" r="47"/><circle class="progress" cx="50" cy="50" r="47"/></svg><div class="face-check" aria-hidden="true">✓</div></div><p class="face-step" role="status" aria-live="polite"></p><ol class="face-dots" aria-hidden="true"></ol><button type="button" class="primary face-retry" hidden>Try again</button><button type="button" class="text-button face-cancel">Cancel</button><p class="fine">No photo leaves your phone. Only a numeric face signature is shared with players in this arena, and it is deleted when you leave.</p>';
+ dialog.innerHTML='<h2 id="face-title">Scan your face</h2><p class="face-sub">This is how other players’ phones recognise you. Nothing to wear or hold.</p><div class="face-stage"><video autoplay muted playsinline></video><svg class="face-ring" viewBox="0 0 100 100" aria-hidden="true"><circle class="track" cx="50" cy="50" r="47"/><circle class="progress" cx="50" cy="50" r="47"/></svg><div class="face-check" aria-hidden="true">✓</div></div><p class="face-step" role="status" aria-live="polite"></p><ol class="face-dots" aria-hidden="true"></ol><button type="button" class="primary face-retry" hidden>Try again</button><button type="button" class="text-button face-cancel">Cancel</button><p class="fine">No photo leaves your phone. Only a numeric face signature is shared with players in this arena, and it is deleted when you leave.</p>';
  document.body.append(dialog);
  const video=dialog.querySelector('video'),stage=dialog.querySelector('.face-stage'),ring=dialog.querySelector('.progress'),stepText=dialog.querySelector('.face-step'),dots=dialog.querySelector('.face-dots'),retry=dialog.querySelector('.face-retry');
  dots.replaceChildren(...STEPS.map(()=>document.createElement('li')));

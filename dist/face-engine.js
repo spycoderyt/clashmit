@@ -4,7 +4,7 @@
 // Both come from InsightFace's buffalo_sc pack: NON-COMMERCIAL RESEARCH licence, see
 // models/face/NOTICE.txt. Frames and descriptors never leave the page unless the caller sends them.
 import * as ort from './vendor/onnxruntime/ort.wasm.bundle.min.js';
-import {alignmentTransform,FACE_TEMPLATE,UPPER_FACE_ROWS} from './face-id.js?v=face10';
+import {alignmentTransform,FACE_TEMPLATE,UPPER_FACE_ROWS} from './face-id.js?v=face11';
 const asset=path=>new URL(path,import.meta.url).href;
 const ALIGNED=112,STRIDES=[8,16,32];
 let loading,detector,recogniser;

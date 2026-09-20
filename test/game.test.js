@@ -2,9 +2,13 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {WebSocket} from 'ws';
 import {castSpell,launchFireball,impactFireball} from '../dist/rules.js';
-import {colorProfile,similarity,validProfile,coverRect} from '../dist/shirt.js';
+import {colorProfile,similarity,validProfile,coverRect,bandProfile} from '../dist/shirt.js';
+import {PALETTE} from '../dist/palette.js';
 const profile=rgb=>colorProfile(new Uint8ClampedArray(Array.from({length:64},()=>[...rgb,255]).flat()));
 const red=profile([220,30,30]),blue=profile([30,30,220]);
+const swatch=name=>new Uint8ClampedArray(Array.from({length:64},()=>[...PALETTE.find(c=>c.name===name).rgb,255]).flat());
+const band=(top,bottom)=>bandProfile(swatch(top),swatch(bottom));
+const redCyan=band('red','cyan'),greenPink=band('green','pink');
 import {createGameServer} from '../server/index.js';
 import {encodeDescriptor,DESCRIPTOR_LENGTH} from '../dist/face-id.js';
 // A stand-in face signature: any unit vector in the wire format.
@@ -44,13 +48,18 @@ test('one shared arena, authoritative controller, face registration and delayed 
  b.send({type:'start'});assert.match((await b.next('error')).message,/host/);
  const third=await client('Third');await third.next('welcome');await a.next('state',m=>m.room.players.length===3);third.send({type:'leave'});await a.next('state',m=>m.room.players.length===2);
  a.send({type:'start'});assert.match((await a.next('error')).message,/scan their face/);
- a.send({type:'face',samples:['nonsense']});assert.match((await a.next('error')).message,/not readable/);
- // Headband samples are still accepted but no longer let a round start.
  a.send({type:'shirt',profile:{}});assert.match((await a.next('error')).message,/Invalid headband/);
- a.send({type:'shirt',profile:red});b.send({type:'shirt',profile:blue});await a.next('state',m=>m.room.players.every(p=>p.shirt));assert.ok(similarity((await b.next('state',m=>m.room.players.every(p=>p.shirt))).room.players.find(p=>p.id===bw.id).shirt,blue)>.9);
+ // A single-color version 1 profile must not be accepted into a two-stripe arena.
+ a.send({type:'shirt',profile:red});assert.match((await a.next('error')).message,/Invalid headband/);
+ a.send({type:'shirt',profile:redCyan});await a.next('state',m=>m.room.players.find(p=>p.id===aw.id)?.shirt?.id==='red-cyan');
+ b.send({type:'shirt',profile:redCyan});assert.match((await b.next('error')).message,/already registered/);
  a.send({type:'start'});assert.match((await a.next('error')).message,/scan their face/);
+ b.send({type:'shirt',profile:greenPink});await a.next('state',m=>m.room.players.find(p=>p.id===bw.id)?.shirt?.id==='green-pink');
+ // Headband samples are still accepted, but players are identified by face, so they do not let a round start.
+ a.send({type:'start'});assert.match((await a.next('error')).message,/scan their face/);
+ a.send({type:'face',samples:['nonsense']});assert.match((await a.next('error')).message,/not readable/);a.send({type:'face',samples:faceOf(1),upper:['x']});assert.match((await a.next('error')).message,/not readable/);
  // Each scan reaches every player once as a 'faces' message and never rides along in the state broadcast.
- assert.deepEqual((await b.next('faces')).faces,{});a.send({type:'face',samples:faceOf(1),upper:['x']});assert.match((await a.next('error')).message,/not readable/);a.send({type:'face',samples:faceOf(1),upper:faceOf(11)});const shared=await b.next('faces',m=>m.faces[aw.id]);assert.deepEqual(shared.faces[aw.id],{samples:faceOf(1),upper:faceOf(11)});
+ assert.deepEqual((await b.next('faces')).faces,{});a.send({type:'face',samples:faceOf(1),upper:faceOf(11)});const shared=await b.next('faces',m=>m.faces[aw.id]);assert.deepEqual(shared.faces[aw.id],{samples:faceOf(1),upper:faceOf(11)});
  b.send({type:'face',samples:faceOf(2)});const ready=await a.next('state',m=>m.room.players.every(p=>p.faceReady));assert.ok(!JSON.stringify(ready.room).includes(faceOf(1)[0].slice(0,40)));
  const late=await client('Late');await late.next('welcome');assert.deepEqual(Object.keys((await late.next('faces')).faces).sort(),[aw.id,bw.id].sort());late.send({type:'leave'});await a.next('state',m=>m.room.players.length===2);
  a.send({type:'start'});const started=await a.next('state',m=>m.room.phase==='playing');assert.equal(started.room.combat.mana.max,10);assert.ok(started.room.players.every(p=>p.mana===10));assert.deepEqual(started.room.shots,[]);

@@ -32,3 +32,59 @@
 .arena.incoming-hit-fallback::after{content:'';position:absolute;inset:0;box-shadow:inset 0 0 70px #ff8c5ba8;z-index:2;pointer-events:none}
 /* Stable headband overlay: one frame and label, updated at display cadence. */
 .band-target{left:0;top:0;border:1.5px solid #d0eee788;border-radius:4px;min-width:0;will-change:transform;transition:none}.band-target.matched{border:2px solid #b9ffe1;box-shadow:0 0 7px #9affe133}.band-target.shielded{border-color:#a8d9ff;border-radius:9px;box-shadow:0 0 18px #77b6ff99,inset 0 0 14px #76b3ff55}.band-target-label{position:absolute;left:0;top:0;bottom:auto;margin:0;min-width:94px;max-width:152px;text-align:center;z-index:2;will-change:transform;transition:none;overflow:hidden}.band-target-label.shielded{border-color:#a8d9ff;color:#d7edff}.band-target-label.shielded small{color:#c2e5ff}.band-target-label b{overflow:hidden;text-overflow:ellipsis}.band-target-label meter{height:7px}.band-target-label small{display:block}.band-target.tracking-gap,.band-target-label.tracking-gap{opacity:.65}
+
+.credits{margin-top:32px;padding-top:20px;border-top:1px solid var(--line);text-align:center;color:var(--muted);font-size:.78rem}.credits p{margin:0;line-height:1.7}.credits p+p{margin-top:8px}.credits a{color:var(--orange);text-underline-offset:3px}.credits a:focus-visible{outline:2px solid var(--orange);outline-offset:4px}
+
+.brand-mark{display:block;flex:0 0 auto;object-fit:contain;filter:drop-shadow(0 3px 5px #0005)}.camera-mark{display:block;margin:0 auto;object-fit:contain}
+
+/* A compact join page; game HUD styles stay separate. */
+.lobby{max-width:480px;min-height:100svh;display:flex;flex-direction:column;padding:28px 24px max(22px,env(safe-area-inset-bottom));background:none}
+.lobby .brand{gap:12px;font-size:1.4rem;letter-spacing:-.04em;font-weight:700}
+.lobby .intro{padding:30px 0 0}
+.lobby h1{font-family:inherit;font-size:clamp(2rem,8vw,2.6rem);font-weight:700;line-height:1.15;letter-spacing:-.04em;text-transform:none;margin:0 0 12px}
+.lobby .intro p{margin:0;color:#b4b6bf;font-size:1rem;line-height:1.65}
+.lobby .join-panel{margin-top:30px}
+.lobby label{font-size:.95rem;font-weight:600;margin-bottom:9px}
+.lobby input{min-height:54px;margin-bottom:12px;background:#191c24}
+.lobby input::placeholder{color:#8f94a2}
+.lobby #join{min-height:54px;justify-content:center;font-size:1rem}
+.lobby #join-status{font-size:.8rem;margin:10px 0 0;min-height:24px}
+.join-next{margin:20px 0 6px;padding-top:20px;border-top:1px solid var(--line);font-size:.875rem;color:#c2c5ce;line-height:1.6}
+.headband-check{align-self:flex-start;min-height:44px;text-align:left;color:#f2c18f;font-size:.875rem;text-underline-offset:4px}
+.camera-note{margin:2px 0 24px;color:var(--muted);font-size:.75rem}
+.lobby .credits{margin-top:auto;padding-top:20px;font-size:.73rem;line-height:1.7}
+@media(min-width:700px){.lobby{padding-top:40px;padding-bottom:28px}.lobby .intro{padding-top:40px}}
+
+/* Decorative demo loop sits behind the join page and stops in the arena. */
+.lobby{position:relative;isolation:isolate}
+.lobby-backdrop{position:fixed;inset:0;z-index:-1;pointer-events:none;overflow:hidden;background:#152332}
+#lobby-background{display:block;width:100%;height:100%}
+.lobby-backdrop::after{content:'';position:absolute;inset:0;background:linear-gradient(90deg,#101217ab,#10121770 55%,#10121728),linear-gradient(0deg,#101217e8,transparent 45%,#10121755)}
+.lobby .intro,.lobby .join-next,.lobby .camera-note,.lobby .credits,.lobby label,.lobby #join-status{text-shadow:0 1px 6px #000}
+.lobby .intro p{color:#d1d6df}
+.lobby .camera-note,.lobby .credits{color:#bfc8d3}
+#background-toggle{margin-left:auto;flex:0 0 auto;width:44px;min-height:44px;padding:0;border:1px solid #ffffff26;border-radius:50%;background:#10121770;color:#d6dde5;font-size:.9rem}
+@media(max-width:699px){.lobby-backdrop::after{background:linear-gradient(90deg,#101217c9,#10121766),linear-gradient(0deg,#101217ee,transparent 60%)}.lobby .intro{padding-top:24px}.lobby .join-panel{margin-top:24px}}
+
+/* Clash-style HUD: tall segmented elixir bar and large spell cards. */
+.mana-row{gap:10px;margin:0 0 10px}
+.mana-row>span{display:none}
+.mana-row>b{min-width:58px;font-size:1.1rem;font-weight:800;color:#f4e2ff;text-shadow:0 2px 4px #000,0 0 10px #c46bff55}
+#mana-track{height:26px;border-radius:13px;border:2px solid #d9b6ff8c;background:#1d1230e8;box-shadow:inset 0 2px 7px #000a}
+#mana-fill{background:linear-gradient(180deg,#eaa6ff,#c452f0 45%,#8d29c8);box-shadow:0 0 14px #d06bff55}
+.mana-segments{background:repeating-linear-gradient(90deg,transparent 0,transparent calc(10% - 2px),#120b1dd9 calc(10% - 2px),#120b1dd9 10%);z-index:1}
+#mana-track::after{content:'';position:absolute;left:3px;right:3px;top:2px;height:36%;border-radius:11px 11px 40% 40%/11px 11px 60% 60%;background:linear-gradient(#ffffff40,#ffffff03);pointer-events:none;z-index:2}
+.spell{min-height:88px;padding:28px 5px 8px;border-radius:14px;border-width:2px;justify-content:flex-start}
+.spell-symbol{font-size:2.1rem;line-height:1;margin-bottom:4px}
+.spell b{font-size:.8rem}
+.mana-cost{top:5px;left:5px;right:auto;width:26px;height:26px;padding:0;display:flex;align-items:center;justify-content:center;border-radius:50%;font-size:.85rem;font-weight:800;line-height:1;color:#fff;background:radial-gradient(circle at 35% 28%,#e8a4ff,#a032d8 72%);border:1.5px solid #f0d4ffc7;box-shadow:0 2px 5px #000a;text-shadow:0 1px 2px #0009}
+.mana-cost::before{display:none}
+.cooldown{font-size:1.7rem;z-index:3}
+#toast{bottom:240px}
+@media(max-height:700px){#mana-track{height:20px}.mana-row>b{font-size:1rem}.spell{min-height:74px;padding-top:24px}.spell-symbol{font-size:1.8rem}.mana-cost{width:22px;height:22px;font-size:.75rem}#toast{bottom:212px}}
+
+/* Two-stripe scan: one guide split into a top and bottom sample. */
+.shirt-guide{top:30%;height:14%}
+.shirt-guide>i{position:absolute;left:0;right:0;top:50%;height:2px;margin-top:-1px;background:#ff9958}
+#shirt-swatch{width:52px;height:44px;padding:0;overflow:hidden;display:flex;flex-direction:column}
+#shirt-swatch>i{flex:1;display:block}

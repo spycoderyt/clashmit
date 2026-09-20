@@ -87,7 +87,8 @@ export function alignmentTransform(landmarks,template=FACE_TEMPLATE){
 // bytes (steps of 1/400, far finer than the differences that matter) and base64 encoded, so eight
 // samples fit in one small WebSocket message. Decoding re-normalises to a unit vector.
 const QUANT=400,ENCODED_LENGTH=684;
-export const MAX_SAMPLES=8;
+// Five whole-face plus five upper-face signatures are about 7 KB, inside the server's 8 KB message limit.
+export const MAX_SAMPLES=5;
 export function encodeDescriptor(descriptor){let binary='';for(let i=0;i<DESCRIPTOR_LENGTH;i++)binary+=String.fromCharCode(Math.max(-127,Math.min(127,Math.round(descriptor[i]*QUANT)))&255);return btoa(binary);}
 export function decodeDescriptor(text){
  if(typeof text!=='string'||text.length!==ENCODED_LENGTH)return null;let binary;try{binary=atob(text);}catch{return null;}if(binary.length!==DESCRIPTOR_LENGTH)return null;

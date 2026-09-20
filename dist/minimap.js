@@ -5,6 +5,8 @@ import {RANGES,relativePosition,cameraHeading,smoothHeading,pickRange,radarPoint
 import {createTileMap} from './minimap-tiles.js?v=map1';
 const SVG='http://www.w3.org/2000/svg',SCALE=100,VIEW=115,SOLO_RANGE=100,FRESH_MS=10000,STALE_MS=30000,SEND_MS=1000,RESEND_MS=3000;
 const el=(tag,attrs={},parent)=>{const node=document.createElementNS(SVG,tag);for(const [k,v] of Object.entries(attrs))node.setAttribute(k,v);parent?.append(node);return node;};
+// A stable, well separated color per player, derived from their id.
+const colorFor=id=>{let hash=0;for(const ch of String(id))hash=(hash*31+ch.charCodeAt(0))>>>0;return `hsl(${hash%360} 85% 62%)`;};
 const compassPoint=bearing=>['N','NE','E','SE','S','SW','W','NW'][Math.round(bearing/45)%8];
 export function createMinimap({container,send,notify=()=>{},geolocation=globalThis.navigator?.geolocation}){
  if(!document.querySelector('link[data-minimap]')){const link=document.createElement('link');link.rel='stylesheet';link.href='minimap.css?v=map1';link.dataset.minimap='';document.head.append(link);}
@@ -23,10 +25,12 @@ export function createMinimap({container,send,notify=()=>{},geolocation=globalTh
  function onOrientation(event){const next=cameraHeading(event);if(next===null)return;const before=heading;heading=smoothHeading(heading,next);headingAt=Date.now();if(before===null||Math.abs(heading-before)>.5)invalidate();}
  function listenCompass(){if(compass)return;compass=true;window.addEventListener('deviceorientationabsolute',onOrientation);window.addEventListener('deviceorientation',onOrientation);}
  function publish(){if(!position||document.hidden)return;const at=Date.now();if(position.at<=lastSentFix&&at-lastSent<RESEND_MS)return;lastSent=at;lastSentFix=position.at;send({type:'location',location:{latitude:position.latitude,longitude:position.longitude,accuracy:position.accuracy}});}
- async function enable(){
+ // compassGranted: the join screen already asked for motion access inside its tap, so asking again here
+ // (outside any tap, where iOS would refuse) is skipped.
+ async function enable({compassGranted=false}={}){
   if(sharing())return;if(!geolocation){notify('Location is unavailable in this browser.');return;}
   // iOS only grants compass access from inside a tap, so ask before anything else.
-  try{if(typeof DeviceOrientationEvent!=='undefined'){if(typeof DeviceOrientationEvent.requestPermission==='function'){if(await DeviceOrientationEvent.requestPermission()==='granted')listenCompass();}else listenCompass();}}catch{}
+  try{if(compassGranted)listenCompass();else if(typeof DeviceOrientationEvent!=='undefined'){if(typeof DeviceOrientationEvent.requestPermission==='function'){if(await DeviceOrientationEvent.requestPermission()==='granted')listenCompass();}else listenCompass();}}catch{}
   if(sharing())return;
   watchId=geolocation.watchPosition(p=>{position={latitude:p.coords.latitude,longitude:p.coords.longitude,accuracy:p.coords.accuracy,at:Date.now()};publish();invalidate();},e=>{if(e.code===1){disable();notify('Allow location access in your browser settings to use the map.');}else if(!position)notify('No GPS fix yet. The map works best outdoors.');},{enableHighAccuracy:true,maximumAge:2000,timeout:20000});
   sendTimer=setInterval(publish,SEND_MS);invalidate();tiles.load().then(invalidate,()=>{});
@@ -52,7 +56,7 @@ export function createMinimap({container,send,notify=()=>{},geolocation=globalTh
   for(const {p,distance,bearing} of visible){
    seen.add(p.id);let node=nodes.get(p.id);
    if(!node){const g=el('g',{class:'minimap-player'},dots);node={g,halo:el('circle',{class:'minimap-halo'},g),dot:el('circle',{class:'minimap-dot',r:9},g),label:el('text',{class:'minimap-label','text-anchor':'middle'},g)};nodes.set(p.id,node);}
-   const point=radarPoint(distance,bearing,facing,range),color=p.shirt?.rgb?`rgb(${p.shirt.rgb.join(',')})`:'#c8cbd3';
+   const point=radarPoint(distance,bearing,facing,range),color=colorFor(p.id);
    node.g.setAttribute('transform',`translate(${(point.x*SCALE).toFixed(1)} ${(point.y*SCALE).toFixed(1)})`);
    node.g.classList.toggle('stale',serverNow-p.location.at>FRESH_MS);node.g.classList.toggle('dead',p.health<=0);node.g.classList.toggle('clamped',point.clamped);
    node.dot.setAttribute('fill',color);node.dot.setAttribute('r',point.clamped?6:9);node.halo.setAttribute('fill',color);node.halo.setAttribute('r',point.clamped?0:Math.min(SCALE,p.location.accuracy/range*SCALE).toFixed(1));
@@ -61,7 +65,7 @@ export function createMinimap({container,send,notify=()=>{},geolocation=globalTh
   }
   for(const [id,node] of nodes)if(!seen.has(id)){node.g.remove();nodes.delete(id);}
   const northPoint=radarPoint(1,0,facing,1);north.setAttribute('x',(northPoint.x*107).toFixed(1));north.setAttribute('y',(northPoint.y*107).toFixed(1));
-  const selfColor=self?.shirt?.rgb?`rgb(${self.shirt.rgb.join(',')})`:'#f6f4ef';for(const node of [selfArrow,selfDot,selfHalo])node.setAttribute('fill',selfColor);
+  const selfColor='#f6f4ef';for(const node of [selfArrow,selfDot,selfHalo])node.setAttribute('fill',selfColor);
   selfArrow.style.display=active&&facing!==null?'':'none';selfDot.style.display=active&&facing===null?'':'none';selfHalo.setAttribute('r',active?Math.min(SCALE,position.accuracy/range*SCALE).toFixed(1):0);
   // The street map sits under the radar at the same scale: the outer ring is `range` metres.
   if(radar.clientWidth!==radarWidth){radarWidth=radar.clientWidth;tiles.resize();}
@@ -77,6 +81,8 @@ export function createMinimap({container,send,notify=()=>{},geolocation=globalTh
   // Called with every server state. Practice modes never call this, so the map stays hidden there.
   update(room,id){players=room.players||[];myId=id;if(Number.isFinite(room.serverTime))skew=Date.now()-room.serverTime;root.hidden=false;invalidate();},
   stop(){disable();players=[];root.hidden=true;},
+  // Starts sharing without a tap on the radar, for players who allowed location when they joined.
+  enable,
   sharing,
  };
 }
