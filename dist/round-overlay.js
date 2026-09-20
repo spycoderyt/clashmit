@@ -1,14 +1,24 @@
-// Round start and end screens. Before a round every phone counts down to the same server moment; when it
+// Round start, knock-out and end screens. Before a round every phone counts down to the same server moment; when it
 // ends the view darkens and a leaderboard shows who lasted longest, with medals for the top three.
 // Builds its own elements and styles, and sits under the HUD so the host can still tap New round.
-import {rankPlayers} from './rules.js?v=round1';
+import {rankPlayers,newlyOut} from './rules.js?v=round2';
+// Knock-outs are announced to everyone in a banner, and the player who went out gets a screen they cannot miss:
+// the camera drains to grey, the edges burn red and KNOCKED OUT stays up until the round ends.
+const OUT_CSS='.round-feed{position:absolute;top:max(132px,calc(env(safe-area-inset-top) + 120px));left:12px;right:12px;z-index:6;display:grid;gap:6px;justify-items:center;pointer-events:none}.round-feed div{max-width:100%;padding:9px 14px;border-radius:12px;background:#190b0df2;border:1px solid #ff5a4f;color:#fff;font-size:.95rem;font-weight:700;box-shadow:0 8px 28px #000b;animation:round-feed 4s ease both;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.round-feed div.me{background:#ff5a4f;color:#190b0d}.round-dead #camera{filter:grayscale(1) brightness(.5) contrast(1.1)}.round-out{position:absolute;inset:0;z-index:2;display:none;flex-direction:column;align-items:center;justify-content:center;gap:6px;padding:0 20px 26%;text-align:center;pointer-events:none;background:radial-gradient(ellipse at center,#0000 25%,#7a0d0dcc 100%);animation:round-out-in .5s ease both}.round-dead .round-out{display:flex}.round-out b{font-size:clamp(2.4rem,12vw,4rem);font-weight:900;letter-spacing:.04em;line-height:1;color:#ff5a4f;text-shadow:0 4px 30px #000}.round-out span{font-size:1.05rem;font-weight:700;color:#fff;text-shadow:0 2px 10px #000}.round-out small{font-size:.85rem;color:#f6d0cc;text-shadow:0 2px 8px #000}@keyframes round-feed{0%{transform:translateY(-14px);opacity:0}8%{transform:none;opacity:1}85%{opacity:1}100%{opacity:0}}@keyframes round-out-in{0%{opacity:0;transform:scale(1.15)}100%{opacity:1;transform:none}}@media(prefers-reduced-motion:reduce){.round-feed div,.round-out{animation:none}}';
 const CSS='.round-overlay{position:absolute;inset:0;z-index:2;display:flex;align-items:center;justify-content:center;pointer-events:none;opacity:0;transition:opacity .35s ease;background:transparent}.round-overlay.show{opacity:1}.round-overlay.dim{background:#05070bb8}.round-count{font-size:clamp(7rem,38vw,13rem);font-weight:800;line-height:1;color:#fff;text-shadow:0 6px 40px #000c,0 0 60px #ff995866;font-variant-numeric:tabular-nums}.round-count.pop{animation:round-pop .9s ease-out both}.round-count.go{color:#ffb070}.round-caption{position:absolute;top:calc(50% + min(24vw,8.5rem));left:0;right:0;text-align:center;font-size:1rem;font-weight:700;letter-spacing:.12em;color:#f6f4efd9;text-shadow:0 2px 8px #000}.round-board{pointer-events:auto;width:min(88%,360px);max-height:62%;overflow:auto;margin-bottom:18%;padding:16px 16px 10px;border-radius:16px;background:#121722f2;border:1px solid #4a5468;box-shadow:0 18px 60px #000a;color:#f6f4ef}.round-board h2{margin:0;font-size:1.25rem;text-align:center}.round-board p{margin:2px 0 12px;text-align:center;font-size:.85rem;color:#ffcfa3}.round-board ol{margin:0;padding:0;list-style:none}.round-board li{display:grid;grid-template-columns:2.2rem 1fr auto;align-items:center;gap:8px;padding:8px 6px;border-top:1px solid #2c3444;font-size:.95rem}.round-board li:first-child{border-top:0}.round-board .place{text-align:center;font-size:1.35rem;font-variant-numeric:tabular-nums;color:#a5a9b5}.round-board .place.number{font-size:.95rem;font-weight:700}.round-board b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.round-board small{color:#a5a9b5;font-size:.78rem;white-space:nowrap}.round-board li.me{background:#ff99581f;border-radius:10px}.round-board li.top b{color:#fff}@keyframes round-pop{0%{transform:scale(1.5);opacity:0}18%{transform:scale(1);opacity:1}80%{opacity:1}100%{transform:scale(.92);opacity:.25}}@media(prefers-reduced-motion:reduce){.round-count.pop{animation:none}.round-overlay{transition:none}}';
 const MEDALS=['🥇','🥈','🥉'];
 const clock=ms=>{const seconds=Math.max(0,Math.round(ms/1000));return `${Math.floor(seconds/60)}:${String(seconds%60).padStart(2,'0')}`;};
-export function createRoundOverlay({container,now=()=>Date.now(),onTick=()=>{}}){
- const style=document.createElement('style');style.textContent=CSS;document.head.append(style);
+export function createRoundOverlay({container,now=()=>Date.now(),onTick=()=>{},onOut=()=>{}}){
+ const style=document.createElement('style');style.textContent=CSS+OUT_CSS;document.head.append(style);
  const root=document.createElement('div');root.className='round-overlay';root.setAttribute('aria-live','polite');container.append(root);
- let timer=null,shown='',lastSecond=null,goUntil=0;
+ const feed=document.createElement('div');feed.className='round-feed';feed.setAttribute('aria-live','assertive');const outScreen=document.createElement('div');outScreen.className='round-out';container.append(outScreen,feed);
+ let timer=null,shown='',lastSecond=null,goUntil=0,round=null;const health=new Map(),lastHitBy=new Map();
+ function announce(player,myId,players){
+  const by=players.find(p=>p.id===lastHitBy.get(player.id))?.name,mine=player.id===myId,line=document.createElement('div');if(mine)line.className='me';
+  line.textContent=mine?`💀 You were knocked out${by?` by ${by}`:''}`:`💀 ${player.name} was knocked out${by?` by ${by===players.find(p=>p.id===myId)?.name?'you':by}`:''}`;feed.append(line);while(feed.children.length>3)feed.firstChild.remove();setTimeout(()=>line.remove(),4000);
+  if(mine){const title=document.createElement('b'),who=document.createElement('span'),note=document.createElement('small');title.textContent='KNOCKED OUT';who.textContent=by?`by ${by}`:'';note.textContent='You’re out for this round. Watch how it ends.';outScreen.replaceChildren(title,who,note);container.classList.add('round-dead');}
+  onOut(player,mine);
+ }
  const clear=()=>{clearInterval(timer);timer=null;lastSecond=null;};
  function hide(){clear();shown='';root.classList.remove('show','dim');root.replaceChildren();}
  function countdown(startsAt){
@@ -38,7 +48,15 @@ export function createRoundOverlay({container,now=()=>Date.now(),onTick=()=>{}})
  }
  return{
   // Call with every server state. Anything other than a countdown or a finished round clears the screen.
-  update(room,myId){if(room?.phase==='countdown'&&room.startsAt)countdown(room.startsAt);else if(room?.phase==='finished')leaderboard(room,myId);else if(shown.startsWith('board:')||(shown.startsWith('count:')&&!goUntil&&room?.phase!=='playing'))hide();},
-  hide,
+  // Who landed the hit that knocked someone out, remembered from impact events until the state shows the knock-out.
+  impact(event){if(event&&!event.missed&&!event.blocked&&event.targetId)lastHitBy.set(event.targetId,event.actorId);},
+  update(room,myId){
+   // A new round forgets the old one; within a round, anyone whose health has just reached zero is announced.
+   if(room&&round!==room.startsAt){round=room.startsAt;health.clear();lastHitBy.clear();}
+   if(room&&(room.phase==='playing'||room.phase==='finished'))for(const player of newlyOut(health,room.players))announce(player,myId,room.players);
+   if(room)for(const p of room.players)health.set(p.id,p.health);
+   if(!room||room.phase!=='playing')container.classList.remove('round-dead');
+   if(room?.phase==='countdown'&&room.startsAt)countdown(room.startsAt);else if(room?.phase==='finished')leaderboard(room,myId);else if(shown.startsWith('board:')||(shown.startsWith('count:')&&!goUntil&&room?.phase!=='playing'))hide();},
+  hide(){hide();container.classList.remove('round-dead');feed.replaceChildren();health.clear();},
  };
 }

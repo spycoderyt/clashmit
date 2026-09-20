@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {WebSocket} from 'ws';
 import {createGameServer} from '../server/index.js';
-import {rankPlayers} from '../dist/rules.js';
+import {rankPlayers,newlyOut} from '../dist/rules.js';
 import {encodeDescriptor,DESCRIPTOR_LENGTH} from '../dist/face-id.js';
 const faceOf=seed=>{const v=Array.from({length:DESCRIPTOR_LENGTH},(_,i)=>Math.sin(seed*31+i*1.3)),n=Math.hypot(...v);return [encodeDescriptor(v.map(x=>x/n))];};
 test('the leaderboard puts survivors first by health, then the knocked out, latest first',()=>{
@@ -55,4 +55,11 @@ test('a face photo for the map is relayed once, validated strictly and removed w
  // It never rides along in the state broadcast, and a player who joins later still receives it.
  const state=await b.next('state');assert.ok(!JSON.stringify(state).includes(jpeg.slice(30)));const late=await join('Cy');await late.next('welcome');assert.equal((await late.next('avatars')).avatars[aw.id],jpeg);
  a.send({type:'leave'});assert.equal((await b.next('avatars',m=>aw.id in m.avatars)).avatars[aw.id],null);assert.equal(game.rooms.get('ARENA').avatars[aw.id],undefined);b.ws.close();late.ws.close();
+});
+test('a knock-out is reported once, at the moment health reaches zero',()=>{
+ const before=new Map([['a',100],['b',25],['c',0]]);
+ const players=[{id:'a',name:'Ada',health:75},{id:'b',name:'Bo',health:0},{id:'c',name:'Cy',health:0},{id:'d',name:'Di',health:0}];
+ // Bo has just gone out. Cy was already out, and Di is seen for the first time already at zero, so neither is news.
+ assert.deepEqual(newlyOut(before,players).map(p=>p.id),['b']);
+ for(const p of players)before.set(p.id,p.health);assert.deepEqual(newlyOut(before,players),[]);
 });
