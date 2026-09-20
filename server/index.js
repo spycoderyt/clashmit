@@ -14,7 +14,7 @@ import {serveVideo} from './video.js';
 import {createScoreStore,startScoring,recordScore,recordLingering,settleScores,POINTS} from './scores.js';
 
 const root=fileURLToPath(new URL('../dist/',import.meta.url));
-const mime={'.html':'text/html; charset=utf-8','.css':'text/css','.js':'text/javascript','.svg':'image/svg+xml','.wasm':'application/wasm','.jpg':'image/jpeg'};
+const mime={'.html':'text/html; charset=utf-8','.css':'text/css','.js':'text/javascript','.svg':'image/svg+xml','.wasm':'application/wasm','.jpg':'image/jpeg','.png':'image/png'};
 const allowedOrigins=(process.env.ALLOWED_ORIGINS||'').split(',').filter(Boolean);
 // countdownMs: how long every phone shows the synchronised countdown before a round begins (0 starts at once).
 export function createGameServer({maxPlayers=null,maxBufferedBytes=256*1024,countdownMs=5000,scoreFile=null,continuous=false,respawnDelayMs=RESPAWN_MS}={}){
@@ -22,14 +22,21 @@ export function createGameServer({maxPlayers=null,maxBufferedBytes=256*1024,coun
  if(!Number.isFinite(respawnDelayMs)||respawnDelayMs<=0)throw new Error('Invalid respawn delay');
  let closing=false,closePromise;
  const rooms=new Map(), clients=new Map(),scores=createScoreStore(scoreFile,{ranking:continuous?'killstreak':'points'});
+ const kills=[];let killSequence=0;
+ const recordKill=event=>{kills.unshift({id:++killSequence,at:Date.now(),...event});if(kills.length>100)kills.length=100;};
  const server=http.createServer(async(req,res)=>{
   try{
   const url=new URL(req.url,'http://localhost');
   if(url.pathname==='/health'){res.writeHead(closing?503:200,{'Content-Type':'application/json','Cache-Control':'no-store'});return res.end(JSON.stringify({ok:!closing}));}
   if(url.pathname==='/api/leaderboard'&&['GET','HEAD'].includes(req.method)){res.writeHead(200,{'Content-Type':'application/json','Cache-Control':'no-store'});return res.end(req.method==='HEAD'?undefined:JSON.stringify({players:scores.standings(),rules:continuous?{...POINTS,win:0,finish:0,damageCapScope:'life',ranking:'bestStreak'}:POINTS}));}
+  if(url.pathname==='/api/live'&&['GET','HEAD'].includes(req.method)){
+   const online=new Set([...rooms.values()].flatMap(room=>room.players.filter(p=>p.connected).map(p=>p.id)));
+   const players=scores.standings().filter(p=>p.bestStreak>0).map(({id,name,rank,bestStreak,currentStreak,knockouts,deaths})=>({id,name,rank,bestStreak,currentStreak,kills:knockouts,deaths,online:online.has(id)}));
+   res.writeHead(200,{'Content-Type':'application/json','Cache-Control':'no-store'});return res.end(req.method==='HEAD'?undefined:JSON.stringify({players,kills,online:online.size,serverTime:Date.now()}));
+  }
   if(closing){res.writeHead(503,{'Retry-After':'2'});return res.end('Server restarting');}
   if(!['GET','HEAD'].includes(req.method)){res.writeHead(405);return res.end();}
-   const path=resolve(root,'.'+decodeURIComponent(url.pathname==='/'?'/index.html':url.pathname));
+   const path=resolve(root,'.'+decodeURIComponent(url.pathname==='/'?'/index.html':['/live','/live/'].includes(url.pathname)?'/live.html':url.pathname));
    if(!path.startsWith(root)){res.writeHead(403);return res.end();}
    if(extname(path)==='.mp4')return await serveVideo(req,res,path);
    const body=await readFile(path);res.writeHead(200,{'Content-Type':mime[extname(path)]||'application/octet-stream','X-Content-Type-Options':'nosniff','Referrer-Policy':'same-origin','Cache-Control':url.pathname.startsWith('/vendor/')||url.pathname.startsWith('/models/')?'public, max-age=3600':'no-cache'});res.end(req.method==='HEAD'?undefined:body);
@@ -45,7 +52,7 @@ export function createGameServer({maxPlayers=null,maxBufferedBytes=256*1024,coun
  const send=(ws,msg)=>sendEncoded(ws,JSON.stringify(msg));
  // Poison and skeletons deal damage between hits. Settle it and credit whoever cast it before anything measures health.
  function announceStreak(room,event){if(event)for(const p of room.players)send(p.socket,event);}
- function settleScored(room,now=Date.now()){for(const dealt of settleRoom(room,now))if(room.continuous)announceStreak(room,creditContinuous(room,scores,dealt));else recordLingering(room,dealt);}
+ function settleScored(room,now=Date.now()){for(const dealt of settleRoom(room,now))if(room.continuous)announceStreak(room,creditContinuous(room,scores,dealt,recordKill));else recordLingering(room,dealt);}
  function view(room){const now=Date.now();settleScored(room,now);if(room.continuous)finish(room);const board=scores.standings(),byId=new Map(board.map(p=>[p.id,p]));return {leaders:board.filter(p=>p.bestStreak>0).slice(0,3).map(({id,name,rank,bestStreak})=>({id,name,rank,bestStreak})),continuous:!!room.continuous,respawnDelayMs,maxPlayers,code:room.code,hostId:room.hostId,phase:room.phase,startsAt:room.startsAt||0,endsAt:room.endsAt,winners:room.winners,results:room.results||null,players:room.players.map(({token,socket,disconnectedAt,damageCredit,koScoredLife,...p})=>({...p,score:byId.get(p.id)})),shots:room.shots||[],combat:{mana:MANA,spells:SPELLS},serverTime:now};}
  function broadcast(room,event){if(closing)return;const state=JSON.stringify({type:'state',room:view(room)}),encodedEvent=event?JSON.stringify(event):null;for(const p of room.players){if(encodedEvent)sendEncoded(p.socket,encodedEvent);sendEncoded(p.socket,state);}}
  // Begins the round once the countdown is over, or returns to the lobby if too few players are still connected.
@@ -65,7 +72,7 @@ export function createGameServer({maxPlayers=null,maxBufferedBytes=256*1024,coun
  function resolveImpact(room,player,shotId,tracked){
   const now=Date.now();settleScored(room,now);finish(room);const shot=(room.shots||[]).find(s=>s.shotId===shotId&&s.actorId===player.id),before=room.players.find(p=>p.id===shot?.targetId)?.health;
   const event=impactProjectile(room,player.id,shotId,tracked,now);
-  if(!event.error){heldImpacts.delete(shotId);if(room.continuous)announceStreak(room,scoreContinuousHit(room,scores,event,before));else recordScore(room,event,before);finish(room);broadcast(room,event);return;}
+  if(!event.error){heldImpacts.delete(shotId);if(room.continuous)announceStreak(room,scoreContinuousHit(room,scores,event,before,recordKill));else recordScore(room,event,before);finish(room);broadcast(room,event);return;}
   if(!shot||closing||heldImpacts.has(shotId)||Date.now()>=shot.impactAt){heldImpacts.delete(shotId);return;}
   heldImpacts.add(shotId);setTimeout(()=>{heldImpacts.delete(shotId);resolveImpact(room,player,shotId,tracked);},shot.impactAt-Date.now()).unref();
  }
@@ -122,7 +129,7 @@ export function createGameServer({maxPlayers=null,maxBufferedBytes=256*1024,coun
     }else if(m.type==='cast'){
      const now=Date.now();settleScored(room,now);finish(room);const before=room.players.find(p=>p.id===m.targetId)?.health;
      const event=(typeof m.spell==='string'&&Object.hasOwn(SPELLS,m.spell)&&SPELLS[m.spell].flightMs)?launchProjectile(room,player.id,m.spell,m.targetId,randomUUID(),now):castSpell(room,player.id,m.spell,m.targetId,now);
-     if(event.error)send(ws,{type:'error',message:event.error});else{if(room.continuous)announceStreak(room,scoreContinuousHit(room,scores,event,before));else recordScore(room,event,before);finish(room);broadcast(room,event);}
+     if(event.error)send(ws,{type:'error',message:event.error});else{if(room.continuous)announceStreak(room,scoreContinuousHit(room,scores,event,before,recordKill));else recordScore(room,event,before);finish(room);broadcast(room,event);}
     }else if(m.type==='impact'){
      resolveImpact(room,player,m.shotId,m.tracked===true);
     }else if(m.type==='shirt'){

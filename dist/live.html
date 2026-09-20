@@ -1,0 +1,12 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#101114"><title>ClashMIT — Live arena</title><link rel="icon" href="/favicon.svg"><link rel="stylesheet" href="/live.css?v=1"></head>
+<body>
+<header class="masthead"><a class="brand" href="/"><img src="/favicon.svg" width="47" height="56" alt=""><span>ClashMIT<span class="domain">.lol</span></span></a><div class="broadcast"><span id="connection" role="status">Connecting</span><span id="population">— in the arena</span></div></header>
+<main>
+<section class="standings" aria-labelledby="board-title"><div class="section-title"><h1 id="board-title">Leaderboard</h1><span>Ranked by best kill streak</span></div><div class="table-wrap" tabindex="0" aria-label="Live player standings"><table><thead><tr><th scope="col">Rank</th><th scope="col">Player</th><th scope="col">Best streak</th><th scope="col">Kills</th><th scope="col">Deaths</th></tr></thead><tbody id="players"></tbody></table><p class="empty" id="board-empty">The arena is warming up.<br>Get a kill to enter the leaderboard.</p></div></section>
+<section class="feed" aria-labelledby="feed-title"><div class="section-title"><h2 id="feed-title">Kill feed</h2><span>Latest first</span></div><ol id="kills" aria-label="Recent kills"></ol><p class="empty" id="feed-empty">The first kill is still up for grabs.</p></section>
+</main>
+<footer><p class="tagline">Fireball! Lightning!<br>Fireball! Fireball!!!</p><a class="join" href="https://clashmit.lol/"><div class="join-copy"><span class="scan-label">SCAN TO JOIN THE ARENA</span><div class="join-brand"><img src="/favicon.svg" width="45" height="54" alt="ClashMIT crown"><strong>clashmit.lol</strong></div><span class="join-hint">Open on your phone. Say a spell.</span></div><img class="qr" src="/media/join-qr.png" width="188" height="192" alt="QR code to join ClashMIT at clashmit.lol"></a></footer>
+<script type="module" src="/live.js?v=1"></script>
+</body></html>

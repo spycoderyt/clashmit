@@ -47,6 +47,12 @@ test('continuous server admits late players, counts kills and deaths once, and r
  a.send({type:'impact',shotId:shot.shotId,tracked:true});
  const alive=await again.next('state',m=>m.room.players.find(p=>p.id===b.id)?.life===2),reborn=alive.room.players.find(p=>p.id===b.id);assert.ok(Date.now()>=out.respawnAt);assert.equal(reborn.health,100);assert.equal(reborn.score.deaths,1);assert.equal(reborn.mana,10);assert.equal(reborn.respawnAt,null);assert.equal(alive.room.players.find(p=>p.id===a.id).score.knockouts,1);
  const api=await (await fetch(url.replace('ws:','http:').replace('/ws','/api/leaderboard'))).json();assert.equal(api.players.find(p=>p.id===b.id).deaths,1);
+ const liveUrl=url.replace('ws:','http:').replace('/ws','/api/live');const live=await (await fetch(liveUrl)).json();
+ assert.equal(live.online,3);assert.equal(live.kills.length,1);assert.equal(live.kills[0].killer,'Ada');assert.equal(live.kills[0].victim,'Bo');assert.equal(live.kills[0].streak,1);
+ assert.equal(live.players[0].name,'Ada');assert.equal(live.players[0].kills,1);assert.equal(live.players[0].online,true);assert.equal(live.players[0].bestStreak,1);
+ for(const p of live.players)assert.deepEqual(Object.keys(p).sort(),['id','name','rank','bestStreak','currentStreak','kills','deaths','online'].sort(),'spectators receive no location, face, token, or socket data');
+ assert.equal((await fetch(liveUrl,{method:'HEAD'})).status,200);assert.equal((await fetch(liveUrl.replace('/api/live','/live'))).status,200);
+
 });
 test('best streak leads the leaderboard, persists after death, and current streak resets',()=>{
  const store=createScoreStore(null,{ranking:'killstreak'}),a=store.register('High damage'),b=store.register('Streak');
@@ -71,4 +77,12 @@ test('every streak at three or above produces a global announcement exactly once
 });
 test('top three leaderboard ranks carry medals',async()=>{
  const {rankLabel}=await import('../dist/leaderboard.js');assert.equal(rankLabel(1),'🥇 1');assert.equal(rankLabel(2),'🥈 2');assert.equal(rankLabel(3),'🥉 3');assert.equal(rankLabel(4),'4');
+});
+
+test('confirmed kill callback includes every kill once, including posthumous lingering damage',()=>{
+ const store=createScoreStore(),a={...store.register('A'),connected:true,faceReady:true},b={...store.register('B'),connected:true,faceReady:true};spawnPlayer(a,0);spawnPlayer(b,0);const room={players:[a,b]},events=[];
+ const report=event=>events.push(event),hit={actorId:a.id,targetId:b.id,amount:10};
+ creditContinuous(room,store,hit,report);assert.equal(events.length,0);
+ creditContinuous(room,store,{...hit,lethal:true},report);creditContinuous(room,store,{...hit,lethal:true},report);assert.deepEqual(events,[{killer:'A',victim:'B',streak:1}]);
+ spawnPlayer(b,1000);a.health=0;creditContinuous(room,store,{...hit,lethal:true},report);assert.deepEqual(events[1],{killer:'A',victim:'B',streak:0});
 });
