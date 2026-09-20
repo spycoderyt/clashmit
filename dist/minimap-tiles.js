@@ -74,6 +74,7 @@ export function createTileMap(host,{theme=DEFAULT_THEME}={}){
   setInteractive(on){view='';if(!map)return;for(const name of GESTURES)map[name][on?'enable':'disable']();if(on){map.touchZoomRotate.disableRotation();map.setBearing(0);}},
   // Where a coordinate falls inside the map element, in CSS pixels, and how many metres one pixel covers there.
   project(latitude,longitude){if(!ready)return null;const point=map.project([longitude,latitude]);return{x:point.x,y:point.y};},
+  unproject(x,y){if(!ready)return null;const p=map.unproject([x,y]);return{latitude:p.lat,longitude:p.lng};},
   metresPerPixel(latitude){return ready?156543.03392*Math.cos(latitude*Math.PI/180)/2**(map.getZoom()+1):null;},
   setTheme(next){if(!THEMES[next]||next===current)return;current=next;map?.setStyle(mapStyle(next));},
   onMove(listener){moved.add(listener);},onGrab(listener){grabbed.add(listener);},

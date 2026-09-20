@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createFaceSearch,detectionTime} from '../dist/face-search.js';
+import {createFaceSearch,detectionTime,createVideoFrameGate} from '../dist/face-search.js';
 import {createFaceTracks} from '../dist/face-tracks.js';
 const scene={width:1920,height:1080,point:{x:960,y:432}};
 test('full-frame misses still trigger native-resolution distant-face searches',()=>{
@@ -27,4 +27,23 @@ test('an actual missing face still clears old votes after a gap',()=>{
  const tracks=createFaceTracks(),descriptor=Array(512).fill(0);descriptor[0]=1;const gallery=[{id:'a',name:'Ada',samples:[descriptor]}],face={box:{x:400,y:200,width:80,height:100},score:.9,pixels:80,descriptor};
  tracks.updateFaces([face],0,gallery);tracks.updateFaces([face],100,gallery);tracks.updateFaces([],300,gallery);tracks.updateFaces([face],700,gallery);
  assert.equal(tracks.list(700)[0].id,null);assert.equal(tracks.list(700)[0].votes,1);
+});
+
+test('frame gate only admits new decoded camera frames and resets when camera restarts',()=>{
+ const gate=createVideoFrameGate(),video={currentTime:1,videoWidth:1920,videoHeight:1080};
+ assert.equal(gate.take(video),true);assert.equal(gate.take(video),false);
+ video.currentTime+=1/30;assert.equal(gate.take(video),true);assert.equal(gate.take(video),false);
+ video.videoWidth=1080;video.videoHeight=1920;assert.equal(gate.take(video),true,'orientation change allows another look');
+ gate.reset();assert.equal(gate.take(video),true,'camera restart cannot be stuck on the last timestamp');
+ assert.equal(gate.take({}),true,'non-video sources remain supported');
+});
+test('frozen camera frames cannot keep a previously recognized target fresh',()=>{
+ const gate=createVideoFrameGate(),tracks=createFaceTracks(),descriptor=Array(512).fill(0);descriptor[0]=1;
+ const gallery=[{id:'a',name:'Ada',samples:[descriptor]}],face={box:{x:400,y:200,width:80,height:100},score:.9,pixels:80,descriptor};
+ const video={currentTime:0,videoWidth:1920,videoHeight:1080};
+ for(let at=0;at<=200;at+=100){video.currentTime=at/1000;if(gate.take(video))tracks.updateFaces([face],at,gallery);}
+ assert.equal(tracks.list(200)[0].id,'a');
+ for(let at=300;at<=900;at+=100){if(gate.take(video))tracks.updateFaces([face],at,gallery);}
+ assert.equal(tracks.list(900)[0].fresh,false,'display coasting never grants a new hit window');
+ assert.deepEqual(tracks.list(1500),[],'stalled camera eventually loses the box');
 });

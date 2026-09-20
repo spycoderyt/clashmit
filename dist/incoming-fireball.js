@@ -28,7 +28,7 @@ export function createIncomingFireballs({container,renderer,describe=describeOri
    const progress=Math.max(0,Math.min(1,1-(entry.deadline-time)/entry.duration)),source=sourceFor(entry.shot);
    const look=describe(entry.shot.spell);
    if(!entry.started&&source&&progress<.8&&!look.bolt&&look.thrown!==false){
-    try{entry.started=!!graphics()?.incoming?.({shotId:id,style:entry.shot.spell,...source,getSource:()=>sourceFor(entry.shot),flightMs:entry.duration,elapsedMs:progress*entry.duration});}catch{entry.started=false;}
+    try{entry.started=!!graphics()?.incoming?.({shotId:id,style:look.style||entry.shot.spell,super:entry.shot.super||entry.shot.upgraded||look.ultimate,...source,getSource:()=>sourceFor(entry.shot),flightMs:entry.duration,elapsedMs:progress*entry.duration});}catch{entry.started=false;}
    }
    if(!strongest||progress>strongest.progress)strongest={...entry,progress,source};
   }

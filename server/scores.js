@@ -1,3 +1,4 @@
+import {freshLoadout,shopQuote} from '../dist/economy.js';
 import {createHash,randomBytes,randomUUID} from 'node:crypto';
 import {existsSync,readFileSync,mkdirSync,writeFileSync,renameSync} from 'node:fs';
 import {dirname} from 'node:path';
@@ -10,8 +11,8 @@ export function createScoreStore(file=null,{ranking='points'}={}){
  if(file&&existsSync(file)){
   const data=JSON.parse(readFileSync(file,'utf8'));
   if(data.version!==1||!Array.isArray(data.players)||!Array.isArray(data.settled))throw Error('Invalid leaderboard file');
-  entries=data.players.map(p=>({...p,deaths:p.deaths??0,currentStreak:p.currentStreak??0,bestStreak:p.bestStreak??0}));settled=data.settled;
-  for(const p of entries)if(typeof p.id!=='string'||typeof p.name!=='string'||typeof p.tokenHash!=='string'||!['points','wins','knockouts','rounds','deaths','currentStreak','bestStreak'].every(k=>Number.isSafeInteger(p[k])&&p[k]>=0))throw Error('Invalid leaderboard player');
+  entries=data.players.map(({trophies,...p})=>({...p,coins:p.coins??0,loadout:p.loadout??freshLoadout(),deaths:p.deaths??0,currentStreak:p.currentStreak??0,bestStreak:p.bestStreak??0}));settled=data.settled;
+  for(const p of entries)if(typeof p.id!=='string'||typeof p.name!=='string'||typeof p.tokenHash!=='string'||!['points','wins','knockouts','rounds','deaths','currentStreak','bestStreak','coins'].every(k=>Number.isSafeInteger(p[k])&&p[k]>=0))throw Error('Invalid leaderboard player');
  }
  function commit(players,rounds=settled){
   if(file){mkdirSync(dirname(file),{recursive:true});const temp=file+'.tmp';writeFileSync(temp,JSON.stringify({version:1,players,settled:rounds}),{mode:0o600});renameSync(temp,file);}
@@ -19,20 +20,23 @@ export function createScoreStore(file=null,{ranking='points'}={}){
  }
  function find(token){return typeof token==='string'&&token.length<=128?entries.find(p=>p.tokenHash===hash(token)):undefined;}
  function standings(){
-  const sorted=entries.map(({id,name,points,wins,knockouts,rounds,deaths=0,currentStreak=0,bestStreak=0})=>({id,name,points,wins,knockouts,rounds,deaths,currentStreak,bestStreak})).sort((a,b)=>(ranking==='killstreak'?b.bestStreak-a.bestStreak:b.points-a.points)||b.knockouts-a.knockouts||a.deaths-b.deaths||a.name.localeCompare(b.name)||a.id.localeCompare(b.id));
-  let rank=0;return sorted.map((p,i)=>{const prev=sorted[i-1];if(!prev||(ranking==='killstreak'?p.bestStreak!==prev.bestStreak:p.points!==prev.points)||p.knockouts!==prev.knockouts||p.deaths!==prev.deaths)rank=i+1;return {...p,rank};});
+  const sorted=entries.map(({id,name,points,wins,knockouts,rounds,deaths=0,currentStreak=0,bestStreak=0,coins=0})=>({id,name,points,wins,knockouts,rounds,deaths,currentStreak,bestStreak,coins})).sort((a,b)=>(ranking==='coins'?b.coins-a.coins:ranking==='killstreak'?b.bestStreak-a.bestStreak:b.points-a.points)||b.knockouts-a.knockouts||a.deaths-b.deaths||a.name.localeCompare(b.name)||a.id.localeCompare(b.id));
+  let rank=0;return sorted.map((p,i)=>{const prev=sorted[i-1];if(ranking==='coins'||!prev||(ranking==='killstreak'?p.bestStreak!==prev.bestStreak:p.points!==prev.points)||p.knockouts!==prev.knockouts||p.deaths!==prev.deaths)rank=i+1;return {...p,rank};});
  }
  return {find,standings,
-  award(id,points,knockouts=0,deaths=0,countStreak=true){
-   if(!points&&!knockouts&&!deaths)return;if(![points,knockouts,deaths].every(n=>Number.isSafeInteger(n)&&n>=0))throw Error('Invalid score award');
-   commit(entries.map(p=>{if(p.id!==id)return p;const currentStreak=deaths?0:(p.currentStreak||0)+(countStreak?knockouts:0);return{...p,points:p.points+points,knockouts:p.knockouts+knockouts,deaths:(p.deaths||0)+deaths,currentStreak,bestStreak:Math.max(p.bestStreak||0,currentStreak)};}));
+  loadout(id){return structuredClone(entries.find(p=>p.id===id)?.loadout||freshLoadout());},
+  saveLoadout(id,loadout){commit(entries.map(p=>p.id===id?{...p,loadout:structuredClone(loadout)}:p));},
+  purchase(id,persona,kind,item){const player=entries.find(p=>p.id===id);if(!player)return{error:'Player not found.'};const loadout=structuredClone(player.loadout),quote=shopQuote(loadout,persona,kind,item);if(quote.error)return quote;if(player.coins<quote.cost)return{error:'Not enough coins.'};if(kind==='consumable')loadout.consumables[item]++;else loadout.skills[item]=kind==='upgrade'?2:1;const coins=player.coins-quote.cost;commit(entries.map(p=>p.id===id?{...p,coins,loadout}:p));return{coins,loadout,cost:quote.cost};},
+  award(id,points,knockouts=0,deaths=0,countStreak=true,coins=0){
+   if(!points&&!knockouts&&!deaths&&!coins)return;if(![points,knockouts,deaths,coins].every(n=>Number.isSafeInteger(n)&&n>=0))throw Error('Invalid score award');
+   commit(entries.map(p=>{if(p.id!==id)return p;const currentStreak=deaths?0:(p.currentStreak||0)+(countStreak?knockouts:0);return{...p,coins:p.coins+coins,points:p.points+points,knockouts:p.knockouts+knockouts,deaths:(p.deaths||0)+deaths,currentStreak,bestStreak:Math.max(p.bestStreak||0,currentStreak)};}));
   },
   resetStreak(id){if(entries.find(p=>p.id===id)?.currentStreak)commit(entries.map(p=>p.id===id?{...p,currentStreak:0}:p));},
   register(name,token){
    const known=find(token);
    if(entries.some(p=>p.id!==known?.id&&p.name.toLowerCase()===name.toLowerCase()))return {error:'That name already has a score. Use your original browser or choose another name.'};
    if(known){if(known.name!==name)commit(entries.map(p=>p.id===known.id?{...p,name}:p));return {id:known.id,token,name};}
-   token=randomBytes(24).toString('hex');const player={id:randomUUID(),tokenHash:hash(token),name,points:0,wins:0,knockouts:0,rounds:0,deaths:0,currentStreak:0,bestStreak:0};commit([...entries,player]);return {id:player.id,token,name};
+   token=randomBytes(24).toString('hex');const player={id:randomUUID(),tokenHash:hash(token),name,points:0,wins:0,knockouts:0,rounds:0,deaths:0,currentStreak:0,bestStreak:0,coins:0,loadout:freshLoadout()};commit([...entries,player]);return {id:player.id,token,name};
   },
   settle(roundId,awards){
    if(settled.includes(roundId))return;

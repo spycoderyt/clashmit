@@ -70,7 +70,7 @@ test('the attack and defence steps light the right cards for every persona',()=>
  // The spell bar is emptied and rebuilt per persona, so these two steps must take slots, never spell names.
  assert.ok(html.includes('id="spells" class="spells"></div>'),'the spell bar is built at runtime');
  assert.match(anchors,/attack:\(\)=>spellCards\(\)\.slice\(0,2\)/);
- assert.match(anchors,/defence:\(\)=>spellCards\(\)\.slice\(-2\)/);
+ assert.ok(anchors.includes("$('inventory').querySelectorAll('[data-consumable=shield],[data-consumable=heal]')"),'defence tips point to consumable inventory rows');
  // Slot order is what makes "first pair attacks, last pair defends" true whoever the player picked.
  for(const [name,deck] of Object.entries(PERSONAS)){
   assert.equal(deck.length,4,`${name} has four cards`);

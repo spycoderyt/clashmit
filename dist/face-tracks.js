@@ -111,7 +111,7 @@ export function createFaceTracks(){
   drop(at);
   return tracks.map(t=>{
    const source=mode(t,at),p=source==='body'?headOf(t.body.box,t.width):predicted(t,at),fresh=source==='face'?at-t.seenAt<=LOCK.faceFreshMs:source==='body';
-   return{key:t.key,id:t.id,via:t.lastMatch?.via||null,source,fresh:source==='coast'?at-t.seenAt<=LOCK.faceFreshMs:fresh,confirmed:!!t.id,hits:t.hits,seenAt:t.seenAt,match:t.lastMatch||null,votes:t.voter.identity.votes,box:{originX:p.x-t.width/2,originY:p.y-t.height/2,width:t.width,height:t.height}};
+   return{bodyBox:t.body&&at-t.body.at<=LOCK.bodyFreshMs&&!t.suspectSince?{...t.body.box}:null,key:t.key,id:t.id,via:t.lastMatch?.via||null,source,fresh:source==='coast'?at-t.seenAt<=LOCK.faceFreshMs:fresh,confirmed:!!t.id,hits:t.hits,seenAt:t.seenAt,match:t.lastMatch||null,votes:t.voter.identity.votes,box:{originX:p.x-t.width/2,originY:p.y-t.height/2,width:t.width,height:t.height}};
   });
  }
  return{

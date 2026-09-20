@@ -1,0 +1,5 @@
+@font-face{font-family:'IBM Plex Sans';src:url('/media/fonts/plex-regular.ttf') format('truetype');font-weight:400;font-style:normal;font-display:swap}
+@font-face{font-family:'IBM Plex Sans';src:url('/media/fonts/plex-semibold.ttf') format('truetype');font-weight:600 900;font-style:normal;font-display:swap}
+:root{--font:'IBM Plex Sans',sans-serif;--ink:#101619;--paper:#f2efe6;--muted:#a5adae;--accent:#d8ed92;--gold:#edc566;--line:#364044;--orange:#d8ed92;font-family:var(--font);color:var(--paper);background:var(--ink)}
+body,button,input,select,textarea{font-family:var(--font)}button,input,select{border-radius:3px}button:focus-visible,input:focus-visible,a:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+.ui-icon{display:inline-block;width:18px;height:18px;background:currentColor;mask:var(--icon) center/contain no-repeat;-webkit-mask:var(--icon) center/contain no-repeat;flex:none}

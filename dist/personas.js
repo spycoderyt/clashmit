@@ -1,11 +1,16 @@
 // Presentation only, keyed by the ids in rules.js. Nothing here affects what the server allows.
 export const PERSONA_INFO=Object.freeze({
- mage:{name:'Mage',symbol:'✷',accent:'#ff8a3d',blurb:'Burst'},
+ mage:{name:'Mage',symbol:'✷',accent:'#63daca',blurb:'Burst'},
  witch:{name:'Witch',symbol:'☠',accent:'#9be564',blurb:'Attrition'},
  archer:{name:'Archer',symbol:'➶',accent:'#ffd84a',blurb:'Tempo'}
 });
 // Voice words are matched longest first; a space also matches the recognizer running the words together.
 export const SPELL_INFO=Object.freeze({
+ meteor:{label:'Meteor',symbol:'☄',blurb:'Ultimate',words:['meteor','extinction'],css:'fire',rgb:'255,113,32'},
+ soulReaper:{label:'Soul Reaper',symbol:'♜',blurb:'Ultimate',words:['soul reaper','grim reaper'],css:'poison',rgb:'125,255,74'},
+ bombArrow:{label:'Bomb Arrow',symbol:'➹',blurb:'Heavy',words:['bomb arrow','explosive arrow'],css:'arrows',rgb:'255,232,170'},
+ ballista:{label:'Ballista',symbol:'⌁',blurb:'Ultimate',words:['ballista','railgun'],css:'arrows',rgb:'255,232,170'},
+ flashbang:{label:'Flashbang',symbol:'✹',blurb:'Blind and stun',words:['flashbang','flash bang','flash bank'],css:'lightning',rgb:'255,255,255'},
  fireball:{label:'Fireball',symbol:'✷',blurb:'25 damage · splash',words:['fire ball'],css:'fire',rgb:'255,113,32'},
  lightning:{label:'Lightning',symbol:'ϟ',blurb:'Ignores shield',words:['lightning'],css:'lightning',rgb:'146,180,255',bolt:true},
  skeletonArmy:{label:'Skeletons',symbol:'☠',blurb:'Ignores shield · 5/s for 6s',words:['skeleton army','skeletons','skeleton'],css:'skeletons',rgb:'226,232,214'},

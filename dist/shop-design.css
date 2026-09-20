@@ -1,0 +1,33 @@
+/* Respawn shop: a simple equipment list, sized for a phone first. */
+.round-out.shop-screen{background:#101619;backdrop-filter:none;-webkit-backdrop-filter:none;padding:22px 18px max(22px,env(safe-area-inset-bottom));box-shadow:none}
+.respawn-shop{width:min(100%,560px);gap:18px;color:#f2efe6;font-family:'IBM Plex Sans',sans-serif;text-shadow:none}
+.respawn-shop header{align-items:baseline;gap:16px}
+.respawn-shop h2{font:600 28px/1.15 'IBM Plex Sans',sans-serif!important;letter-spacing:-.8px;text-shadow:none}
+.respawn-shop header strong{font:600 24px/1 'IBM Plex Sans',sans-serif;color:#edc566;white-space:nowrap;font-variant-numeric:tabular-nums}
+.respawn-shop>p{font:400 13px/1.5 'IBM Plex Sans',sans-serif!important;color:#a9b1b0!important;text-shadow:none!important}
+.respawn-shop button{font:600 13px/1.25 'IBM Plex Sans',sans-serif!important;border-radius:3px;border:1px solid #47514f;background:#1a2326;color:#f2efe6;padding:11px 12px;min-height:42px;box-shadow:none;text-shadow:none;letter-spacing:0}
+.respawn-shop button:disabled{opacity:1;color:#7d8885;border-color:#303a3b;background:#141d20}
+.respawn-shop button:focus-visible{outline:2px solid #d8ed92;outline-offset:3px}
+.shop-characters{gap:0;border-bottom:1px solid #46514d}
+.shop-characters button{flex:1;border:0;border-radius:0;background:transparent;padding:12px 4px;color:#a9b1b0}
+.shop-characters [aria-pressed=true]{background:transparent;color:#d8ed92;border-bottom:3px solid #d8ed92;padding-bottom:9px}
+.shop-skills{gap:0}
+.shop-skill{display:grid;grid-template-columns:minmax(0,1fr) auto;column-gap:14px;row-gap:6px;align-items:start;background:transparent;border:0;border-bottom:1px solid #303a3b;border-radius:0;padding:17px 0;min-height:0;box-shadow:none}
+.shop-skill h3{grid-column:1;grid-row:1;font:600 18px/1.25 'IBM Plex Sans',sans-serif!important;color:#f2efe6;margin:0;padding:0;overflow-wrap:anywhere;letter-spacing:-.2px}
+.shop-skill p{grid-column:1;grid-row:2;font:400 12px/1.5 'IBM Plex Sans',sans-serif!important;color:#a9b1b0;margin:0!important;white-space:nowrap}
+.shop-skill>button,.shop-skill .shop-upgrade{position:static;grid-column:2;grid-row:1 / span 2;max-width:126px;align-self:center;font-size:12px!important;background:#1a2326;border-color:#47514f;color:#d8ed92}
+.shop-skill>button:disabled{color:#7d8885;border-color:#303a3b;background:transparent}
+.shop-skill small{grid-column:1 / -1;font:400 12px/1.45 'IBM Plex Sans',sans-serif!important;color:#87948f!important;margin:2px 0 0;text-shadow:none!important}
+.shop-skill.upgraded h3,.shop-skill.upgraded p{color:#c9b8e9}
+.shop-items{gap:0;border-bottom:1px solid #303a3b}
+.shop-items>div{gap:12px;padding:8px 0;border-bottom:1px solid #253033}
+.shop-items>div:last-child{border-bottom:0}
+.shop-items span{font:400 14px/1.4 'IBM Plex Sans',sans-serif!important;color:#f2efe6!important}
+.shop-items button{min-width:86px;flex-shrink:0}
+.respawn-shop .respawn-go{background:#d8ed92!important;color:#101619!important;border-color:#d8ed92!important;border-radius:3px;min-height:48px;font:600 16px/1.25 'IBM Plex Sans',sans-serif!important}
+.respawn-shop .respawn-go:disabled{background:#253032!important;border-color:#394340!important;color:#88968f!important}
+.respawn-shop .shop-streak-tip{font:400 12px/1.5 'IBM Plex Sans',sans-serif!important;color:#87948f!important;text-align:left;max-width:44ch;text-shadow:none!important}
+@media(max-width:370px){.round-out.shop-screen{padding-inline:14px}.respawn-shop{gap:14px}.respawn-shop h2{font-size:25px!important}.shop-skill{column-gap:10px}.shop-skill h3{font-size:16px!important}.shop-skill>button,.shop-skill .shop-upgrade{max-width:110px;padding:9px 8px}.shop-skill p{font-size:11px!important}}
+@media(max-height:700px){.round-out.shop-screen{padding-top:16px}.respawn-shop{gap:12px}.shop-skill{padding:13px 0}}
+
+.respawn-shop .shop-area-note{display:block;margin:4px 0 6px;color:#bdb0df!important;max-width:100%;line-height:1.4!important}

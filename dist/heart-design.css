@@ -1,0 +1,4 @@
+/* Reference hearts use a 9×9 grid; 18px is an exact 2× scale. */
+#health-hearts.health-hearts{gap:2px;min-height:18px}
+#health-hearts .pixel-heart{display:block;width:18px!important;height:18px!important;flex:0 0 18px!important;image-rendering:pixelated;filter:none}
+.health-standing-hearts .pixel-heart{display:block;width:9px;height:9px;flex:0 0 9px;image-rendering:pixelated;filter:none}

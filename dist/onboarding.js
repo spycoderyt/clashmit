@@ -1,7 +1,7 @@
 // Two skippable voice-casting tips, remembered on this device after skip or completion.
 export const STEPS=Object.freeze([
  {key:'attack',anchor:'attack',text:"Aim at a player and say a spell’s name to attack."},
- {key:'defence',anchor:'defence',text:"Say “Shield” to block or “Heal” to recover health."},
+ {key:'defence',anchor:'defence',text:"Buy Shield and Heal after dying, then say their names to use them."},
 ]);// A brand new player only: after their face is scanned, before any round is running, and never over the face scan.
 export function shouldOpen({seen,practice,faceReady,phase,scanOpen,open,continuous=false}){
  return !seen&&!practice&&!!faceReady&&!open&&!scanOpen&&(phase==='lobby'||phase==='finished'||(continuous&&phase==='playing'));
@@ -31,14 +31,14 @@ export function frame(hole,box,{height=150,gap:GAP=14,margin=12}={}){
 }
 const CSS='.coach{position:absolute;inset:0;z-index:6;font-size:1rem;pointer-events:none}.coach[hidden]{display:none}'
  +'.coach-block{position:absolute;background:#05070be0;pointer-events:auto}'
- +'.coach-hole{position:absolute;border-radius:14px;pointer-events:none;box-shadow:0 0 0 2px var(--orange,#ff9958),0 0 26px #ff995885;animation:coach-glow 1.9s ease-in-out infinite}'
+ +'.coach-hole{position:absolute;border-radius:14px;pointer-events:none;box-shadow:0 0 0 2px var(--orange,#63daca),0 0 26px #63daca85;animation:coach-glow 1.9s ease-in-out infinite}'
  +'.coach-card{position:absolute;left:12px;right:12px;max-width:380px;margin:0 auto;pointer-events:auto;padding:14px 16px 12px;border-radius:16px;background:#121722f7;border:1px solid #4a5468;box-shadow:0 18px 60px #000a;color:#f6f4ef}'
  +'.coach-text{margin:0 0 12px;font-size:1rem;font-weight:700;line-height:1.35}'
- +'.coach-dots{display:flex;gap:6px;margin:0 0 12px;padding:0;list-style:none}.coach-dots li{flex:1;height:5px;border-radius:3px;background:#3a4150}.coach-dots li.active{background:var(--orange,#ff9958)}.coach-dots li.done{background:#7be0a0}'
+ +'.coach-dots{display:flex;gap:6px;margin:0 0 12px;padding:0;list-style:none}.coach-dots li{flex:1;height:5px;border-radius:3px;background:#3a4150}.coach-dots li.active{background:var(--orange,#63daca)}.coach-dots li.done{background:#7be0a0}'
  +'.coach-row{display:flex;align-items:center;gap:12px}'
  +'.coach-skip{background:transparent;color:#d6d8df;text-decoration:underline;text-underline-offset:5px;font-size:.85rem;padding:6px 0;min-height:0}'
- +'.coach-next{margin-left:auto;background:var(--orange,#ff9958);color:#24160e;border-radius:8px;font-weight:700;padding:11px 22px;font-size:.9rem;min-height:40px}'
- +'@keyframes coach-glow{50%{box-shadow:0 0 0 3px var(--orange,#ff9958),0 0 34px #ff9958b0}}'
+ +'.coach-next{margin-left:auto;background:var(--orange,#63daca);color:#24160e;border-radius:8px;font-weight:700;padding:11px 22px;font-size:.9rem;min-height:40px}'
+ +'@keyframes coach-glow{50%{box-shadow:0 0 0 3px var(--orange,#63daca),0 0 34px #63dacab0}}'
  +'@media(prefers-reduced-motion:reduce){.coach-hole{animation:none}}';
 // anchors: the real HUD elements each step lights up, one or several, by the step's `anchor` key. A function
 // is called each time the step is placed, for controls that are built or replaced while the game runs.

@@ -14,8 +14,8 @@ const tick=(room,at)=>{for(const dealt of settleRoom(room,at))recordLingering(ro
 
 test('settling reports lingering damage with who cast it, and flags the point that kills',()=>{
  const room=arena('witch','mage'),[,b]=room.players;b.health=12;const hit=land(room,'a','poison','b',1000),t=hit.resolvedAt;
- assert.deepEqual(settleRoom(room,t+1000),[{actorId:'a',targetId:'b',amount:3,lethal:false}]);
- const rest=settleRoom(room,t+5000);assert.equal(rest.length,1);assert.deepEqual(rest[0],{actorId:'a',targetId:'b',amount:4,lethal:true},'only the 4 health that was left can be dealt');
+ assert.deepEqual(settleRoom(room,t+1000),[{actorId:'a',targetId:'b',amount:3,lethal:false,spell:'poison',attackName:'Poison'}]);
+ const rest=settleRoom(room,t+5000);assert.equal(rest.length,1);assert.deepEqual(rest[0],{actorId:'a',targetId:'b',amount:4,lethal:true,spell:'poison',attackName:'Poison'},'only the 4 health that was left can be dealt');
  assert.deepEqual(settleRoom(room,t+9000),[],'nothing is reported once the effect is over');
 });
 test('a witch is paid for skeleton and poison damage, not only for what lands on impact',()=>{

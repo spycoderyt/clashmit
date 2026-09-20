@@ -38,30 +38,30 @@ export function createSkeletonArmy(container,{clock=()=>performance.now()}={}){
  //   outgoing: [{id,who,progress,feet}]  my armies marching at a player
  //   incoming: [{id,who,progress,feet}]  a player's army marching at me
  //   mobbed:   [{who,feet}]              players my landed army is attacking
- function update({outgoing=[],incoming=[],mobbed=[],onMe=false,ground=.62}={}){
+ function update({outgoing=[],incoming=[],mobbed=[],onMe=false,superOnMe=false,ground=.62}={}){
   const rect=container.getBoundingClientRect(),view={width:rect.width,height:rect.height};if(!view.width||!view.height)return;
   const aspect=view.width/view.height,time=clock(),wanted=new Set();
   // Feet hidden behind the HUD, or that player not sighted yet: stand the army on the visible ground instead.
   const standing=(who,feet)=>{if(feet)lastFeet.set(who,feet);const seen=feet||lastFeet.get(who)||{x:.5,y:ground-.12,size:.07};return{x:seen.x,y:Math.min(seen.y,ground-.02),size:seen.size};};
   const bob=(s,size)=>Math.abs(Math.sin(time*.012+s.phase))*size*.07;
   const spot=(far,s)=>({x:far.x+(s.lane-.5)*far.size*2.4/aspect,y:far.y+(s.stagger-.5)*far.size*.35});
-  for(const {id,who,progress,feet} of outgoing){
-   const g=group('out:'+id,MARCHERS,false,true),far=standing(who,feet);wanted.add(g.key);
+  for(const {id,who,progress,feet,super:superCast} of outgoing){
+   const g=group('out:'+id,superCast?22:MARCHERS,false,true),far=standing(who,feet);wanted.add(g.key);
    for(const s of g.soldiers){const t=clamp(progress*1.3-s.stagger*.3),to=spot(far,s),{size,along}=perspective(NEAR_SIZE,far.size,t);place(s,lerp(.1+.8*s.lane,to.x,along),lerp(ground+.05,to.y,along)-bob(s,size),size,view);}
   }
-  for(const {id,who,progress,feet} of incoming){
-   const g=group('in:'+id,MARCHERS,false),far=standing(who,feet);wanted.add(g.key);
+  for(const {id,who,progress,feet,super:superCast} of incoming){
+   const g=group('in:'+id,superCast?22:MARCHERS,false),far=standing(who,feet);wanted.add(g.key);
    // They fan out across the view and walk on past its bottom edge: at you, not to a spot in front of you.
    for(const s of g.soldiers){const t=clamp(progress*1.3-s.stagger*.3),from=spot(far,s),{size,along}=perspective(far.size,ARRIVE_SIZE,t);place(s,lerp(from.x,-.05+1.1*s.lane,along),lerp(from.y,ground+.1,along)-bob(s,size),size,view);}
   }
-  for(const {who,feet} of mobbed){
+  for(const {who,feet,super:superCast} of mobbed){
    if(!feet)continue; // a mob is only drawn on a player who can be seen
-   const g=group('mob:'+who,MARCHERS,true,true),far=standing(who,feet);wanted.add(g.key);
+   const g=group('mob:'+who,superCast?22:MARCHERS,true,true),far=standing(who,feet);wanted.add(g.key);
    // A flattened ring reads as a crowd standing on the ground around the legs.
    for(const s of g.soldiers){const r=far.size*(.45+.7*s.stagger);place(s,far.x+Math.cos(s.ring)*r/aspect,far.y+Math.sin(s.ring)*r*.3-bob(s,far.size)*1.6,far.size,view);}
   }
   if(onMe){
-   const g=group('me',CROWD,true);wanted.add(g.key);
+   const g=group('me'+(superOnMe?':super':''),superOnMe?16:CROWD,true);wanted.add(g.key);
    for(const s of g.soldiers){const size=NEAR_SIZE*(.72+.2*s.stagger);place(s,.06+.88*s.lane,ground+size*.18-bob(s,size)*2.2,size,view);}
   }
   for(const g of [...groups.values()])if(!wanted.has(g.key))retire(g);

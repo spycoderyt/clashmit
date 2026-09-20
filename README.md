@@ -151,7 +151,7 @@ Players are identified by their face, scanned once when they join. Nothing has t
 
 **Joining.** Enter a name and tap Join game. The game asks for everything it needs straight away, one prompt after another: motion and compass, camera and microphone, then location. The face scan then opens by itself: a round selfie view with a ring that fills as it captures, and one instruction at a time (look straight, turn your head one way, then the other, then raise the phone as if aiming). It tells the player what to fix in plain words (move closer, centre your face, find brighter light), never waits more than a few seconds on a step, and closes itself with “You’re in!”. It takes about 10 seconds. Two skippable tips teach voice casting: aim and say an attack spell, then say Shield or Heal. They appear only for new players on this browser; skipping or finishing records the choice locally. They do not require an extra activation tap. The face scan opens automatically on joining; there are no Sound on or Rescan face buttons in the arena. Voice starts from the Join gesture, pauses for the face scan and while the page is hidden, resumes afterwards, and restarts when a speech session ends. Browsers still require microphone/speech permissions and may refuse speech on unsupported devices; the compact voice status explains errors. There is no Enable voice or Retry tracking button. Leave the arena to stop the microphone. The host's name appears in the waiting message.
 
-**Playing.** Point the rear camera at another player. A box with their name and health appears once their face is recognised (“Face locked”); aim the reticle at it and cast. With more than two players, spells go to whoever is under the reticle. “Identifying… hold steady” means a face is seen but not yet named; “Too far to recognise” means it is under 32 px wide, so move closer. **Try face lock on my own first** on the join screen (or `/?test=face`) scans your own face and tracks you with the front camera, with no second player or server.
+**Playing.** Point the rear camera at another player. A box with their name and health appears once their face is recognised (“Face locked”); aim the reticle at it and cast. With more than two players, spells go to whoever is under the reticle. “Identifying… hold steady” means a face is seen but not yet named; “Too far to recognise” means it is under 32 px wide, so move closer. The legacy `/?test=face` route scans your own face and tracks you with the front camera, with no second player or server.
 
 **Keeping the lock when the face is hidden.** Recognition needs a clear, large enough face, but following does not. Once three of five frames agree on who someone is, the name stays on that tracked head even in profile, where it can no longer be recognised. If the face disappears altogether (head turned away, phone raised in front of it), the person detector is woken up, the lock moves to the body that face belonged to, and the head position is estimated from the body box (“Following · face hidden”). When a face reappears there it is re-checked on fresh frames: the same player carries on, anyone else loses the name at once. A body alone holds a lock for at most six seconds, with no body the lock coasts for about a second, and a name never transfers by position alone.
 
@@ -176,32 +176,24 @@ Node 22+: `npm ci`, `npm start`. Open http://localhost:3000 locally. Every phone
 1. Enter a name and tap Join game, then allow the permission prompts.
 2. Follow the face scan. A small face avatar and face signatures are shared with players in the arena, in memory only.
 3. Enter the live arena immediately after scanning. There is no host start, round time limit, or last-player-standing ending.
-4. Point the rear camera at another player. When their name and health appear, aim the reticle at them until it locks, then say Fireball. Voice starts automatically on joining after permissions are allowed. All spells, including Shield and Heal, are voice-only; the spell cards display mana costs and cooldowns and cannot be tapped to cast. Both “heal” and the speech transcription “heel” activate Heal.
+4. Point the rear camera at another player. When their name and health appear, aim the reticle at them until it locks, then say your unlocked spell (Lightning, Poison or Arrows). Voice starts automatically on joining after permissions are allowed. All spells, including Shield and Heal, are voice-only; the spell cards display mana costs and cooldowns and cannot be tapped to cast. Both “heal” and the speech transcription “heel” activate Heal.
 5. Keep your target in view during the 1.4-second flight. The 3D fireball steers toward them. If their face is hidden the lock follows their body; if they are lost for more than 700 ms the hit is cancelled. Shield and Heal need no target.
 
 ### Personas
 
-Each player picks a persona in the lobby. A persona is a deck of four spells in a fixed order: an attack a shield blocks, an attack it cannot block, then Shield and Heal, which are the same for everyone. Each spell is cast by saying the one word on its card; only the words of your own deck cast. The server enforces decks, and a returning player may change persona before a round but not during one.
-
-| Persona | Slot 1 · blockable | Slot 2 · ignores Shield |
-|---|---|---|
-| Mage · burst | **Fireball**: 25 damage / 1.4 s flight / 1.8 s cooldown / 3 mana / splash | **Lightning**: 20 damage / 0.25 s flight / 2.5 s cooldown / 4 mana |
-| Witch · attrition | **Poison**: 5 on impact then 3 per second for 5 s, 20 in all / 1.2 s flight / 2.5 s cooldown / 3 mana / splash | **Skeletons**: an army marches for 1.5 s and must be tracked like any flight; once it lands it deals 5 per second for 6 s, 30 in all, with no further aiming / 9 s cooldown / 4 mana |
-| Archer · tempo | **Arrows**: 10 damage / 0.5 s flight / 0.6 s cooldown / 1 mana / splash | **Zap**: 8 damage / 0.15 s flight / 1.5 s cooldown / 2 mana / stuns for 0.5 s, during which the target cannot cast |
-
-Shield: blocks every slot-1 attack for 3 seconds / 10-second cooldown / 3 mana. Heal: restores 20 / 12-second cooldown / 4 mana; it does not cure poison or remove skeletons. Skeletons on you are cleared at once by casting any splash spell (Fireball, Poison or Arrows), with or without a locked target. Re-applying poison or skeletons refreshes them; they do not stack. Lingering damage is settled by the server on its 500 ms tick, before it judges the round. Every attack has its own hit sound, and lingering damage ticks once a second. These numbers are untuned prototype values. Mana caps at 10 and continuously refills one unit every 1.5 seconds. Shield protection is evaluated at impact. A visible opponent gets a shield aura and your own shield adds a screen rim, both in the caster’s persona color. Incoming fireballs approach from the locally tracked attacker, with an intensifying all-edge warning when their position is unknown. Sound effects unlock on the Join tap. The live arena keeps running regardless of how many players remain alive. Solo practice retains a clearly labeled simulated target and camera view.
+Choose Mage, Witch or Archer. You start with Lightning, Poison or Arrows respectively. Each has a purchasable heavy attack and ultimate, plus shared consumable Shield, Heal and Flashbang. See **Coins, skills, kills and deaths** below for current damage, prices and delays. Voice-only attack cards show damage in hearts, mana, and cooldown. Mana caps at 10 and regenerates one unit every 1.5s. Shield protection is evaluated at impact; Lightning is the only normal shield-piercing spell. A well-timed shield can parry. Splash attacks clear skeletons on you with or without a locked opponent.
 
 ## Continuous arena and respawn
 
 `npm start` and Railway start a continuous arena. Players can join and scan at any time; there is no host button, countdown to start, round deadline, last-standing winner, or end-of-round interruption. Railway's checked-in settings disable application sleeping and restart a failed process. Run one replica with a persistent volume for scores; active combat remains in memory and resets on a process restart.
 
-On death, the server sets a **10-second respawn deadline**. The screen displays the killer and a countdown using the server clock. At the deadline, a connected player respawns with 100 HP, full mana, no cooldowns, poison, skeletons, stun, or shield. Their face scan and saved score remain. Disconnecting does not reset the countdown; they respawn when connected again. Players cannot cast while dead, and a projectile from a previous life cannot damage the new life. Open `/?test=respawn` to preview the countdown without joining or granting permissions.
+On FFA death, the server sets a **10-second minimum respawn deadline** and opens the shop. After the countdown, press Respawn to return with 70 HP, full mana, and no lingering effects or cooldowns. Bought skills, upgrades, unused consumables and coins persist. Switching character is allowed while dead. Other modes eliminate you until the next round; reconnecting cannot revive you. Projectiles from a previous life cannot damage a new life. Open `/?test=respawn` for a sensor-free preview.
 
 The original round mode remains available to internal callers of `createGameServer({continuous:false})` and its regression tests; the production entry point explicitly selects continuous mode.
 
 ## One-person preview
 
-Open `/?test=face` or tap **Try face lock on my own first**. Scan your face, then prop the phone up and step back in view of the front camera. This uses the real recognition and lock-on pipeline with yourself as the target. No second player or server is needed. **Reset target** restores 100 HP.
+Open the legacy `/?test=face` test. Scan your face, then prop the phone up and step back in view of the front camera. This uses the real recognition and lock-on pipeline with yourself as the target. No second player or server is needed. **Reset target** restores 100 HP.
 
 Open `/?test=solo&vs=witch` (or `vs=mage`, `vs=archer`) to play your chosen persona against a simulated opponent that casts its own deck back. It needs no camera, second player or server, and shows every incoming effect, status and clear on one device.
 
@@ -219,9 +211,9 @@ Taking damage also flashes a red vignette and briefly shakes the camera feed on 
 
 **HUD preview.** Open `/?test=hud` for a sensor-free in-game preview with simulated players, automatic health changes, and example map positions. It does not join the server or request camera, microphone, or location access.
 
-**Passive healing.** During live rounds, living connected players regenerate 5 HP (half a heart) every 4 seconds, up to 100 HP. It costs no mana, does not revive knocked-out players, and stops outside the round. Damage over time is resolved before each healing tick.
+**Passive healing.** During live rounds, living connected players regenerate 5 HP (half a heart) every 4 seconds, up to 70 HP. It costs no mana, does not revive knocked-out players, and stops outside the round. Damage over time is resolved before each healing tick.
 
-**Health HUD.** Ten pixel hearts sit immediately above mana (10 HP each, with partial fills). A compact top-left list automatically sorts everyone by current health and uses smaller pixel hearts, including partial hearts; equal health shares a rank. The locked-target health meter shifts from green through yellow to red as health falls. A bottom-right top-three panel shows medals, names and best streaks from the global leaderboard, above the spell controls. The health ranking is separate from the persistent points leaderboard.
+**Health HUD.** Seven pixel hearts (10 HP each) show your health with partial fills. Coin balance sits above them; skill cards sit above mana. The top-left panel shows the three richest active players with medals/portraits, and the bottom-right panel lists consumable stocks. The target health meter turns from green through yellow to red.
 
 ## Minimap
 
@@ -243,7 +235,7 @@ Voice uses the browser's speech recognition service, which may process audio rem
 
 **This is a hackathon prototype, not reliable identity recognition.** Lighting changes, distance, head angle and look-alikes can defeat matching, and a face signature does not authenticate a person. Start close together and test on the actual phones. Visual projectile depth is artistic; there is no real-world distance, surface occlusion, or shared AR map.
 
-The server enforces player slots, round state, cooldowns, impact timing, shields, and health, but trusts the firing client to report whether tracking remained valid. It is not anti-cheat-secure. A disconnect or missing impact report causes no damage. Foreground camera tracking is required. In-memory state is lost on server restart.
+The server enforces player slots, round state, cooldowns, impact timing, shields, and health, but trusts the firing client to report whether tracking remained valid. It is not anti-cheat-secure. A disconnect or missing impact report cancels ordinary projectile damage; an already-launched orbital strike still resolves. Foreground camera tracking is required. In-memory state is lost on server restart.
 
 ## Hosting
 
@@ -258,9 +250,29 @@ Optional `ALLOWED_ORIGINS` is a comma-separated browser origin allowlist; same o
 Third-party assets: Three.js (MIT), ONNX Runtime Web 1.30.0 (MIT), InsightFace buffalo_sc face models (non-commercial research only, `dist/models/face/NOTICE.txt`), MapLibre GL JS 6.10.0 (BSD-3-Clause, `dist/vendor/maplibre/LICENSE.txt`), map tiles by OpenFreeMap © OpenMapTiles with data © OpenStreetMap contributors (ODbL), MediaPipe Tasks Vision (Apache-2.0), Google's EfficientDet Lite0 and BlazeFace short-range models. See `dist/vendor/THREE-LICENSE.txt` and `dist/vendor/mediapipe/NOTICE.txt`.
 
 
-## Kill streaks, kills, deaths and leaderboard
+## Coins, skills, kills and deaths
 
-The front page shows rank, player, **best kill streak**, total kills and total deaths. It refreshes every five seconds and hides players with no recorded streak. Best streak ranks first, total kills breaks ties, and fewer deaths breaks remaining ties; exact ties share rank. Points and Wins are no longer displayed or used to rank the live arena.
+The front page, in-game top-left panel, face labels and `/live` rank players by **current coin balance**. Players start at zero; a confirmed kill grants **30 coins**, once per victim life, including damage-over-time and orbital kills. This is a bounty, not a transfer: the victim keeps their balance for shopping. Spending reduces your rank. Trophies/Elo are removed; older profiles keep their identities and stats but start with zero coins unless they already have a coin balance.
+
+Production players have **7 hearts / 70 HP**. Each class starts with only its quick attack; unlock the second attack for 60 coins, then the ultimate for 140. Upgrades cost 80 / 160 / 240 coins and add damage while keeping cooldown and flight delay unchanged. Purchases persist across lives and class changes. There are no automatic third-cast supers, and consumables have no upgrades.
+
+| Class | Quick: damage / mana / cooldown | Heavy | Ultimate |
+| --- | --- | --- | --- |
+| Mage | Lightning: 10 / 2 / 1s | Fireball: 25 / 4 / 2.4s | Meteor: 60 / 10 / 15s |
+| Witch | Poison: 5 + 6 over 3s / 1 / 1s | Skeletons: 25 over 5s / 4 / 5s | Soul Reaper: 60 / 10 / 15s |
+| Archer | Arrows: 8 / 1 / 0.65s | Bomb Arrow: 25 / 4 / 2.4s | Ballista: 60 / 10 / 15s |
+
+Paid names: Chain Lightning (14), Wildfire (32), Extinction (67); Plague (8 + 6 lingering), Bone Legion (35 lingering), Grim Reaper (67); Arrow Storm (12), Explosive Arrow (32), Railgun (67). Numbers are HP. Ultimates require and spend all 10 mana. Voice accepts base and upgraded names, common aliases including “heel” and “flash bank”, and bounded spelling variation; locked attacks and empty consumables remain server-rejected.
+
+The FFA death screen is a shop with a 10-second minimum wait. Buy or upgrade skills, choose a character, and buy Shield (30 coins, 7s), Heal (30 coins, restores 50 HP, capped at 70), or Flashbang (50 coins, 3s blind/stun for other unshielded players within 10m of the caster; fresh GPS required). Press **Respawn** when ready after the countdown. Shield blocks all normal attacks/ultimates and Flashbang except Lightning, and clears poison/skeletons. Orbital Airstrike ignores shields. Inventory appears bottom-right, skills above mana, and coin balance above your hearts.
+
+Every 5 consecutive kills earns one **Orbital Airstrike** charge. Tap the red button, tap a point on the full-screen map to see the **10m radius**, then hold for 0.8s to launch. Players inside see “Incoming orbital airstrike — get out of the 10m radius!” with **5 seconds to escape**. Movement and casting stay enabled. At impact the server checks the latest fresh locations, kills players still inside (including those who entered during the countdown), spares the caster, and awards each bounty once. Disconnecting preserves a warned player's last location for that strike; it does not cancel it. GPS uncertainty applies, particularly indoors: the on-screen radius is approximate and escaping depends on timely location updates.
+
+The actual 3D rocket uses the CC0 modular meshes from [Kenney Space Kit](https://kenney.nl/assets/space-kit), bundled locally under `dist/models/rocket` with its license. Three.js animates a quadratic arc with perspective, tangent-aligned rotation and the caster's portrait near the tip. The warning leaves the camera visible and does not intercept movement controls.
+
+When no active opponent with a fresh location is within 10m, the map opens with directions toward the nearest players. It closes below 8m to avoid GPS jitter repeatedly toggling it. Closing it manually pauses auto-opening for 15s. Unknown/stale locations are not treated as nearby. No location access means no automatic distance map or orbital targeting.
+
+Backgrounding, leaving, and socket closure remove a player from public game state and clear their face/map markers. If a phone vanishes without sending a message, the server times out its heartbeat after about 8 seconds. The original browser token restores the same identity, balance, and purchases; a short private reconnect record does not appear in the arena. Non-FFA disconnects forfeit that round. No web app can guarantee receipt of a final message when the OS kills it.
 
 Your current streak increases on each kill and resets on death. Each increase pops up the new streak number on screen. Every kill reaching streak 3 or higher also broadcasts the player name and new streak to everyone in the arena. The top three leaderboard ranks have gold, silver and bronze medals. Your best streak remains saved. A kill from an earlier life or after dying still counts as a kill but does not advance your new streak. A reconnect to the same life preserves the streak; a fresh life after a server restart or reconnect expiry resets the current streak without losing the best.
 
@@ -272,6 +284,42 @@ The normal server saves names, scores and hashed reconnect tokens atomically in 
 
 ### Live spectator display
 
-Open `/live` (for example, https://clashmit.lol/live) on a projector or another screen. It refreshes every second with the best-kill-streak leaderboard, online count, and confirmed kills, including lingering damage. It never joins as a player or asks for camera, microphone, or location permissions. The bottom-right QR code opens https://clashmit.lol/ on players’ phones. `/live?demo=1` previews the layout with clearly labeled sample data.
+Open `/live` (for example, https://clashmit.lol/live) on a projector or another screen. It refreshes every second with the coin leaderboard, online count, and confirmed kills, including lingering damage. It never joins as a player or asks for camera, microphone, or location permissions. The bottom-right QR code opens https://clashmit.lol/ on players’ phones. `/live?demo=1` previews the layout with clearly labeled sample data.
 
-The latest 100 kills are held in server memory and reset on a restart/deploy; leaderboard statistics continue to use the persistent score file. The read-only `/api/live` endpoint exposes only names, public statistics, online status, and kill events. It excludes face scans, photos, locations, and player tokens.
+The latest 100 kills are held in server memory and reset on a restart/deploy; leaderboard statistics continue to use the persistent score file. The read-only `/api/live` endpoint exposes only names, public statistics, online status, and kill events. It excludes face descriptors, locations, and player tokens. Tiny face portraits for the top three and current king are public on the leaderboard/live page; the scan screen explains this. Photos remain in memory and disappear when players leave or the server restarts.
+
+
+## Local feature previews and round administration
+
+- `/sounds.html`: recorded online meme clips, normal/upgraded casts, coin collection, airstrikes, impacts, volume and stop controls. Source/author links are shown below the buttons; licenses and edits are documented in `dist/media/memes/CREDITS.md`. Clips are bundled locally, preloaded after an audio gesture, and never fetched from a soundboard during combat.
+- `/?test=airstrike`: sensor-free targeting and cinematic preview.
+- `/effects.html`: choose a local photo and tap a face to preview the 50% red damage silhouette. The photo is never uploaded. Hold the tint to inspect its edges.
+- `/?test=respawn`: FFA death shop with simulated coins, purchases, character selection and manual respawn.
+- `/?test=eliminated`: non-FFA elimination screen.
+- `/live?demo=1`: spectator layout using sample coin balances.
+
+Set **`ADMIN_PASSWORD`** to a strong private password in Railway service variables before deploying the admin feature. For local testing, export it in the terminal before `npm start`. Never put it in frontend code, the README, or Git. Open `/admin`, sign in, and choose **Start FFA**, **Start King of the Hill**, **End round**, or **Mana surge**. Without that variable, the admin API is disabled. Sessions use HttpOnly/SameSite cookies, expire after eight hours and reset on server restart; wrong-password attempts are rate-limited. Starting a mode immediately resets current combat state and broadcasts the change. Ending a round stops combat and broadcasts results. Coins and purchases persist across all these transitions.
+
+**FFA is the default stage.** FFA deaths get the normal 10-second respawn countdown. Choose Mage, Witch or Archer and shop while waiting; press Respawn after the countdown. The server applies the selection without shortening the delay. You cannot change persona while alive. In KOTH and future non-FFA modes, death eliminates you for the rest of the round. There is no respawn or character switch; reconnecting cannot revive that identity. Late arrivals spectate until the next round starts.
+
+**King of the Hill** lasts three minutes and needs at least two scanned, connected players. A random living player starts with the crown; killing them transfers it to the living killer. On disconnect it transfers to another living player. The crown holder accumulates time; the most time wins, with kills/deaths breaking ties. The crown appears above the tracked face and beside the top-left coin standings. Round results rank KOTH by crown time. Global coin rankings remain on the front/live leaderboards.
+
+**Upgrades replace supers:** buy them in the FFA death shop; there is no automatic cast counter. See the balance table above.
+
+A blockable projectile hitting within **350ms** of raising a shield is **parried**: it reflects once, costs no extra mana, credits the defender, and cannot be parried again. Killing your previous killer grants **revenge**, a public announcement and 2 mana. The admin’s **Mana surge** event doubles mana regeneration for 20 seconds. Public kill/streak/round/crown/revenge announcements are sent to all players and the spectator screen. Other possible event additions: low-gravity projectiles, double-coin minute, or a rotating bounty; these are ideas, not active rules.
+
+**Damage tint:** only the attacker receives a server-confirmed damage event, including damage-over-time. A separate CPU worker builds a small body silhouette, shown red at 50% opacity for 240ms. It never affects targeting or whether damage counts. Mask work runs only around an outgoing shot/damage, with one request in flight. Fresh tracking aligns the mask; stale masks are discarded. A face-only tint is used until a reliable body mask is ready. Segmentation can be imperfect at distance, with occlusion or overlapping people; test on the actual target iPhones. Camera frames and masks remain local.
+
+**Slow-phone box motion:** display-only adaptive smoothing runs every animation frame, independently of recognition. Slow inference reduces optional body detection and full-scene search frequency while retaining follow crops. This does not extend target freshness or grant damage from stale locks. Test on actual iPhones under movement and low light; desktop tests only verify smoothing behavior and scheduling.
+
+**Share card:** the home page title is “ClashMIT: Fireball your friends”. Open Graph/Twitter metadata use `media/social-gameplay-v1.jpg`, a 1200×630 composition from the supplied gameplay video. Preview services may cache the previous card until they fetch it again after deployment.
+
+### Interface and device checks (local overhaul)
+
+The HUD keeps the top coin standings left and the minimap right. Your coin balance and seven pixel hearts sit bottom-left, with icon-labeled consumables opposite them. Skills precede the mana bar. The front page, shop and live view share flat surfaces and locally bundled [IBM Plex Sans](https://www.ibm.com/plex/) typography. UI stat/consumable icons are from [Lucide](https://lucide.dev/) and the font/icon license files ship alongside the assets. No UI framework or remote font request is required at runtime.
+
+Shield lasts 7s with a14s reuse delay; Heal restores50HP with an8s reuse delay; Flashbang disables nearby unshielded opponents for3s within10m with an8s reuse delay. Purchased attack upgrades retain their original delays. These values are a first balancing pass, not a substitute for a live playtest.
+
+The face tracker skips repeated camera frames, rejects stale worker results after restarts, and deprioritizes body detection on slow devices. Overlay interpolation does not alter recognition confidence or hit freshness. Physical iPhone12 camera/ASR performance must still be measured on-device.
+
+Upgraded first attacks (Chain Lightning, Plague, Arrow Storm) hit the locked target at full damage, then up to two nearest eligible opponents within 5 metres of that target at 50% damage. Plague spreads at half poison damage per second for the same duration. Extra hits require fresh location data; no GPS means the main hit still works without spread. Shields block spread except Chain Lightning. A miss, blocked primary, parry, or reflection cannot start a spread.

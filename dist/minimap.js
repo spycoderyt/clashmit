@@ -1,3 +1,5 @@
+import {ORBITAL} from './orbital-rules.js';
+import {createHoldGesture} from './hold-gesture.js';
 // Minimap. Owns its DOM, stylesheet, GPS watch and compass so the game only has to pass it server state.
 // Two views of the same thing:
 //   corner   a small rounded-square map, centred on you, 50 m to each side, turning with your compass heading
@@ -34,7 +36,8 @@ export function createMinimap({container,send,notify=()=>{},geolocation=globalTh
  const selfLayer=el('g',{},svg),dots=el('g',{},svg),self=marker(selfLayer),selfBeak=el('path',{class:'minimap-beak'},self.g);self.g.classList.add('minimap-me');let avatars=new Map();
  container.append(root);
  let players=[],myId=null,skew=0,position=null,heading=null,headingAt=0,watchId=null,sendTimer=null,lastSent=0,lastSentFix=0,compass=false,full=false,following=true,centredAt=0,wired=false,dirty=true,frameRequest=0,size='';
- let locationStatus='Locating…';
+ let locationStatus='Locating…',gameRoom=null,targeting=null,aimPoint=null,previewStrike=null,holdStart=null,autoFull=false,snoozeUntil=0;
+ const guide=document.createElement('div');guide.className='map-guide';root.append(guide);const aimCircle=el('circle',{class:'orbital-radius',fill:'#ff384844',stroke:'#ff5266','stroke-width':3},svg),blastLayer=el('g',{},svg),directions=el('g',{class:'map-directions'},svg);aimCircle.style.display='none';
  const nodes=new Map(),sharing=()=>watchId!==null;
  const invalidate=()=>{dirty=true;if(!frameRequest)frameRequest=requestAnimationFrame(()=>{frameRequest=0;if(dirty&&!root.hidden)render();});};
  function onOrientation(event){const next=cameraHeading(event);if(next===null)return;const before=heading;heading=smoothHeading(heading,next);headingAt=Date.now();if(before===null||Math.abs(heading-before)>.5)invalidate();}
@@ -55,15 +58,26 @@ export function createMinimap({container,send,notify=()=>{},geolocation=globalTh
   if(compass){compass=false;window.removeEventListener('deviceorientationabsolute',onOrientation);window.removeEventListener('deviceorientation',onOrientation);}
   if(position||lastSent)send({type:'location',location:null});position=null;heading=null;lastSent=0;lastSentFix=0;locationStatus='Location off';setFull(false);invalidate();
  }
- function setFull(next){if(full===next)return;full=next;following=true;size='';root.classList.toggle('full',full);tiles.setInteractive(full);frame.setAttribute('aria-label',full?'Map':'Open the full-screen map');frame.tabIndex=full?-1:0;invalidate();}
+ function setFull(next){if(full===next)return;full=next;following=true;size='';root.classList.toggle('full',full);tiles.setInteractive(full&&!targeting);frame.setAttribute('aria-label',full?'Map':'Open the full-screen map');frame.tabIndex=full?-1:0;invalidate();}
  const open=()=>{if(full)return;if(!sharing())void enable();else if(position)setFull(true);};
  frame.onclick=open;frame.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();open();}};
- root.querySelector('.minimap-close').onclick=()=>setFull(false);
+ root.querySelector('.minimap-close').onclick=()=>{endAirstrike();autoFull=false;snoozeUntil=Date.now()+15000;setFull(false);};
  recenter.onclick=()=>{following=true;centredAt=0;invalidate();};
  root.querySelector('.minimap-stop').onclick=()=>{disable();notify('Location sharing stopped.');};
- document.addEventListener('keydown',e=>{if(e.key==='Escape'&&full)setFull(false);});
+ document.addEventListener('keydown',e=>{if(e.key==='Escape'&&full)root.querySelector('.minimap-close').click();});
+ const hold=createHoldGesture({onHold:()=>{const launch=targeting,point=aimPoint;holdStart=null;root.classList.remove('holding');if(launch&&point){endAirstrike();setFull(false);launch(point);}}});
+ function endAirstrike(){hold.cancel();holdStart=null;targeting=null;aimPoint=null;root.classList.remove('orbital-targeting','holding');tiles.setInteractive(full);invalidate();}
+ function pick(e){const r=frame.getBoundingClientRect(),x=e.clientX-r.left,y=e.clientY-r.top,mpp=tiles.metresPerPixel(position.latitude)||FULL_METRES/(Math.min(r.width,r.height)/2);return tiles.unproject(x,y)||{latitude:position.latitude+(r.height/2-y)*mpp/111320,longitude:position.longitude+(x-r.width/2)*mpp/(111320*Math.cos(position.latitude*Math.PI/180))};}
+ frame.addEventListener('pointerdown',e=>{if(!targeting||!position)return;e.preventDefault();frame.setPointerCapture(e.pointerId);aimPoint=pick(e);holdStart={x:e.clientX,y:e.clientY};root.classList.add('holding');invalidate();hold.begin(holdStart);});
+ frame.addEventListener('pointermove',e=>{if(holdStart&&Math.hypot(e.clientX-holdStart.x,e.clientY-holdStart.y)>12){hold.cancel();holdStart=null;root.classList.remove('holding');}});
+ for(const type of ['pointerup','pointercancel','lostpointercapture'])frame.addEventListener(type,()=>{hold.cancel();holdStart=null;root.classList.remove('holding');});
  function render(){
-  dirty=false;const active=sharing()&&!!position,facing=heading!==null&&Date.now()-headingAt<3000?heading:null,width=frame.clientWidth,height=frame.clientHeight;
+  dirty=false;
+  const mineNow=players.find(p=>p.id===myId),foes=players.filter(p=>p.id!==myId&&p.connected&&p.faceReady&&p.health>0&&p.location&&Date.now()-skew-p.location.at<FRESH_MS),distances=position?foes.map(p=>relativePosition(position,p.location).distance):[],nearest=distances.length?Math.min(...distances):Infinity;
+  const canGuide=gameRoom?.economy&&gameRoom.phase==='playing'&&mineNow?.health>0&&mineNow.faceReady&&position&&Date.now()-position.at<FRESH_MS&&!targeting&&!(mineNow.actionLockUntil>Date.now()-skew);
+  if(canGuide&&nearest>10&&!full&&Date.now()>snoozeUntil){autoFull=true;setFull(true);}else if(autoFull&&(!canGuide||nearest<8)){autoFull=false;setFull(false);}
+  guide.hidden=!full;guide.textContent=targeting?'Tap to select a 10 m radius. Click and hold to launch orbital airstrike.':autoFull?(foes.length?'No players nearby · walk toward the arrows':'No players nearby · waiting for active player locations'):'';
+ const active=sharing()&&!!position,facing=heading!==null&&Date.now()-headingAt<3000?heading:null,width=frame.clientWidth,height=frame.clientHeight;
   root.classList.toggle('active',active);cta.textContent=active?'':sharing()?'Locating…':locationStatus;if(!active&&full)setFull(false);
   const resized=size!==`${width}x${height}x${full}`;if(resized){size=`${width}x${height}x${full}`;tiles.resize();svg.setAttribute('viewBox',full?`0 0 ${width} ${height}`:`${-VIEW} ${-VIEW} ${VIEW*2} ${VIEW*2}`);}
   // Corner view: the map is a backdrop scaled so 50 m reaches the edge. Full view: the map decides, we project onto it.
@@ -78,13 +92,16 @@ export function createMinimap({container,send,notify=()=>{},geolocation=globalTh
    if(full){const p=tiles.project(location.latitude,location.longitude);if(p)return{x:p.x,y:p.y,clamped:false};const r=relativePosition(position,location),q=radarPoint(r.distance,r.bearing,null,Infinity);return{x:width/2+Math.sin(r.bearing*Math.PI/180)*r.distance*perMetre,y:height/2-Math.cos(r.bearing*Math.PI/180)*r.distance*perMetre,clamped:q.clamped};}
    const r=relativePosition(position,location),q=radarPoint(r.distance,r.bearing,facing,CORNER_METRES);return{x:q.x*SCALE,y:q.y*SCALE,clamped:q.clamped};
   };
+  blastLayer.replaceChildren();for(const strike of [...(gameRoom?.airstrikes||[]),...(previewStrike?[previewStrike]:[])]){if(strike.endsAt<=Date.now()-skew||!active)continue;const at=place(strike.point);el('circle',{cx:at.x,cy:at.y,r:(strike.radius||10)*perMetre,fill:'#ff384830',stroke:'#ff5266','stroke-width':2},blastLayer);}
+  aimCircle.style.display=targeting&&aimPoint&&full?'':'none';if(targeting&&aimPoint&&full){const at=place(aimPoint);aimCircle.setAttribute('cx',at.x);aimCircle.setAttribute('cy',at.y);aimCircle.setAttribute('r',ORBITAL.radius*perMetre);}
+  directions.replaceChildren();if(autoFull&&position&&full){const from=place(position);for(const p of [...foes].sort((a,b)=>relativePosition(position,a.location).distance-relativePosition(position,b.location).distance).slice(0,3)){const to=place(p.location),angle=Math.atan2(to.y-from.y,to.x-from.x),distance=Math.min(85,Math.hypot(to.x-from.x,to.y-from.y)),x=from.x+Math.cos(angle)*distance,y=from.y+Math.sin(angle)*distance;el('path',{d:`M ${from.x} ${from.y} L ${x} ${y}`,stroke:'#63daca','stroke-width':3},directions);el('path',{d:`M -9 -6 L 0 0 L -9 6`,fill:'none',stroke:'#63daca','stroke-width':3,transform:`translate(${x} ${y}) rotate(${angle*180/Math.PI})`},directions);}}
   const serverNow=Date.now()-skew,seen=new Set(),radius=full?22:17;
   const visible=active?players.filter(p=>p.id!==myId&&p.connected&&p.location&&serverNow-p.location.at<STALE_MS):[];
   for(const p of visible){
    seen.add(p.id);let node=nodes.get(p.id);if(!node){node=marker(dots);nodes.set(p.id,node);}
    const point=place(p.location),color=colorFor(p.id),r=radius*(point.clamped?.65:1);
    node.g.setAttribute('transform',`translate(${point.x.toFixed(1)} ${point.y.toFixed(1)})`);node.g.classList.toggle('stale',serverNow-p.location.at>FRESH_MS);
-   paint(node,{radius:r,color,name:p.name,photo:avatars.get(p.id),dead:p.health<=0,label:full?p.name:''});node.halo.setAttribute('fill',color);node.halo.setAttribute('r',point.clamped?0:Math.min(full?400:SCALE,p.location.accuracy*perMetre).toFixed(1));
+   paint(node,{radius:r,color,name:p.name,photo:avatars.get(p.id),dead:p.health<=0,label:full?`${p.name} · ${Math.round(relativePosition(position,p.location).distance)}m`:''});node.halo.setAttribute('fill',color);node.halo.setAttribute('r',point.clamped?0:Math.min(full?400:SCALE,p.location.accuracy*perMetre).toFixed(1));
   }
   for(const [id,node] of nodes)if(!seen.has(id)){node.g.remove();nodes.delete(id);}
   // You: your own face in a white ring, with a small beak showing which way the camera points.
@@ -100,7 +117,7 @@ export function createMinimap({container,send,notify=()=>{},geolocation=globalTh
  window.addEventListener('resize',()=>{size='';invalidate();});
  return {
   // Called with every server state. Practice modes never call this, so the map stays hidden there.
-  update(room,id){players=room.players||[];myId=id;if(Number.isFinite(room.serverTime))skew=Date.now()-room.serverTime;root.hidden=false;invalidate();},
+  update(room,id){gameRoom=room;players=room.players||[];myId=id;if(Number.isFinite(room.serverTime))skew=Date.now()-room.serverTime;root.hidden=false;invalidate();},
   // avatars: Map of player id to a small face photo (data URL) from their scan.
   setAvatars(next){avatars=next;invalidate();},
   stop(){disable();locationStatus='Locating…';players=[];root.hidden=true;},
@@ -108,5 +125,10 @@ export function createMinimap({container,send,notify=()=>{},geolocation=globalTh
   enable,
   setPermission(state){if(!sharing()&&state==='denied'){locationStatus='Location blocked';invalidate();}},
   sharing,
+  beginAirstrike(launch){if(!position||Date.now()-position.at>FRESH_MS){notify('Wait for a fresh GPS fix before targeting.');return;}targeting=launch;aimPoint=null;autoFull=false;root.classList.add('orbital-targeting');setFull(true);tiles.setInteractive(false);invalidate();},
+  endAirstrike,
+  showStrike(strike){endAirstrike();previewStrike=strike;autoFull=false;setFull(true);following=false;if(tiles.ready)tiles.centerOn(strike.point,40,Math.min(frame.clientWidth,frame.clientHeight)/2);invalidate();setTimeout(()=>{if(previewStrike===strike){previewStrike=null;invalidate();}},Math.max(0,strike.endsAt-(Date.now()-skew))+500);},
+  projectStrike(point){const p=tiles.project(point.latitude,point.longitude),bounds=frame.getBoundingClientRect(),parent=container.getBoundingClientRect();return p?{x:(bounds.left-parent.left+p.x)/parent.width,y:(bounds.top-parent.top+p.y)/parent.height}:{x:.5,y:.55};},
+  currentLocation(){return position?{...position,at:position.at-skew}:null;},
  };
 }

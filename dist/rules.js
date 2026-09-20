@@ -1,8 +1,12 @@
+import {relativePosition,validLocation} from './geo.js';
+import {ATTACKS,CONSUMABLES,attacksFor,ruleFor,skillLevel,skillName,MAX_HEALTH} from './economy.js';
+import {isSuperReady,upgradedRule,SUPER_NAMES} from './supers.js';
 // Prototype balance: ten whole spendable units; the fractional bar fills one unit every 1.5 seconds.
 export const MANA = Object.freeze({max:10,regenPerSecond:2/3});
 export const HEALTH_REGEN=Object.freeze({amount:5,intervalMs:4000,max:100});
 export const FLIGHT_MS=1400;
 export const SPELLS = Object.freeze({
+ ...ATTACKS,flashbang:{...CONSUMABLES.flashbang,damage:0,manaCost:0,flash:true},
  fireball:{cooldown:1800,damage:25,manaCost:3,flightMs:FLIGHT_MS,splash:true},
  lightning:{cooldown:2500,damage:20,manaCost:4,flightMs:250,bypassShield:true},
  // The army marches like a projectile; landing it starts damage that needs no further tracking.
@@ -22,12 +26,13 @@ export const PERSONAS = Object.freeze({
  archer:Object.freeze(['arrows','zap','shield','heal'])
 });
 export const personaOf=player=>Object.hasOwn(PERSONAS,player?.persona)?player.persona:DEFAULT_PERSONA;
-export const deckOf=player=>PERSONAS[personaOf(player)];
+export const deckOf=player=>player?.economy?[...attacksFor(personaOf(player)),'shield','heal','flashbang']:PERSONAS[personaOf(player)];
 export const piercerOf=deck=>deck.find(spell=>SPELLS[spell].bypassShield)||null;
 export function manaAt(player,now=Date.now()){
  const current=Number.isFinite(player.mana)?player.mana:MANA.max;
  const elapsed=Number.isFinite(player.manaUpdatedAt)?Math.max(0,now-player.manaUpdatedAt):0;
- return Math.min(MANA.max,Math.max(0,current)+elapsed*MANA.regenPerSecond/1000);
+ const boosted=Number.isFinite(player.manaUpdatedAt)?Math.max(0,Math.min(now,player.manaBoostUntil||0)-player.manaUpdatedAt):0;
+ return Math.min(MANA.max,Math.max(0,current)+(elapsed+boosted)*MANA.regenPerSecond/1000);
 }
 export function replenishMana(player,now=Date.now()){
  player.mana=manaAt(player,now);player.manaUpdatedAt=Math.max(player.manaUpdatedAt??now,now);return player.mana;
@@ -37,10 +42,16 @@ export function replenishMana(player,now=Date.now()){
 function bleed(player,key,now,dealt){
  const effect=player[key];if(!effect)return;
  const due=Math.floor((Math.min(now,effect.until)-effect.startedAt)*effect.perSecond/1000)-effect.applied;
- if(due>0){const amount=Math.min(due,player.health);player.health-=amount;effect.applied+=due;if(amount>0)dealt?.push({actorId:effect.by,targetId:player.id,amount,lethal:player.health<=0,...(Number.isFinite(effect.life)?{actorLife:effect.life}:{})});}
+ if(due>0){const amount=Math.min(due,player.health);player.health-=amount;effect.applied+=due;if(amount>0)dealt?.push({actorId:effect.by,targetId:player.id,amount,lethal:player.health<=0,...(effect.spell?{spell:effect.spell,attackName:effect.attackName}:{}),...(Number.isFinite(effect.life)?{actorLife:effect.life}:{})});}
  if(now>=effect.until||player.health<=0)player[key]=null;
 }
-const lingering=(rule,now,by,life)=>({by,...(Number.isFinite(life)?{life}:{}),perSecond:rule.perSecond,startedAt:now,until:now+rule.duration,applied:0});
+const lingering=(rule,now,by,life,shot)=>({by,...(shot?.spell?{spell:shot.spell,attackName:shot.attackName}:{}),...(Number.isFinite(life)?{life}:{}),perSecond:rule.perSecond,startedAt:now,until:now+rule.duration,applied:0});
+function applyPoison(target,rule,now,by,life,shot){
+ // A weak area hit must not lower active poison damage or take its kill credit.
+ // Keep its original expiry too; weak hits cannot extend a stronger effect.
+ if(target.poison?.until>now&&target.poison.perSecond>rule.perSecond)return;
+ target.poison=lingering(rule,now,by,life,shot);
+}
 // Who to name for a knock-out that no impact announced: the caster of the lingering damage that was on the
 // player when last seen alive. With both on them, the skeletons out-damage the poison and most likely landed it.
 export function lingeringKiller(before){
@@ -48,7 +59,13 @@ export function lingeringKiller(before){
 }
 export function settle(player,now=Date.now(),dealt){
  replenishMana(player,now);
- const {amount,intervalMs,max}=HEALTH_REGEN;
+ // Resolve each Renewal tick after damage due at that instant; delayed server ticks cannot revive a player.
+ const renewal=player.renewal;
+ if(renewal){while(renewal.at+1000<=Math.min(now,renewal.until)&&player.health>0){renewal.at+=1000;settleHealth(player,renewal.at,dealt);if(player.health>0&&player.connected!==false)player.health=Math.min(player.economy?MAX_HEALTH:100,player.health+3);}if(now>=renewal.until||player.health<=0)player.renewal=null;}
+ settleHealth(player,now,dealt);return player;
+}
+function settleHealth(player,now,dealt){
+ const {amount,intervalMs}=HEALTH_REGEN,max=player.economy?MAX_HEALTH:HEALTH_REGEN.max;
  if(Number.isFinite(player.healthRegenAt)){
   // Resolve ongoing damage before each heal boundary so late ticks cannot revive a dead player
   // or change the result compared with frequent ticks. Full health never banks unused healing.
@@ -67,14 +84,16 @@ export function settle(player,now=Date.now(),dealt){
 // with the same `now` it then passes to a cast or an impact, so nothing is dealt unseen inside those calls.
 export function settleRoom(room,now=Date.now()){
  const dealt=[];
- for(const p of room.players){if(room.phase==='playing'){const at=room.endsAt>0?Math.min(now,room.endsAt):now;p.healthRegenAt??=at;settle(p,at,dealt);}else{replenishMana(p,now);p.healthRegenAt=now;p.poison=null;p.swarm=null;}}
+ for(const p of room.players){if(room.phase==='playing'&&(p.actionLockUntil||0)<=now){const at=room.endsAt>0?Math.min(now,room.endsAt):now;p.healthRegenAt??=at;settle(p,at,dealt);}else{replenishMana(p,now);p.healthRegenAt=now;p.poison=null;p.swarm=null;}}
  return dealt;
 }
 function prepareCast(room,casterId,spell,targetId,now){
- const actor=room.players.find(p=>p.id===casterId),rule=Object.hasOwn(SPELLS,spell)?SPELLS[spell]:null;
+ const actor=room.players.find(p=>p.id===casterId),superCast=!room.economy&&!!room.enhanced&&isSuperReady(actor,spell),rule=Object.hasOwn(SPELLS,spell)?(room.economy?ruleFor(actor,spell):upgradedRule(spell,SPELLS[spell],superCast)):null;
  // Lingering damage is settled first so a dead or freshly cleared caster is judged correctly; mana waits until the cast is otherwise valid.
  if(actor&&room.phase==='playing'){bleed(actor,'poison',now);bleed(actor,'swarm',now);}
  if(!rule||!actor?.connected||actor.health<=0||(room.continuous&&!actor.faceReady)||room.phase!=='playing')return{error:'Wait for a live round.'};
+ if((actor.actionLockUntil||0)>now)return{error:'Orbital airstrike incoming — actions locked.'};
+ if(room.economy){if(Object.hasOwn(CONSUMABLES,spell)){if(!(actor.loadout?.consumables?.[spell]>0))return{error:'Buy this consumable after you die.'};}else if(!skillLevel(actor,spell))return{error:'Unlock that skill in the respawn shop.'};}
  if(!deckOf(actor).includes(spell))return{error:'Not in your deck.'};
  if((actor.stunUntil||0)>now)return{error:"You're stunned."};
  if((actor.cooldowns?.[spell]||0)>now)return{error:'That spell is recharging.'};
@@ -88,12 +107,12 @@ function prepareCast(room,casterId,spell,targetId,now){
  }
  replenishMana(actor,now);
  if(actor.mana+1e-9<rule.manaCost)return{error:`Not enough mana. ${spell[0].toUpperCase()+spell.slice(1)} needs ${rule.manaCost}.`};
- return{actor,rule,target};
+ return{actor,rule,target,superCast};
 }
-function spend(actor,spell,rule,now){actor.mana=Math.max(0,actor.mana-rule.manaCost);(actor.cooldowns??={})[spell]=now+rule.cooldown;}
-function damage(target,rule,now){
+function spend(actor,spell,rule,now,room){if(room.economy&&Object.hasOwn(CONSUMABLES,spell))actor.loadout.consumables[spell]--;if(room.enhanced&&!room.economy)(actor.castCounts??={})[spell]=((actor.castCounts?.[spell]||0)+1)%3;actor.mana=Math.max(0,actor.mana-rule.manaCost);(actor.cooldowns??={})[spell]=now+rule.cooldown;}
+function damage(target,rule,now,spell){
  // Shields reject every damaging spell unless that spell explicitly bypasses them.
- const blocked=target.shieldUntil>now&&!rule.bypassShield;
+ const blocked=target.shieldUntil>now&&(target.economy?spell!=='lightning':(!rule.bypassShield||(target.superShieldUntil>now&&spell!=='lightning')));
  if(!blocked)target.health=Math.max(0,target.health-rule.damage);
  return blocked;
 }
@@ -101,20 +120,29 @@ export function castSpell(room,casterId,spell,targetId,now=Date.now()){
  // Resolving these instantly would drop the poison, swarm or stun they exist to deliver.
  if(Object.hasOwn(SPELLS,spell)&&(SPELLS[spell].dot||SPELLS[spell].swarm||SPELLS[spell].stun))return{error:'That spell must be thrown.'};
  const cast=prepareCast(room,casterId,spell,targetId,now);if(cast.error)return cast;
- const{actor,rule,target}=cast;spend(actor,spell,rule,now);
- const blocked=target?damage(target,rule,now):false;
- if(spell==='heal')actor.health=Math.min(100,actor.health+rule.amount);
- if(spell==='shield')actor.shieldUntil=now+rule.duration;
- return{type:'spell',spell,actorId:actor.id,targetId:target?.id,blocked,at:now};
+ const{actor,rule,target,superCast}=cast;
+ if(spell==='flashbang'){
+  const fresh=p=>validLocation(p.location)&&Number.isFinite(p.location.at)&&now-p.location.at>=-1000&&now-p.location.at<=10000;
+  if(!fresh(actor))return{error:'Waiting for a fresh location before using Flashbang.'};
+  const nearby=room.players.filter(p=>p.id!==actor.id&&p.connected&&p.health>0&&(!room.continuous||p.faceReady)&&fresh(p)&&relativePosition(actor.location,p.location).distance<=rule.radius);
+  spend(actor,spell,rule,now,room);const affectedIds=[],blockedIds=[];
+  for(const p of nearby){if(p.shieldUntil>now){blockedIds.push(p.id);continue;}p.flashUntil=Math.max(p.flashUntil||0,now+rule.duration);p.stunUntil=Math.max(p.stunUntil||0,now+rule.duration);affectedIds.push(p.id);}
+  return{type:'spell',spell,actorId:actor.id,affectedIds,blockedIds,radius:rule.radius,duration:rule.duration,at:now};
+ }
+ spend(actor,spell,rule,now,room);
+ const blocked=target?damage(target,rule,now,spell):false;
+ if(spell==='heal'){actor.health=Math.min(actor.economy?MAX_HEALTH:100,actor.health+rule.amount);if(rule.regeneration)actor.renewal={at:now,until:now+5000};}
+ if(spell==='shield'){actor.shieldUntil=now+rule.duration;if(room.enhanced)actor.shieldStartedAt=now;if(superCast||room.economy){actor.superShieldUntil=actor.shieldUntil;actor.poison=null;actor.swarm=null;}}
+ return{type:'spell',spell,attackName:room.economy?skillName(actor,spell):(superCast?SUPER_NAMES[spell]:null)||ATTACKS[spell]?.name||spell,...(superCast?{super:true}:{}),actorId:actor.id,targetId:target?.id,blocked,at:now};
 }
 export function launchProjectile(room,actorId,spell,targetId,shotId,now=Date.now()){
  if(!Object.hasOwn(SPELLS,spell)||!SPELLS[spell].flightMs)return{error:'Choose a projectile spell.'};
  if(typeof shotId!=='string'||!shotId||(room.shots||[]).some(s=>s.shotId===shotId))return{error:'Invalid projectile.'};
  const cast=prepareCast(room,actorId,spell,targetId,now);if(cast.error)return cast;
- const{actor,rule,target}=cast;spend(actor,spell,rule,now);
+ const{actor,rule,target,superCast}=cast;spend(actor,spell,rule,now,room);
  const clearedSwarm=rule.splash&&actor.swarm?true:undefined;if(clearedSwarm)actor.swarm=null;
- if(!target)return{type:'spell',spell,actorId,clearedSwarm,at:now};
- const shot={spell,shotId,actorId,targetId,...(room.continuous?{actorLife:actor.life,targetLife:target.life}:{}),at:now,flightMs:rule.flightMs,impactAt:now+rule.flightMs,expiresAt:now+rule.flightMs+2100};
+ if(!target)return{type:'spell',spell,...(superCast?{super:true}:{}),actorId,clearedSwarm,at:now};
+ const shot={spell,attackName:room.economy?skillName(actor,spell):(superCast?SUPER_NAMES[spell]:null)||ATTACKS[spell]?.name||spell,...(room.economy?{economy:true,upgraded:rule.upgraded,attackRule:{damage:rule.damage||0,dot:rule.dot,swarm:rule.swarm,stun:rule.stun,flash:rule.flash,multiHit:rule.multiHit?{...rule.multiHit}:undefined,bypassShield:rule.bypassShield,flightMs:rule.flightMs}}:{}),...(superCast?{super:true}:{}),shotId,actorId,targetId,...(room.continuous?{actorLife:actor.life,targetLife:target.life}:{}),at:now,flightMs:rule.flightMs,impactAt:now+rule.flightMs,expiresAt:now+rule.flightMs+2100};
  (room.shots??=[]).push(shot);
  return{type:'spell',...shot,clearedSwarm};
 }
@@ -123,20 +151,39 @@ export function launchFireball(room,actorId,targetId,shotId,now=Date.now()){
 }
 export function impactProjectile(room,actorId,shotId,tracked,now=Date.now()){
  const i=(room.shots||[]).findIndex(s=>s.shotId===shotId&&s.actorId===actorId);
- if(i<0)return{error:'Projectile expired.'};const shot=room.shots[i],rule=SPELLS[shot.spell||'fireball'];
+ if(i<0)return{error:'Projectile expired.'};const shot=room.shots[i],rule=shot.attackRule||upgradedRule(shot.spell||'fireball',SPELLS[shot.spell||'fireball'],shot.super);
  if(now<shot.impactAt-Math.min(100,shot.flightMs*.1))return{error:'Projectile is still in flight.'};
  room.shots.splice(i,1);const target=room.players.find(p=>p.id===shot.targetId);
  // Damage already owed is paid before this hit is judged: a target it has killed cannot be hit, and a refreshed effect must not swallow it.
  if(target&&room.phase==='playing'){bleed(target,'poison',now);bleed(target,'swarm',now);}
  const actor=room.players.find(p=>p.id===actorId),staleLife=room.continuous&&(!actor?.faceReady||!target?.faceReady||actor.health<=0||actor.life!==shot.actorLife||target.life!==shot.targetLife);
- const missed=staleLife||!tracked||now>shot.expiresAt||room.phase!=='playing'||!target?.connected||target.health<=0;
- const blocked=!missed?damage(target,rule,now):false;
+ const missed=staleLife||(target?.actionLockUntil||0)>now||(actor?.actionLockUntil||0)>now||!tracked||now>shot.expiresAt||room.phase!=='playing'||!target?.connected||target.health<=0;
+ const canBlock=target?.economy?shot.spell!=='lightning':!rule.bypassShield||(target?.superShieldUntil>now&&shot.spell!=='lightning');
+ const parried=!!room.enhanced&&!missed&&!shot.reflected&&canBlock&&target.shieldUntil>now&&Number.isFinite(target.shieldStartedAt)&&now-target.shieldStartedAt>=0&&now-target.shieldStartedAt<=350;
+ const blocked=parried||(!missed?damage(target,rule,now,shot.spell):false);
+ let reflection;
+ if(parried){reflection={...shot,shotId:shot.shotId+':return',actorId:target.id,targetId:actor.id,actorLife:target.life,targetLife:actor.life,reflected:true,at:now,flightMs:450,impactAt:now+450,expiresAt:now+1800};room.shots.push(reflection);}
  if(!missed&&!blocked){
-  if(rule.dot)target.poison=lingering(rule.dot,now,shot.actorId,shot.actorLife);
-  if(rule.swarm)target.swarm=lingering(rule.swarm,now,shot.actorId,shot.actorLife);
-  if(rule.stun)target.stunUntil=now+rule.stun;
+  if(rule.dot)applyPoison(target,rule.dot,now,shot.actorId,shot.actorLife,shot);
+  if(rule.swarm)target.swarm=lingering(rule.swarm,now,shot.actorId,shot.actorLife,shot);
+  if(rule.stun)target.stunUntil=now+rule.stun;if(rule.flash)target.flashUntil=now+rule.stun;
  }
- return{type:'impact',...shot,resolvedAt:now,missed,blocked};
+ const secondaryHits=[];
+ if(!missed&&!blocked&&!shot.reflected&&rule.multiHit){
+  const fresh=p=>validLocation(p?.location)&&Number.isFinite(p.location.at)&&now-p.location.at>=-1000&&now-p.location.at<=10000;
+  if(fresh(target)){
+   const nearby=room.players.filter(p=>p.id!==actorId&&p.id!==target.id&&p.connected&&p.health>0&&(!room.continuous||p.faceReady)&&!(p.actionLockUntil>now)&&fresh(p))
+    .map(p=>({p,distance:relativePosition(target.location,p.location).distance})).filter(x=>x.distance<=rule.multiHit.radius)
+    .sort((a,b)=>a.distance-b.distance||a.p.id.localeCompare(b.p.id)).slice(0,rule.multiHit.maxExtraTargets);
+   const secondaryRule={...rule,damage:rule.damage*rule.multiHit.damageScale,multiHit:undefined,...(rule.dot?{dot:{...rule.dot,perSecond:rule.dot.perSecond*rule.multiHit.damageScale}}:{})};
+   for(const {p} of nearby){
+    const healthBefore=p.health,blocked=damage(p,secondaryRule,now,shot.spell);
+    if(!blocked&&secondaryRule.dot)applyPoison(p,secondaryRule.dot,now,actorId,shot.actorLife,shot);
+    secondaryHits.push({type:'impact',...shot,shotId:`${shot.shotId}:extra:${p.id}`,primaryTargetId:target.id,targetId:p.id,targetLife:p.life,attackRule:secondaryRule,secondary:true,healthBefore,resolvedAt:now,missed:false,blocked});
+   }
+  }
+ }
+ return{type:'impact',...shot,resolvedAt:now,missed,blocked,...(parried?{parried:true,reflection}: {}),...(secondaryHits.length?{secondaryHits}:{})};
 }
 export const impactFireball=impactProjectile;
 export function expireProjectiles(room,now=Date.now()){

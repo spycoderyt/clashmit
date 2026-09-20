@@ -1,13 +1,11 @@
 const ORIGINAL_WORDS={fireball:['fire ball'],lightning:['lightning'],shield:['shield'],heal:['heal','heel']};
 // `words` maps a spell id to its spoken forms. Only the supplied deck can cast, which also cuts misfires.
+const editDistance=(a,b)=>{let row=Array.from({length:b.length+1},(_,i)=>i);for(let i=1;i<=a.length;i++){const next=[i];for(let j=1;j<=b.length;j++)next[j]=Math.min(next[j-1]+1,row[j]+1,row[j-1]+Number(a[i-1]!==b[j-1]));row=next;}return row[b.length];};
 export function spellsFromText(text,words=ORIGINAL_WORDS){
- const spoken=new Map(),forms=[];
- for(const [id,list] of Object.entries(words))for(const word of list){const parts=word.toLowerCase().trim().split(/\s+/);spoken.set(parts.join(''),id);forms.push(parts);}
- if(!forms.length)return [];
- // Longest first so “skeleton army” is one command rather than “skeleton” plus noise.
- forms.sort((a,b)=>b.join('').length-a.join('').length);
- const pattern=new RegExp(`\\b(?:${forms.map(parts=>parts.join('\\s*')).join('|')})\\b`,'g');
- return [...text.toLowerCase().matchAll(pattern)].map(m=>spoken.get(m[0].replace(/\s/g,'')));
+ const tokens=text.toLowerCase().match(/[a-z]+/g)||[],forms=Object.entries(words).flatMap(([id,list])=>list.map(word=>({id,word:word.toLowerCase().replace(/[^a-z]/g,''),count:word.trim().split(/\s+/).length}))).sort((a,b)=>b.word.length-a.word.length),result=[];
+ for(let i=0;i<tokens.length;){let best=null;for(let count=Math.min(3,tokens.length-i);count>=1;count--){const phrase=tokens.slice(i,i+count).join('');for(const f of forms){const limit=f.word.length>=9?2:f.word.length>=5?1:0;if(Math.abs(f.word.length-phrase.length)>limit)continue;const cost=editDistance(phrase,f.word);if(cost>limit||phrase.length<5&&cost)continue;if(!best||cost<best.cost||(cost===best.cost&&f.word.length>best.length))best={id:f.id,cost,count,length:f.word.length};else if(cost===best.cost&&f.id!==best.id&&f.word.length===best.length)best.ambiguous=true;}}
+  if(best&&!best.ambiguous){result.push(best.id);i+=best.count;}else i++;
+ }return result;
 }
 export function spellFromText(text,words){return spellsFromText(text,words)[0]||null;}
 const messages={

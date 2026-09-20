@@ -1,42 +1,8 @@
-import test from 'node:test';import assert from 'node:assert/strict';
-import {createSpellAudio} from '../dist/sound.js';
-import {SPELLS,PERSONAS} from '../dist/rules.js';
-
-// Records what a recipe synthesises: each oscillator's wave, start pitch and start time, and each noise burst's cutoff.
-function fakeContext(log){
- const param=kind=>({setValueAtTime(v,t){if(kind)log.push([kind,Math.round(v),+t.toFixed(3)]);},exponentialRampToValueAtTime(){},linearRampToValueAtTime(){}});
- const node=()=>({connect(next){return next;}});
- return class{constructor(){this.state='running';this.currentTime=0;this.sampleRate=8000;this.destination=node();}
-  resume(){}createGain(){return{...node(),gain:param()};}
-  createOscillator(){const o={...node(),frequency:param('tone'),start(){},stop(){}};Object.defineProperty(o,'type',{set(v){log.push(['wave',v]);}});return o;}
-  createBuffer(_,count){return{getChannelData:()=>new Float32Array(count)};}
-  createBufferSource(){return{...node(),start(t){log.push(['noiseAt',+t.toFixed(3)]);},stop(){}};}
-  createBiquadFilter(){return{...node(),frequency:param('cutoff')};}};
-}
-async function recorder(){const log=[];globalThis.window={AudioContext:fakeContext(log)};const audio=createSpellAudio();await audio.unlock();delete globalThis.window;
- return{audio,heard(spell,kind){log.length=0;audio.play(spell,kind);return JSON.stringify(log);}};}
-const attacks=Object.keys(SPELLS).filter(s=>SPELLS[s].flightMs);
-
-test('every attack has its own hit sound, unlike any other and unlike the generic thud',async()=>{
- const{heard}=await recorder(),generic=heard('no-such-spell','impact');assert.notEqual(generic,'[]','an unknown spell still thuds');
- const sounds=new Map(attacks.map(s=>[s,heard(s,'impact')]));
- assert.deepEqual([...sounds.keys()].sort(),['arrows','fireball','lightning','poison','skeletonArmy','zap']);
- for(const [spell,sound] of sounds){assert.notEqual(sound,'[]',spell+' is silent');assert.notEqual(sound,generic,spell+' still uses the generic thud');assert.notEqual(sound,heard(spell,'cast'),spell+' hit must not just replay its cast');}
- assert.equal(new Set(sounds.values()).size,attacks.length,'two attacks share a hit sound');
-});
-test('every spell in every deck can be heard when cast',async()=>{
- const{heard}=await recorder();for(const deck of Object.values(PERSONAS))for(const spell of deck)assert.notEqual(heard(spell,'cast'),'[]',spell);
-});
-test('arrows land as three separate thunks and the skeletons as a run of bony clicks',async()=>{
- const{heard}=await recorder(),times=kind=>[...new Set(JSON.parse(kind).filter(e=>e[0]==='noiseAt'||e[0]==='tone').map(e=>e[e.length-1]))];
- assert.ok(times(heard('arrows','impact')).length>=3,'three arrows, three moments');
- assert.ok(JSON.parse(heard('skeletonArmy','impact')).filter(e=>e[0]==='tone').length>=8,'a clatter, not a single note');
-});
-test('lingering damage ticks quietly for poison and skeletons only',async()=>{
- const{heard}=await recorder();assert.notEqual(heard('poison','tick'),'[]');assert.notEqual(heard('skeletonArmy','tick'),'[]');assert.notEqual(heard('poison','tick'),heard('skeletonArmy','tick'));
- assert.equal(heard('fireball','tick'),'[]');assert.equal(heard('constructor','tick'),'[]');
-});
-test('muting silences everything; blocks and misses are unchanged',async()=>{
- const{audio,heard}=await recorder();assert.notEqual(heard('zap','block'),'[]');assert.notEqual(heard('zap','miss'),'[]');
- audio.toggle();for(const kind of ['cast','impact','tick','block','miss'])assert.equal(heard('poison',kind),'[]',kind);
-});
+import test from 'node:test';import assert from 'node:assert/strict';import {access} from 'node:fs/promises';
+import {createSpellAudio} from '../dist/sound.js';import {MEME_CLIPS,soundCues} from '../dist/meme-sounds.js';import {SPELLS} from '../dist/rules.js';
+function rig(fetchOverride){const starts=[],stops=[];const node=()=>({connect(x){return x;},disconnect(){}});class Context{constructor(){this.state='running';this.currentTime=0;this.destination=node();}createGain(){return{...node(),gain:{value:1}};}decodeAudioData(){return Promise.resolve({numberOfChannels:1,length:400,sampleRate:100,duration:4,getChannelData:()=>new Float32Array(400).fill(.5)});}createBufferSource(){return{...node(),playbackRate:{value:1},start(...args){starts.push(args);},stop(){stops.push(1);}};}}
+ const audio=createSpellAudio({Context:()=>Context,fetchAudio:fetchOverride||(()=>Promise.resolve({ok:true,arrayBuffer:async()=>new ArrayBuffer(8)})),random:()=>.5});return{audio,starts,stops};}
+test('all normal and super spells resolve to bundled attributed clips',async()=>{for(const spell of Object.keys(SPELLS))for(const kind of ['cast','super','impact']){const cues=soundCues(spell,kind);assert.ok(cues.length);for(const c of cues){assert.ok(MEME_CLIPS[c.clip]?.source);await access(new URL(`../dist/media/memes/${c.clip}.mp3`,import.meta.url));}}});
+test('recorded clips play after unlock; volume mute and stop apply to all sources',async()=>{const{audio,starts,stops}=rig();assert.equal(await audio.play('fireball'),false);assert.equal(await audio.unlock(),true);assert.equal(await audio.play('fireball'),true);assert.equal(starts.length,1);audio.toggle();assert.equal(await audio.play('heal'),false);assert.equal(stops.length,1);audio.toggle();assert.equal(await audio.play('arrows','super'),true);assert.equal(starts.length,4);audio.stop();assert.equal(stops.length,4);});
+test('stop cancels pending downloads; load failures do not reject gameplay',async()=>{let resolve;const response=new Promise(r=>resolve=r),{audio,starts}=rig(()=>response);await audio.unlock();const play=audio.play('zap');audio.stop();resolve({ok:true,arrayBuffer:async()=>new ArrayBuffer(8)});assert.equal(await play,false);assert.equal(starts.length,0);const fail=rig(async()=>({ok:false}));await fail.audio.unlock();assert.equal(await fail.audio.play('heal'),false);});
+test('arrows have staggered impacts and only lingering spells have quiet tick sounds',()=>{assert.equal(new Set(soundCues('arrows','impact').map(c=>c.delay)).size,3);assert.ok(soundCues('poison','tick')[0].gain<.2);assert.ok(soundCues('skeletonArmy','tick')[0].gain<.2);assert.deepEqual(soundCues('fireball','tick'),[]);assert.deepEqual(soundCues('constructor'),[]);});

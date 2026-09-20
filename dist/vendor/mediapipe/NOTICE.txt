@@ -12,3 +12,7 @@ License: https://www.apache.org/licenses/LICENSE-2.0
 BlazeFace short-range float16 face detector model supplied by Google MediaPipe:
 https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/latest/blaze_face_short_range.tflite
 Documentation: https://ai.google.dev/edge/mediapipe/solutions/vision/face_detector
+
+Selfie segmenter float16 (body damage flash mask), supplied by Google MediaPipe:
+https://storage.googleapis.com/mediapipe-models/image_segmenter/selfie_segmenter/float16/latest/selfie_segmenter.tflite
+Documentation: https://ai.google.dev/edge/mediapipe/solutions/vision/image_segmenter

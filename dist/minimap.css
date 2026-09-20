@@ -40,3 +40,4 @@
 .minimap-gps:empty{display:none}
 .minimap-credit{margin-left:auto;font-size:.58rem;text-align:right}
 .minimap:not(.mapped) .minimap-credit{visibility:hidden}
+.map-guide{position:absolute;top:70px;left:20px;right:20px;z-index:5;text-align:center;font:650 16px/1.45 system-ui;color:white;background:#091725e8;border-radius:9px;padding:12px;pointer-events:none}.map-guide:empty{display:none}.orbital-targeting .minimap-frame{touch-action:none}.orbital-targeting.full{z-index:50}.orbital-targeting .minimap-stop{display:none}.orbital-targeting.holding .map-guide{background:#a81830}.map-directions{pointer-events:none}

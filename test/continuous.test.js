@@ -30,7 +30,7 @@ test('old score files acquire deaths without losing points or login identities',
  assert.equal(createScoreStore(file).standings()[0].deaths,1);
 });
 test('continuous server admits late players, counts kills and deaths once, and respawns after reconnect',async t=>{
- const game=createGameServer({continuous:true,respawnDelayMs:700});await new Promise(r=>game.server.listen(0,'127.0.0.1',r));t.after(()=>game.close());const url=`ws://127.0.0.1:${game.server.address().port}/ws`;
+ const game=createGameServer({continuous:true,economy:false,respawnDelayMs:700});await new Promise(r=>game.server.listen(0,'127.0.0.1',r));t.after(()=>game.close());const url=`ws://127.0.0.1:${game.server.address().port}/ws`;
  async function client(name,token){
   const ws=new WebSocket(url),messages=[];t.after(()=>ws.terminate());ws.on('message',b=>messages.push(JSON.parse(b)));await new Promise(r=>ws.on('open',r));const send=m=>ws.send(JSON.stringify(m));
   const next=async(type,predicate=()=>true)=>{const end=Date.now()+4000;while(Date.now()<end){const i=messages.findIndex(m=>m.type===type&&predicate(m));if(i>=0)return messages.splice(i,1)[0];await new Promise(r=>setTimeout(r,10));}throw Error('Timed out: '+type);};send({type:'join',name,token});const welcome=await next('welcome');return{ws,send,next,...welcome};
@@ -50,7 +50,7 @@ test('continuous server admits late players, counts kills and deaths once, and r
  const liveUrl=url.replace('ws:','http:').replace('/ws','/api/live');const live=await (await fetch(liveUrl)).json();
  assert.equal(live.online,3);assert.equal(live.kills.length,1);assert.equal(live.kills[0].killer,'Ada');assert.equal(live.kills[0].victim,'Bo');assert.equal(live.kills[0].streak,1);
  assert.equal(live.players[0].name,'Ada');assert.equal(live.players[0].kills,1);assert.equal(live.players[0].online,true);assert.equal(live.players[0].bestStreak,1);
- for(const p of live.players)assert.deepEqual(Object.keys(p).sort(),['id','name','rank','bestStreak','currentStreak','kills','deaths','online'].sort(),'spectators receive no location, face, token, or socket data');
+ for(const p of live.players)assert.deepEqual(Object.keys(p).sort(),['id','name','rank','bestStreak','currentStreak','kills','deaths','online','coins','avatar'].sort(),'spectators receive no location, face, token, or socket data');
  assert.equal((await fetch(liveUrl,{method:'HEAD'})).status,200);assert.equal((await fetch(liveUrl.replace('/api/live','/live'))).status,200);
 
 });
@@ -83,6 +83,6 @@ test('confirmed kill callback includes every kill once, including posthumous lin
  const store=createScoreStore(),a={...store.register('A'),connected:true,faceReady:true},b={...store.register('B'),connected:true,faceReady:true};spawnPlayer(a,0);spawnPlayer(b,0);const room={players:[a,b]},events=[];
  const report=event=>events.push(event),hit={actorId:a.id,targetId:b.id,amount:10};
  creditContinuous(room,store,hit,report);assert.equal(events.length,0);
- creditContinuous(room,store,{...hit,lethal:true},report);creditContinuous(room,store,{...hit,lethal:true},report);assert.deepEqual(events,[{killer:'A',victim:'B',streak:1}]);
- spawnPlayer(b,1000);a.health=0;creditContinuous(room,store,{...hit,lethal:true},report);assert.deepEqual(events[1],{killer:'A',victim:'B',streak:0});
+ creditContinuous(room,store,{...hit,lethal:true},report);creditContinuous(room,store,{...hit,lethal:true},report);assert.deepEqual(events.map(({killer,victim,streak})=>({killer,victim,streak})),[{killer:'A',victim:'B',streak:1}]);assert.equal(events[0].coins,30);
+ spawnPlayer(b,1000);a.health=0;creditContinuous(room,store,{...hit,lethal:true},report);assert.equal(events[1].killer,'A');assert.equal(events[1].victim,'B');assert.equal(events[1].streak,0);assert.ok(events[1].coins===30);
 });
