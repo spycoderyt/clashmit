@@ -70,3 +70,9 @@ export function expireProjectiles(room,now=Date.now()){
  room.shots=(room.shots||[]).filter(s=>now<s.expiresAt&&room.phase==='playing');
  return expired.map(shot=>({type:'impact',...shot,resolvedAt:now,missed:true,blocked:false}));
 }
+// End-of-round order: survivors first by remaining health, then everyone knocked out, latest first.
+// diedAt is the server time a player reached zero health. Returns [{...player,place}] with place from 1.
+export function rankPlayers(players){
+ const alive=players.filter(p=>p.health>0).sort((a,b)=>b.health-a.health),out=players.filter(p=>!(p.health>0)).sort((a,b)=>(b.diedAt||0)-(a.diedAt||0));
+ return [...alive,...out].map((p,i)=>({...p,place:i+1}));
+}

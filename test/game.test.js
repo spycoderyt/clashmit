@@ -42,7 +42,7 @@ test('fireball damage occurs at impact, expires, and respects tracking loss and 
  launchFireball(room,'a','b','four',10000);assert.equal(impactFireball(room,'a','four',true,14000).missed,true);
 });
 test('one shared arena, authoritative controller, face registration and delayed impact, reconnect and round outcome',async t=>{
- const game=createGameServer();await new Promise(r=>game.server.listen(0,'127.0.0.1',r));t.after(()=>game.close());const url=`ws://127.0.0.1:${game.server.address().port}/ws`;
+ const game=createGameServer({countdownMs:0});await new Promise(r=>game.server.listen(0,'127.0.0.1',r));t.after(()=>game.close());const url=`ws://127.0.0.1:${game.server.address().port}/ws`;
  async function client(name,token){const ws=new WebSocket(url),messages=[];ws.on('message',b=>messages.push(JSON.parse(b)));await new Promise(r=>ws.on('open',r));const send=m=>ws.send(JSON.stringify(m));const next=async(type,predicate=()=>true)=>{const end=Date.now()+2500;while(Date.now()<end){const i=messages.findIndex(m=>m.type===type&&predicate(m));if(i>=0)return messages.splice(i,1)[0];await new Promise(r=>setTimeout(r,10));}throw Error('Timed out waiting for '+type);};send({type:'join',name,token});return {ws,send,next,messages};}
  const a=await client('Merlin'),aw=await a.next('welcome');const b=await client('Morgana'),bw=await b.next('welcome');assert.equal(aw.code,bw.code);
  b.send({type:'start'});assert.match((await b.next('error')).message,/host/);

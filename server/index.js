@@ -12,7 +12,8 @@ import {validEncodedSamples} from '../dist/face-id.js';
 const root=fileURLToPath(new URL('../dist/',import.meta.url));
 const mime={'.html':'text/html; charset=utf-8','.css':'text/css','.js':'text/javascript','.svg':'image/svg+xml','.wasm':'application/wasm'};
 const allowedOrigins=(process.env.ALLOWED_ORIGINS||'').split(',').filter(Boolean);
-export function createGameServer({maxPlayers=null,maxBufferedBytes=256*1024}={}){
+// countdownMs: how long every phone shows the synchronised countdown before a round begins (0 starts at once).
+export function createGameServer({maxPlayers=null,maxBufferedBytes=256*1024,countdownMs=5000}={}){
  if(maxPlayers!==null&&(!Number.isInteger(maxPlayers)||maxPlayers<2))throw new Error('Invalid player capacity');
  let closing=false,closePromise;
  const rooms=new Map(), clients=new Map();
@@ -35,9 +36,17 @@ export function createGameServer({maxPlayers=null,maxBufferedBytes=256*1024}={})
   try{ws.send(payload,error=>{if(error)ws.terminate();});}catch{ws.terminate();}
  }
  const send=(ws,msg)=>sendEncoded(ws,JSON.stringify(msg));
- function view(room){const now=Date.now();for(const p of room.players)replenishMana(p,now);return {maxPlayers,code:room.code,hostId:room.hostId,phase:room.phase,endsAt:room.endsAt,winners:room.winners,players:room.players.map(({token,socket,disconnectedAt,...p})=>p),shots:room.shots||[],combat:{mana:MANA,spells:SPELLS},serverTime:now};}
+ function view(room){const now=Date.now();for(const p of room.players)replenishMana(p,now);return {maxPlayers,code:room.code,hostId:room.hostId,phase:room.phase,startsAt:room.startsAt||0,endsAt:room.endsAt,winners:room.winners,players:room.players.map(({token,socket,disconnectedAt,...p})=>p),shots:room.shots||[],combat:{mana:MANA,spells:SPELLS},serverTime:now};}
  function broadcast(room,event){if(closing)return;const state=JSON.stringify({type:'state',room:view(room)}),encodedEvent=event?JSON.stringify(event):null;for(const p of room.players){if(encodedEvent)sendEncoded(p.socket,encodedEvent);sendEncoded(p.socket,state);}}
- function finish(room){if(room.phase!=='playing')return;const alive=room.players.filter(p=>p.health>0);if(alive.length<=1||Date.now()>=room.endsAt){room.phase='finished';const best=Math.max(...alive.map(p=>p.health),0);room.winners=alive.filter(p=>p.health===best).map(p=>p.id);}}
+ // Begins the round once the countdown is over, or returns to the lobby if too few players are still connected.
+ function begin(room){
+  if(room.phase!=='countdown')return;clearTimeout(room.startTimer);room.startTimer=null;const now=Date.now();
+  if(room.players.filter(p=>p.connected).length<2){room.phase='lobby';room.startsAt=0;broadcast(room,{type:'error',message:'Not enough players to start the round.'});return;}
+  for(const p of room.players){p.mana=MANA.max;p.manaUpdatedAt=now;}
+  room.phase='playing';room.startsAt=now;room.endsAt=now+180000;broadcast(room,{type:'round-start'});
+ }
+ // The moment each player is knocked out is what the end-of-round leaderboard ranks by.
+ function finish(room){if(room.phase!=='playing')return;const moment=Date.now();for(const p of room.players)if(p.health<=0&&!p.diedAt)p.diedAt=moment;const alive=room.players.filter(p=>p.health>0);if(alive.length<=1||Date.now()>=room.endsAt){room.phase='finished';const best=Math.max(...alive.map(p=>p.health),0);room.winners=alive.filter(p=>p.health===best).map(p=>p.id);}}
  wss.on('connection',ws=>{
   ws.on('error',()=>ws.terminate());
   ws.isAlive=true;ws.on('pong',()=>ws.isAlive=true);let count=0,windowStart=Date.now();
@@ -60,7 +69,7 @@ export function createGameServer({maxPlayers=null,maxBufferedBytes=256*1024}={})
      if(typeof m.token==='string')player=room.players.find(p=>p.token===m.token);
      if(player){if(player.socket!==ws){clients.delete(player.socket);player.socket.close(4000,'Opened on another connection');}player.socket=ws;player.connected=true;player.disconnectedAt=null;}
      else{
-      if(room.phase==='playing')return send(ws,{type:'error',message:'A round is running. Join when it finishes.'});
+      if(room.phase==='playing'||room.phase==='countdown')return send(ws,{type:'error',message:'A round is running. Join when it finishes.'});
       if(maxPlayers!==null&&room.players.length>=maxPlayers)return send(ws,{type:'error',message:`The arena is full (${maxPlayers} players).`});
       if(room.players.some(p=>p.name.toLowerCase()===name.toLowerCase()))return send(ws,{type:'error',message:'That mage name is taken. Choose another.'});
       player={id:randomUUID(),token:randomBytes(24).toString('hex'),name,health:100,mana:MANA.max,manaUpdatedAt:Date.now(),shieldUntil:0,cooldowns:{},connected:true,shirt:null,socket:ws};room.players.push(player);if(!room.players.some(p=>p.id===room.hostId&&p.connected))room.hostId=player.id;
@@ -70,14 +79,16 @@ export function createGameServer({maxPlayers=null,maxBufferedBytes=256*1024}={})
     const current=clients.get(ws);if(!current)return;const {room,player}=current;
     if(m.type==='start'){
      if(player.id!==room.hostId)return send(ws,{type:'error',message:'Only the host can start a round.'});
-     if(room.phase==='playing')return;
+     if(room.phase==='playing'||room.phase==='countdown')return;
      room.players=room.players.filter(p=>p.connected);
      if(room.players.length<2)return send(ws,{type:'error',message:'Wait for at least one friend to join.'});
      // Players are identified by a scanned face. Headband samples are still accepted below but no longer needed to start.
      if(room.players.some(p=>!p.faceReady))return send(ws,{type:'error',message:'Every player needs to scan their face first.'});
      room.shots=[];
-     for(const p of room.players){p.health=100;p.mana=MANA.max;p.manaUpdatedAt=Date.now();p.cooldowns={};p.shieldUntil=0;}
-     room.phase='playing';room.endsAt=Date.now()+180000;room.winners=[];broadcast(room,{type:'round-start'});
+     for(const p of room.players){p.health=100;p.mana=MANA.max;p.manaUpdatedAt=Date.now();p.cooldowns={};p.shieldUntil=0;p.diedAt=null;}
+     // Every phone counts down to the same server moment, so the round opens for everyone together.
+     room.winners=[];room.phase='countdown';room.startsAt=Date.now()+countdownMs;room.endsAt=room.startsAt+180000;
+     if(countdownMs>0){broadcast(room,{type:'countdown',startsAt:room.startsAt});room.startTimer=setTimeout(()=>begin(room),countdownMs);room.startTimer.unref();}else begin(room);
     }else if(m.type==='cast'){
      const event=(m.spell==='fireball'||m.spell==='lightning')?launchProjectile(room,player.id,m.spell,m.targetId,randomUUID()):castSpell(room,player.id,m.spell,m.targetId);
      if(event.error)send(ws,{type:'error',message:event.error});else{finish(room);broadcast(room,event);}
@@ -94,7 +105,7 @@ export function createGameServer({maxPlayers=null,maxBufferedBytes=256*1024}={})
     }else if(m.type==='face'){
      // Face signatures live beside the room, not on the player, so the frequent state broadcast stays small.
      // They are held in memory only and removed when the player leaves or expires.
-     if(room.phase==='playing')return send(ws,{type:'error',message:'Scan your face before the round starts.'});
+     if(room.phase==='playing'||room.phase==='countdown')return send(ws,{type:'error',message:'Scan your face before the round starts.'});
      if(!validEncodedSamples(m.samples)||(m.upper!==undefined&&!validEncodedSamples(m.upper)))return send(ws,{type:'error',message:'That face scan was not readable. Scan again.'});
      // upper: the same scan described from the eyes and forehead only, for players aiming with a phone over their face.
      (room.faces??={})[player.id]={samples:[...m.samples],upper:[...(m.upper||[])]};player.faceReady=true;for(const p of room.players)send(p.socket,{type:'faces',faces:{[player.id]:room.faces[player.id]}});broadcast(room);
@@ -108,11 +119,11 @@ export function createGameServer({maxPlayers=null,maxBufferedBytes=256*1024}={})
   ws.on('close',()=>{const current=clients.get(ws);if(current)current.player.location=null;}); // never keep a disconnected player's position
   ws.on('close',()=>{clearTimeout(timeout);const current=clients.get(ws);if(!current)return;const{room,player}=current;player.connected=false;player.disconnectedAt=Date.now();clients.delete(ws);if(room.hostId===player.id)room.hostId=room.players.find(p=>p.connected)?.id||player.id;broadcast(room);});
  });
- const tick=setInterval(()=>{for(const [code,room]of rooms){for(const p of room.players)if(!p.connected&&Date.now()-p.disconnectedAt>60000){p.health=0;p.expired=true;}room.players=room.players.filter(p=>!p.expired);if(room.faces)for(const id of Object.keys(room.faces))if(!room.players.some(p=>p.id===id))delete room.faces[id];if(!room.players.some(p=>p.id===room.hostId&&p.connected))room.hostId=room.players.find(p=>p.connected)?.id||room.players[0]?.id;if(!room.players.length){rooms.delete(code);continue;}finish(room);for(const event of expireProjectiles(room))broadcast(room,event);broadcast(room);}},500);tick.unref();
+ const tick=setInterval(()=>{for(const [code,room]of rooms){for(const p of room.players)if(!p.connected&&Date.now()-p.disconnectedAt>60000){p.health=0;p.expired=true;}room.players=room.players.filter(p=>!p.expired);if(room.faces)for(const id of Object.keys(room.faces))if(!room.players.some(p=>p.id===id))delete room.faces[id];if(!room.players.some(p=>p.id===room.hostId&&p.connected))room.hostId=room.players.find(p=>p.connected)?.id||room.players[0]?.id;if(!room.players.length){clearTimeout(room.startTimer);rooms.delete(code);continue;}finish(room);for(const event of expireProjectiles(room))broadcast(room,event);broadcast(room);}},500);tick.unref();
  const heartbeat=setInterval(()=>{for(const ws of wss.clients){if(!ws.isAlive){ws.terminate();continue;}ws.isAlive=false;ws.ping();}},15000);heartbeat.unref();
  function close({graceMs=0}={}){
   if(closePromise)return closePromise;
-  closing=true;clearInterval(tick);clearInterval(heartbeat);
+  closing=true;clearInterval(tick);clearInterval(heartbeat);for(const room of rooms.values())clearTimeout(room.startTimer);
   closePromise=new Promise(resolve=>{
    const force=setTimeout(()=>{for(const ws of wss.clients)ws.terminate();server.closeAllConnections();},graceMs);force.unref();
    for(const ws of wss.clients){if(graceMs)ws.close(1012,'Server restarting');else ws.terminate();}

@@ -15,6 +15,7 @@ import {encodeDescriptor,decodeDescriptor} from './face-id.js?v=face11';
 import {createMinimap} from './minimap.js?v=map3';
 import {createHaptics} from './haptics.js?v=haptic4';
 import {requestAllPermissions} from './permissions.js?v=perm1';
+import {createRoundOverlay} from './round-overlay.js?v=round1';
 const $=id=>document.getElementById(id);
 setupLobbyScene({canvas:$('lobby-background'),lobby:$('lobby'),button:$('background-toggle')});
 const targetOverlay=createTargetOverlay($('arena'),$('boxes'));
@@ -37,6 +38,8 @@ function send(message){return connection.send(message);}
 const minimap=createMinimap({container:$('arena'),send,notify});$('leave').addEventListener('click',()=>minimap.stop());window.addEventListener('pagehide',()=>minimap.stop());
 $('leave').addEventListener('click',()=>{faces.clear();focusId=null;localFace=null;autoScanOffered=false;mySamples=null;});
 const haptics=createHaptics({isMuted:()=>audio.muted,stage:$('arena'),shakeTarget:$('camera')});document.querySelectorAll('.spell').forEach(button=>haptics.attachTap(button));if(new URLSearchParams(location.search).get('test')==='haptics')haptics.showTestPanel();
+// Synchronised 5-4-3-2-1 before every round and the leaderboard after it; a tick is felt on each second.
+const roundOverlay=createRoundOverlay({container:$('arena'),now:()=>serverClock.now(),onTick:second=>haptics.play(second?'tap':'hit')});$('leave').addEventListener('click',()=>roundOverlay.hide());
 const flights=new Map(),completedShots=new Set();
 const incoming=createIncomingFireballs({container:$('arena'),renderer:()=>fireScene,getAttacker:id=>{const p=matchedPerson(id);return p?.fresh?{x:p.x,y:p.y}:null;},now});
 const faceTracker=createFaceTracker($('camera'),{getGallery:gallery,onStatus:status=>{trackingStatus=status;}});
@@ -101,6 +104,7 @@ const connection=createGameConnection({
   if(m.type==='welcome'){if(myId&&myId!==m.id){clearFlights();completedShots.clear();faceTracker.reset();room=null;rosterSignature='';notify('The arena restarted. Rejoining with your face scan.');}serverClock.reset();joined=true;myId=m.id;sessionStorage.setItem('fieldspell-token',m.token);showArena();$('join').disabled=false;}
   if(m.type==='state'){if(room&&room.endsAt!==m.room.endsAt)clearFlights();room=m.room;serverClock.bootstrap(room.serverTime);incoming.sync((room.shots||[]).filter(s=>s.targetId===myId));for(const shot of room.shots||[])if(shot.actorId===myId&&room.phase==='playing'&&now()<(shot.expiresAt??Infinity))effect(shot.spell||'fireball',{shot});renderState();}
   if(m.type==='state')minimap.update(m.room,myId);
+  if(m.type==='state'){roundOverlay.update(m.room,myId);if(m.room.phase==='countdown')$('phase').textContent='Round starting…';}
   // Each player's scan: whole-face samples plus upper-face ones for when a phone hides their nose and mouth.
   if(m.type==='faces')for(const [id,scan] of Object.entries(m.faces||{})){const decode=list=>(list||[]).map(decodeDescriptor).filter(Boolean),samples=decode(scan?.samples);if(samples.length)faces.set(id,{samples,upper:decode(scan.upper)});else faces.delete(id);}
   // First thing a new player sees after the permission prompts: the face scan, without having to find a button.
