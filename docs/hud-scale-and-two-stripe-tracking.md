@@ -1,7 +1,10 @@
-# Handoff: `feature/clash-style-hud`
+# Larger HUD and two-stripe headband tracking
 
-Working notes for whoever merges this branch into `main`. Each section is one
-self-contained change: what moved, why, how it was verified, and what is left.
+What changed on `feature/clash-style-hud`, for whoever merges it into `main`.
+Two self-contained changes: the elixir bar and spell cards were scaled up for
+phone reading, and player identity moved from a single headband color to an
+ordered two-color stripe pair. Each section records what moved, why, how it was
+verified, and what is still open.
 
 Branch base: `42455fb` (Harden game connections and prepare tested Railway deployment).
 
