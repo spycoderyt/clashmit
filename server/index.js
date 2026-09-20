@@ -1,6 +1,7 @@
+import {createLiveMap} from './live-map.js';
 import {createPassiveCoins,PASSIVE_COINS} from './passive-coins.js';
 import {launchOrbital,resolveOrbitals,rememberOrbitalLocation} from './orbital.js';
-import {COINS_PER_KILL,KILL_BOUNTY,MAX_HEALTH,CONSUMABLES} from '../dist/economy.js';
+import {COINS_PER_KILL,KILL_BOUNTY,bountyMultiplier,killReward,MAX_HEALTH,CONSUMABLES} from '../dist/economy.js';
 import {createAdmin} from './admin.js';
 import {createEventRounds} from './event-rounds.js';
 import {SUPER_NAMES} from '../dist/supers.js';
@@ -29,17 +30,19 @@ export function createGameServer({maxPlayers=null,maxBufferedBytes=256*1024,coun
  let closing=false,closePromise;
  const rooms=new Map(), clients=new Map(),scores=createScoreStore(scoreFile,{ranking:continuous?'coins':'points'});
  const participation=createPassiveCoins({credit:(id,coins)=>scores.award(id,0,0,0,false,coins)});
+ const liveMap=createLiveMap();
  const kills=[],events=[],eventEpoch=randomUUID();let killSequence=0,eventSequence=0;
  const announce=(room,event,immediate={})=>{const full={type:'arena-event',id:`${eventEpoch}:${++eventSequence}`,at:Date.now(),...event};events.unshift(full);if(events.length>40)events.length=40;for(const p of room.players)send(p.socket,{...full,...immediate});};
  const rounds=createEventRounds({announce,resetStreak:id=>scores.resetStreak(id),getStandings:()=>scores.standings()});
  function ensureArena(){let room=rooms.get('ARENA');if(!room){room={code:'ARENA',players:[],continuous,economy,enhanced,phase:continuous?'playing':'lobby',startsAt:continuous?Date.now():0,hostId:null,endsAt:0,winners:[]};if(continuous)room.eventRound={id:Date.now(),mode:'ffa',endsAt:0,kingId:null,lastAt:Date.now(),players:{}};rooms.set('ARENA',room);}return room;}
  const recordKill=(room,event)=>{
-  const {actorId,targetId,...publicEvent}=event;const at=Date.now(),actor=room.players.find(p=>p.id===actorId),target=room.players.find(p=>p.id===targetId);
+  const {actorId,targetId,assists=[],...publicEvent}=event;const at=Date.now(),actor=room.players.find(p=>p.id===actorId),target=room.players.find(p=>p.id===targetId);
   rounds.kill(room,event,at);
   if(room.enhanced&&actor&&target){if(actor.revengeTargetId===targetId&&actor.health>0){actor.mana=Math.min(10,(actor.mana||0)+2);actor.revengeTargetId=null;announce(room,{kind:'revenge',actorId,text:`Revenge! ${actor.name} defeated ${target.name} · +2 mana`});}target.revengeTargetId=actorId;}
   if(room.economy&&actor&&event.streak>0&&event.streak%5===0){actor.airstrikeCharges=(actor.airstrikeCharges||0)+1;announce(room,{kind:'airstrike-ready',actorId,text:`${actor.name} earned an Orbital Airstrike!`});}
-  const cheers=['Huzzah!','Unstoppable!','What a streak!','Keep it going!'];if(event.streak>=3)announce(room,{kind:'streak',actorId,text:room.economy&&event.streak>=KILL_BOUNTY.minimumStreak?`${event.killer} is on a ${event.streak}x killstreak. Bounty: triple the coins!`:`${event.killer} is on a ${event.streak} killstreak. ${cheers[event.streak%cheers.length]}`});
+  const cheers=['Huzzah!','Unstoppable!','What a streak!','Keep it going!'];if(event.streak>=3)announce(room,{kind:'streak',actorId,text:room.economy&&event.streak>=KILL_BOUNTY.minimumStreak?`${event.killer} is on a ${event.streak}x killstreak. Bounty: ${bountyMultiplier(event.streak)}x coins (${killReward(event.streak)})!`:`${event.killer} is on a ${event.streak} killstreak. ${cheers[event.streak%cheers.length]}`});
   kills.unshift({id:++killSequence,at,...publicEvent});if(kills.length>100)kills.length=100;
+  for(const assist of assists){const assistant=room.players.find(p=>p.id===assist.actorId);if(assistant?.socket)send(assistant.socket,{type:'assist',id:`${eventEpoch}:assist:${killSequence}:${assist.actorId}`,at,victim:event.victim,targetId,coins:assist.coins,balance:assist.balance});}
   announce(room,{kind:'kill',actorId,targetId,text:`${event.killer} killed ${event.victim} using ${event.attackName||'an attack'}`,...publicEvent},room.avatars?.[actorId]?{killerAvatar:room.avatars[actorId]}:{});
  };
  const admin=createAdmin({password:adminPassword,getState:()=>({round:rounds.snapshot(rooms.get('ARENA')),players:(rooms.get('ARENA')?.players||[]).filter(p=>p.connected).map(p=>({id:p.id,name:p.name,ready:!!p.faceReady})),serverTime:Date.now()}),onCommand:command=>{
@@ -55,7 +58,7 @@ export function createGameServer({maxPlayers=null,maxBufferedBytes=256*1024,coun
   if(url.pathname==='/api/live'&&['GET','HEAD'].includes(req.method)){
    const online=new Set([...rooms.values()].flatMap(room=>room.players.filter(p=>p.connected).map(p=>p.id)));
    const players=scores.standings().map(({id,name,rank,coins,bestStreak,currentStreak,knockouts,deaths},index)=>({id,name,rank,coins,bestStreak,currentStreak,kills:knockouts,deaths,online:online.has(id),avatar:index<3?(rooms.get('ARENA')?.avatars?.[id]||null):null}));
-   res.writeHead(200,{'Content-Type':'application/json','Cache-Control':'no-store'});return res.end(req.method==='HEAD'?undefined:JSON.stringify({players,kills,events,round:rounds.snapshot(rooms.get('ARENA')),online:online.size,serverTime:Date.now()}));
+   res.writeHead(200,{'Content-Type':'application/json','Cache-Control':'no-store'});return res.end(req.method==='HEAD'?undefined:JSON.stringify({players,kills,events,map:liveMap.snapshot(rooms.get('ARENA')),round:rounds.snapshot(rooms.get('ARENA')),online:online.size,serverTime:Date.now()}));
   }
   if(closing){res.writeHead(503,{'Retry-After':'2'});return res.end('Server restarting');}
   if(!['GET','HEAD'].includes(req.method)){res.writeHead(405);return res.end();}
@@ -84,7 +87,7 @@ export function createGameServer({maxPlayers=null,maxBufferedBytes=256*1024,coun
   return {...round,king:king?withoutAvatar(king):null,leaders:leaders.map(withoutAvatar)};
  }
  function view(room){const now=Date.now();settleScored(room,now);if(room.continuous)finish(room);const board=scores.standings(),byId=new Map(board.map(p=>[p.id,p]));return {economy:!!room.economy,airstrikes:room.airstrikes||[],enhanced:!!room.enhanced,eventRound:compactRound(room),announcements:events.slice(0,6),leaders:board.filter(p=>room.players.some(a=>a.id===p.id&&a.connected)).slice(0,3).map(({id,name,rank,coins,bestStreak})=>({id,name,rank,coins,bestStreak})),continuous:!!room.continuous,respawnDelayMs,maxPlayers,code:room.code,hostId:room.hostId,phase:room.phase,startsAt:room.startsAt||0,endsAt:room.endsAt,winners:room.winners,results:room.results||null,players:room.players.filter(p=>!room.economy||p.connected).map(({token,socket,disconnectedAt,lastSeen,damageCredit,koScoredLife,deathScoredLife,...p})=>({...p,score:byId.get(p.id)})),shots:room.shots||[],combat:{mana:MANA,spells:SPELLS},serverTime:now};}
- function broadcast(room,event){if(closing)return;const state=JSON.stringify({type:'state',room:view(room)}),encodedEvent=event?JSON.stringify(event):null;for(const p of room.players){if(encodedEvent)sendEncoded(p.socket,encodedEvent);sendEncoded(p.socket,state);}}
+ function broadcast(room,event){if(closing)return;liveMap.record(room,event);const state=JSON.stringify({type:'state',room:view(room)}),encodedEvent=event?JSON.stringify(event):null;for(const p of room.players){if(encodedEvent)sendEncoded(p.socket,encodedEvent);sendEncoded(p.socket,state);}}
  // Begins the round once the countdown is over, or returns to the lobby if too few players are still connected.
  function begin(room){
   if(room.phase!=='countdown')return;clearTimeout(room.startTimer);room.startTimer=null;const now=Date.now();

@@ -2,7 +2,7 @@ import {createReaperEffect} from './reaper-effect.js';
 import {createHealFeedback} from './heal-effect.js';
 import {createUpgradeEffects} from './upgrade-effects.js';
 import {createKillIntro} from './kill-intro.js';
-import {attacksFor,ATTACKS,CONSUMABLES,ruleFor,skillName,skillLevel,wordsFor,totalDamage,freshLoadout,shopQuote,UNLOCK_COST} from './economy.js';
+import {attacksFor,ATTACKS,CONSUMABLES,COINS_PER_KILL,ruleFor,skillName,skillLevel,wordsFor,totalDamage,freshLoadout,shopQuote,UNLOCK_COST} from './economy.js';
 import {requestRespawn} from './respawn.js';
 import {createCoinEffects,createOrbitalView} from './economy-effects.js';
 import {createDamageFlash} from './damage-flash.js?v=1';
@@ -166,7 +166,8 @@ const connection=createGameConnection({
  onMessage:m=>{
   if(m.type==='damage')damageFlash.receive(m);
   if(m.type==='spell'&&m.actorId===myId&&m.targetId)damageFlash.prepare(m.targetId);
-  if(m.type==='arena-event'){arenaEvents.receive(m);killIntro.receive(m);if(m.kind==='kill'&&m.actorId===myId)coinEffects.collect(targetPoint(m.targetId),m.coins??30,m.id,m.victim);}
+  if(m.type==='assist'){arenaEvents.receive({...m,kind:'assist',text:`You assisted in killing ${m.victim}. +${m.coins} coins!`});}
+  if(m.type==='arena-event'){arenaEvents.receive(m);killIntro.receive(m);if(m.kind==='kill'&&m.actorId===myId)coinEffects.collect(targetPoint(m.targetId),m.coins??COINS_PER_KILL,m.id,m.victim);}
   if(m.type==='orbital'){minimap.endAirstrike();orbitalView.sync([m.strike],myId);}
   if(m.type==='killstreak'&&m.actorId!==myId)killStreak.announce(m.name,m.streak);
   if(m.type==='welcome'){if(myId&&myId!==m.id){clearFlights();completedShots.clear();faceTracker.reset();room=null;notify('The arena restarted. Rejoining with your face scan.');}serverClock.reset();joined=true;myId=m.id;sessionStorage.setItem('fieldspell-token',m.token);safeWrite('clashmit-player-token',m.token);safeWrite('clashmit-player-id',m.id);showArena();startJoinedSensors();$('join').disabled=false;}
@@ -394,7 +395,7 @@ if(hudPreview){
  const preview=document.createElement('button');preview.textContent='Preview overlapping alerts';preview.className='respawn-demo-repeat';
  preview.onclick=()=>{me().shieldUntil=now()+CONSUMABLES.shield.duration;killStreak.announce('Leon',5);killStreak.show(3);arenaEvents.receive({id:crypto.randomUUID(),at:now(),kind:'kill',text:'Alex eliminated John · Huzzah!'});renderState();};$('arena').append(preview);
  }
- if(previewMode==='coins'){const demo=document.createElement('button');demo.textContent='Preview coin pickup';demo.className='respawn-demo-repeat';demo.onclick=async()=>{await audio.unlock();coinEffects.collect({x:.5,y:.4},30,crypto.randomUUID(),'Alex');};$('arena').append(demo);}
+ if(previewMode==='coins'){const demo=document.createElement('button');demo.textContent='Preview coin pickup';demo.className='respawn-demo-repeat';demo.onclick=async()=>{await audio.unlock();coinEffects.collect({x:.5,y:.4},COINS_PER_KILL,crypto.randomUUID(),'Alex');};$('arena').append(demo);}
  if(previewMode==='airstrike'){
   const controls=document.createElement('details');controls.className='airstrike-preview-controls';controls.innerHTML='<summary>Preview controls</summary>';
   function previewStrike(caster=false,escape=false){controls.open=false;previewLocation={latitude:42.3601,longitude:-71.0942,accuracy:4};previewFix?.();const point={...previewLocation};orbitalView.clear();orbitalView.sync([{id:crypto.randomUUID(),actorId:caster?myId:'dummy',name:caster?'You':'Alex',point,radius:10,startsAt:now(),endsAt:now()+5000,victims:caster?[]:[{id:myId}]}],myId);if(escape)setTimeout(()=>{previewLocation={...previewLocation,latitude:42.3603};previewFix?.();},1300);}

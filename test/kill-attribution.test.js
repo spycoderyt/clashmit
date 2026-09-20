@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {freshLoadout,ATTACKS} from '../dist/economy.js';
+import {COINS_PER_KILL,freshLoadout,ATTACKS} from '../dist/economy.js';
 import {launchProjectile,impactProjectile,settleRoom} from '../dist/rules.js';
 import {createScoreStore} from '../server/scores.js';
 import {creditContinuous,scoreContinuousHit} from '../server/continuous-scores.js';
@@ -36,7 +36,7 @@ test('each multi-hit kill carries its own victim and the same purchased attack n
  const shot=launchProjectile(room,actor.id,'lightning',target.id,'one',now),hit=impactProjectile(room,actor.id,shot.shotId,true,shot.impactAt),kills=[];
  for(const event of [hit,...hit.secondaryHits])scoreContinuousHit(room,store,event,1,k=>kills.push(k));
  assert.deepEqual(kills.map(k=>k.targetId),[target.id,near.id]);assert.ok(kills.every(k=>k.spell==='lightning'&&k.attackName==='Chain Lightning'));
- assert.equal(store.standings().find(p=>p.id===actor.id).coins,60);
+ assert.equal(store.standings().find(p=>p.id===actor.id).coins,2*COINS_PER_KILL);
 });
 
 test('poison and skeleton DOT kills retain the attack name and caster life recorded at launch',()=>{
@@ -70,7 +70,7 @@ test('duplicate lethal reports cannot emit a second kill attribution or award',(
  const {store,room}=setup(),[actor,target]=room.players,kills=[];target.health=0;
  const hit={actorId:actor.id,targetId:target.id,actorLife:1,amount:70,lethal:true,spell:'meteor',attackName:'Extinction'};
  creditContinuous(room,store,hit,k=>kills.push(k));creditContinuous(room,store,hit,k=>kills.push(k));
- assert.equal(kills.length,1);assert.equal(kills[0].attackName,'Extinction');assert.equal(store.standings().find(p=>p.id===actor.id).coins,30);
+ assert.equal(kills.length,1);assert.equal(kills[0].attackName,'Extinction');assert.equal(store.standings().find(p=>p.id===actor.id).coins,COINS_PER_KILL);
 });
 
 test('confirmed kills broadcast attack and portrait to everyone once, without repeating portraits in announcement history',async t=>{

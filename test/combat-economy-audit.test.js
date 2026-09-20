@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {mkdtempSync,rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {ATTACKS,CLASS_ATTACKS,UNLOCK_COST,UPGRADE_COST,freshLoadout,ruleFor,totalDamage} from '../dist/economy.js';
+import {COINS_PER_KILL,ATTACKS,CLASS_ATTACKS,UNLOCK_COST,UPGRADE_COST,freshLoadout,ruleFor,totalDamage} from '../dist/economy.js';
 import {castSpell,launchProjectile,impactProjectile,settleRoom} from '../dist/rules.js';
 import {spawnPlayer,advanceRespawns,requestRespawn,selectRespawnPersona} from '../dist/respawn.js';
 import {createScoreStore} from '../server/scores.js';
@@ -78,13 +78,13 @@ test('coins and all three character purchases survive store reload, and spending
  const detached=store.loadout(a.id);detached.skills.lightning=999;assert.equal(store.loadout(a.id).skills.lightning,2);
 });
 
-test('one victim life gives exactly one 30-coin bounty; the victim retains shop funds',()=>{
+test('one victim life gives exactly one 50-coin reward; the victim retains shop funds',()=>{
  const r=room(),store=createScoreStore(null,{ranking:'coins'}),a=store.register('Alice'),b=store.register('Bob');
  r.players[0].id=a.id;r.players[1].id=b.id;store.award(b.id,0,0,0,true,60);
  const hit={actorId:a.id,targetId:b.id,amount:70,lethal:true,actorLife:1};
  creditContinuous(r,store,hit);creditContinuous(r,store,hit);
- assert.equal(store.standings().find(p=>p.id===a.id).coins,30);assert.equal(store.standings().find(p=>p.id===a.id).knockouts,1);assert.equal(store.standings().find(p=>p.id===b.id).coins,60);
- spawnPlayer(r.players[1],5000);creditContinuous(r,store,hit);assert.equal(store.standings().find(p=>p.id===a.id).coins,60);
+ assert.equal(store.standings().find(p=>p.id===a.id).coins,COINS_PER_KILL);assert.equal(store.standings().find(p=>p.id===a.id).knockouts,1);assert.equal(store.standings().find(p=>p.id===b.id).coins,60);
+ spawnPlayer(r.players[1],5000);creditContinuous(r,store,hit);assert.equal(store.standings().find(p=>p.id===a.id).coins,2*COINS_PER_KILL);
 });
 
 test('poison and skeleton kills pay coins once when their damage settles',()=>{
@@ -92,9 +92,9 @@ test('poison and skeleton kills pay coins once when their damage settles',()=>{
   const r=room('witch'),store=createScoreStore(null,{ranking:'coins'}),a=store.register('Alice'),b=store.register('Bob');r.players[0].id=a.id;r.players[1].id=b.id;r.players[0].loadout.skills[id]=1;r.players[1].health=id==='poison'?7:2;
   const shot=launchProjectile(r,a.id,id,b.id,id,1000);impactProjectile(r,a.id,id,true,shot.impactAt);
   for(const damage of settleRoom(r,shot.impactAt+1000))creditContinuous(r,store,damage);
-  assert.equal(r.players[1].health,0,id);assert.equal(store.standings().find(p=>p.id===a.id).coins,30,id);
+  assert.equal(r.players[1].health,0,id);assert.equal(store.standings().find(p=>p.id===a.id).coins,COINS_PER_KILL,id);
   for(const damage of settleRoom(r,shot.impactAt+10000))creditContinuous(r,store,damage);
-  assert.equal(store.standings().find(p=>p.id===a.id).coins,30,id);
+  assert.equal(store.standings().find(p=>p.id===a.id).coins,COINS_PER_KILL,id);
  }
 });
 
@@ -127,5 +127,5 @@ test('coin combat does not write scores for nonlethal damage or repeated lethal 
  assert.equal(writes,0,'nonlethal direct hits and DOT ticks skip persistence entirely');
  creditContinuous(r,store,{...hit,lethal:true});assert.equal(writes,1);
  creditContinuous(r,store,{...hit,lethal:true});assert.equal(writes,1,'one persisted award per life');
- const score=store.standings().find(p=>p.id===a.id);assert.equal(score.points,0);assert.equal(score.coins,30);assert.equal(score.knockouts,1);assert.equal(score.currentStreak,1);
+ const score=store.standings().find(p=>p.id===a.id);assert.equal(score.points,0);assert.equal(score.coins,COINS_PER_KILL);assert.equal(score.knockouts,1);assert.equal(score.currentStreak,1);
 });

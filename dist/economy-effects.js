@@ -1,8 +1,9 @@
+import {COINS_PER_KILL} from './economy.js';
 import {inOrbitalZone,ORBITAL} from './orbital-rules.js';
 // Cosmetic effects consume confirmed server events; they never grant money or deal damage.
 export function createCoinEffects(container,{audio,destination}){
  const seen=new Set(),rewards=document.createElement('div');rewards.className='coin-rewards';rewards.setAttribute('aria-live','polite');container.append(rewards);
- return{collect(point,amount=30,id,victim='an opponent'){if(id&&seen.has(id))return;if(id){seen.add(id);if(seen.size>100)seen.delete(seen.values().next().value);}const bounds=container.getBoundingClientRect(),dest=destination(),from={x:(point?.x??.5)*bounds.width,y:(point?.y??.4)*bounds.height},to={x:dest.left-bounds.left+dest.width/2,y:dest.top-bounds.top+dest.height/2};
+ return{collect(point,amount=COINS_PER_KILL,id,victim='an opponent'){if(id&&seen.has(id))return;if(id){seen.add(id);if(seen.size>100)seen.delete(seen.values().next().value);}const bounds=container.getBoundingClientRect(),dest=destination(),from={x:(point?.x??.5)*bounds.width,y:(point?.y??.4)*bounds.height},to={x:dest.left-bounds.left+dest.width/2,y:dest.top-bounds.top+dest.height/2};
  for(let i=0;i<9;i++){const coin=document.createElement('img');coin.src='/media/coin.svg';coin.className='flying-coin';coin.alt='';container.append(coin);const arc=(Math.random()-.5)*100,animation=coin.animate([{transform:`translate(${from.x}px,${from.y}px) scale(1.4)`,opacity:1},{transform:`translate(${from.x+arc}px,${from.y-70-Math.random()*70}px) scale(1.4)`,opacity:1,offset:.3},{transform:`translate(${to.x}px,${to.y}px) scale(.6)`,opacity:0}],{duration:800+i*45,delay:i*35,fill:'both',easing:'cubic-bezier(.2,.7,.4,1)'});animation.onfinish=()=>coin.remove();}
  const label=document.createElement('div'),value=document.createElement('b'),who=document.createElement('span');label.className='coin-reward';value.textContent=`+${amount} coins`;who.textContent=`for killing ${victim}`;label.append(value,who);rewards.append(label);while(rewards.children.length>3)rewards.firstChild.remove();setTimeout(()=>label.remove(),2400);audio.play('coins');
  }};

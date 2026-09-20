@@ -1,3 +1,4 @@
+import {killReward} from './economy.js';
 import {createBoxMotion} from './box-motion.js';
 import {healthColor} from './health-hud.js?v=1';
 // One persistent overlay follows the same normalized target used for aim and
@@ -19,7 +20,7 @@ export function createTargetOverlay(arena,container){
   label.classList.toggle('crowned',crowned);label.classList.toggle('shielded',shielded);label.classList.toggle('tracking-gap',!target.fresh);
   const center=Math.max(76,Math.min(viewport.width-76,x+w/2)),top=Math.max(safeTop,y-7);
   label.style.transform=`translate3d(${center.toFixed(2)}px,${top.toFixed(2)}px,0) translate(-50%,-100%)`;
-  text(title,(player.name||'Target')+(player.score?` · ◉ ${player.score.coins??0}`:''));if(meter.value!==player.health){meter.value=player.health;meter.style.setProperty('--health-color',healthColor(player.health));}meter.hidden=!!target.pending;
+  text(title,(player.name||'Target')+` · Reward: ${killReward(player.score?.currentStreak??0)} 🪙`);if(meter.value!==player.health){meter.value=player.health;meter.style.setProperty('--health-color',healthColor(player.health));}meter.hidden=!!target.pending;
   text(info,shielded?`◇ Shield · ${piercer} pierces`:poisoned?'☣ Poisoned':simulated?'Simulated':target.pending?'Hold steady':target.source==='body'?'Following · face hidden':target.confirmed?(target.fresh?'Face locked':'Tracking…'):'Identifying…');
  }
  hide();return{update,hide,size,setSafeTop(value){safeTop=value;},dispose(){observer?.disconnect();frame.remove();label.remove();}};

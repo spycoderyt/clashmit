@@ -1,3 +1,4 @@
+import {COINS_PER_KILL} from '../dist/economy.js';
 import test from 'node:test';import assert from 'node:assert/strict';import {WebSocket} from 'ws';
 import {mkdtemp,writeFile,rm} from 'node:fs/promises';import {tmpdir} from 'node:os';import {join} from 'node:path';
 import {createGameServer} from '../server/index.js';import {spawnPlayer,advanceRespawns,respawnSeconds} from '../dist/respawn.js';
@@ -83,6 +84,6 @@ test('confirmed kill callback includes every kill once, including posthumous lin
  const store=createScoreStore(),a={...store.register('A'),connected:true,faceReady:true},b={...store.register('B'),connected:true,faceReady:true};spawnPlayer(a,0);spawnPlayer(b,0);const room={players:[a,b]},events=[];
  const report=event=>events.push(event),hit={actorId:a.id,targetId:b.id,amount:10};
  creditContinuous(room,store,hit,report);assert.equal(events.length,0);
- creditContinuous(room,store,{...hit,lethal:true},report);creditContinuous(room,store,{...hit,lethal:true},report);assert.deepEqual(events.map(({killer,victim,streak})=>({killer,victim,streak})),[{killer:'A',victim:'B',streak:1}]);assert.equal(events[0].coins,30);
- spawnPlayer(b,1000);a.health=0;creditContinuous(room,store,{...hit,lethal:true},report);assert.equal(events[1].killer,'A');assert.equal(events[1].victim,'B');assert.equal(events[1].streak,0);assert.ok(events[1].coins===30);
+ creditContinuous(room,store,{...hit,lethal:true},report);creditContinuous(room,store,{...hit,lethal:true},report);assert.deepEqual(events.map(({killer,victim,streak})=>({killer,victim,streak})),[{killer:'A',victim:'B',streak:1}]);assert.equal(events[0].coins,COINS_PER_KILL);
+ spawnPlayer(b,1000);a.health=0;creditContinuous(room,store,{...hit,lethal:true},report);assert.equal(events[1].killer,'A');assert.equal(events[1].victim,'B');assert.equal(events[1].streak,0);assert.ok(events[1].coins===COINS_PER_KILL);
 });

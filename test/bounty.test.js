@@ -27,20 +27,20 @@ for(const route of ['projectile','poison','orbital'])test(`${route} pays the fiv
   const launched=launchOrbital(room,a,a.location,1000);assert.equal(launched.error,undefined);
   [hit]=resolveOrbitals(room,launched.strike.endsAt,event=>creditContinuous(room,store,event,report));
  }
- assert.equal(b.health,0);assert.equal(events.length,1);assert.equal(events[0].coins,90);assert.equal(events[0].balance,90);
+ assert.equal(b.health,0);assert.equal(events.length,1);assert.equal(events[0].coins,150);assert.equal(events[0].balance,150);
  // finish() uses this same death award after combat scoring.
  store.award(b.id,0,0,1);assert.equal(store.standings().find(p=>p.id===b.id).currentStreak,0);
  creditContinuous(room,store,{actorId:a.id,targetId:b.id,amount:10,lethal:true},report);
- assert.equal(events.length,1);assert.equal(store.standings().find(p=>p.id===a.id).coins,90);
+ assert.equal(events.length,1);assert.equal(store.standings().find(p=>p.id===a.id).coins,150);
  spawnPlayer(b,10000);b.health=0;creditContinuous(room,store,{actorId:a.id,targetId:b.id,amount:10,lethal:true},report);
- assert.equal(events[1].coins,30);assert.equal(store.standings().find(p=>p.id===a.id).coins,120);
+ assert.equal(events[1].coins,50);assert.equal(store.standings().find(p=>p.id===a.id).coins,200);
  assert.equal(store.standings().find(p=>p.id===b.id).bestStreak,5);
 });
 
 test('bounty uses the victim current streak, not the killer streak or victim best streak',()=>{
- for(const victimStreak of [0,4,5,8]){
+ for(const [victimStreak,reward] of [[0,50],[2,50],[3,100],[4,100],[5,150],[6,150],[7,200],[8,200],[9,250],[10,250],[11,300]]){
   const {room,store,a,b}=fixture(victimStreak);store.award(a.id,0,10);
   b.health=0;let event;creditContinuous(room,store,{actorId:a.id,targetId:b.id,amount:10,lethal:true},value=>event=value);
-  assert.equal(event.coins,victimStreak>=5?90:30);
+  assert.equal(event.coins,reward);
  }
 });

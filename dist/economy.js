@@ -1,6 +1,8 @@
 // Shared presentation/balance data; the server is authoritative for spending and combat.
-export const MAX_HEALTH=70,COINS_PER_KILL=30;
-export const KILL_BOUNTY=Object.freeze({minimumStreak:5,multiplier:3});
+export const MAX_HEALTH=70,COINS_PER_KILL=50,ASSIST_COINS=20,ASSIST_WINDOW_MS=10000;
+export const KILL_BOUNTY=Object.freeze({minimumStreak:3,step:2});
+export function bountyMultiplier(streak){return Math.max(1,Math.floor(((Number.isFinite(streak)?Math.max(0,Math.floor(streak)):0)+1)/2));}
+export const killReward=streak=>COINS_PER_KILL*bountyMultiplier(streak);
 export const CLASS_ATTACKS={mage:['lightning','fireball','meteor'],witch:['poison','skeletonArmy','soulReaper'],archer:['arrows','bombArrow','ballista']};
 export const UNLOCK_COST=[0,60,140],UPGRADE_COST=[80,160,240];
 export const CONSUMABLES={shield:{name:'Shield',cost:30,duration:7000,cooldown:14000},heal:{name:'Heal',cost:30,amount:50,cooldown:8000},flashbang:{name:'Flashbang',cost:50,duration:3000,radius:10,cooldown:8000}};

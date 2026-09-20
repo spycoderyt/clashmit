@@ -1,3 +1,4 @@
+import {COINS_PER_KILL} from '../dist/economy.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {WebSocket} from 'ws';
@@ -14,6 +15,6 @@ test('one upgraded cast broadcasts three hits, credits each KO once and spends m
  const impact=await a.next('impact');assert.equal(impact.secondaryHits.length,2);assert.ok(Math.abs((caster.mana-(caster.manaUpdatedAt-shot.at)*2/3000)-8)<.01,'one mana charge plus continuous regen');assert.ok(room.players.filter(p=>p.id!==a.id).every(p=>p.health===0));
  for(const c of clients.slice(1)){const seen=await c.next('impact');assert.deepEqual(seen.secondaryHits.map(h=>h.targetId),impact.secondaryHits.map(h=>h.targetId));}
  const board=async()=>(await(await fetch(base+'/api/leaderboard')).json()).players;
- let scores=await board(),score=scores.find(p=>p.id===a.id);assert.equal(score.coins,90);assert.equal(score.knockouts,3);assert.equal(score.currentStreak,3);assert.ok(scores.filter(p=>p.id!==a.id).every(p=>p.deaths===1));
- a.send({type:'impact',shotId:shot.shotId,tracked:true});a.send({type:'ping',at:123});await a.next('pong',m=>m.at===123);score=(await board()).find(p=>p.id===a.id);assert.equal(score.coins,90);assert.equal(score.knockouts,3);
+ let scores=await board(),score=scores.find(p=>p.id===a.id);assert.equal(score.coins,3*COINS_PER_KILL);assert.equal(score.knockouts,3);assert.equal(score.currentStreak,3);assert.ok(scores.filter(p=>p.id!==a.id).every(p=>p.deaths===1));
+ a.send({type:'impact',shotId:shot.shotId,tracked:true});a.send({type:'ping',at:123});await a.next('pong',m=>m.at===123);score=(await board()).find(p=>p.id===a.id);assert.equal(score.coins,3*COINS_PER_KILL);assert.equal(score.knockouts,3);
 });
