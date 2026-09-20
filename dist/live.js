@@ -16,7 +16,7 @@ function render(data){
   const line=document.createElement('div');line.className='kill-line';
   for(const [cls,value] of [['killer',k.killer],['verb','eliminated'],['victim',k.victim]]){const span=document.createElement('span');span.className=cls;span.textContent=value;line.append(span);}
   const meta=document.createElement('div');meta.className='kill-meta';const time=document.createElement('time');time.dateTime=new Date(k.at).toISOString();time.textContent=new Date(k.at).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',second:'2-digit'});meta.append(time);
-  if(k.streak>0){const streak=document.createElement('span');streak.className='kill-streak';streak.textContent=`${k.streak} KILL STREAK`;meta.append(streak);}
+  if(k.streak>0){const streak=document.createElement('span');streak.className='kill-streak';streak.textContent=`${k.streak} kill streak`;meta.append(streak);}
   li.append(line,meta);return li;
  }));$('feed-empty').hidden=data.kills.length>0;}
 }
