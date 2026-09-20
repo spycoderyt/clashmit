@@ -1,4 +1,4 @@
-import {setupLeaderboard} from './leaderboard.js?v=scores1';
+import {setupLeaderboard} from './leaderboard.js?v=scores2';
 import {setupLobbyVideo} from './lobby-video.js?v=2';
 import {createGameConnection} from './connection.js?v=hosting1';
 import {createTargetOverlay} from './target-overlay.js?v=persona3';
