@@ -1,0 +1,7 @@
+det_500m.onnx (SCRFD-500M face detector) and w600k_mbf.onnx (MobileFaceNet ArcFace recogniser
+trained on WebFace600K) come from the InsightFace "buffalo_sc" model pack:
+https://github.com/deepinsight/insightface/releases/download/v0.7/buffalo_sc.zip
+
+The InsightFace pretrained models are released for NON-COMMERCIAL RESEARCH PURPOSES ONLY.
+They are used here for a hackathon prototype. Replace them with commercially licensed
+weights (for example OpenCV's Apache-2.0 SFace + YuNet) before any commercial use.

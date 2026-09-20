@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#101217"><title>Face lock test</title><link rel="icon" href="favicon.svg">
+<style>
+:root{font-family:system-ui,sans-serif;color:#f6f4ef;background:#101217;--muted:#a5a9b5;--line:#30343e;--orange:#ff9958;--good:#7be0a0;--bad:#ff7a7a}
+*{box-sizing:border-box}body{margin:0;padding:12px 12px 40px;max-width:560px;margin-inline:auto}
+h1{font-size:1.1rem;margin:4px 0}p{margin:6px 0;color:var(--muted);font-size:.85rem;line-height:1.4}
+.stage{position:relative;border-radius:12px;overflow:hidden;background:#000;aspect-ratio:3/4;margin:10px 0}
+.stage video,.stage img,.stage canvas{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.readout{position:absolute;left:8px;right:8px;bottom:8px;padding:8px 10px;border-radius:10px;background:#0d131cd9;font-size:.8rem;display:grid;gap:2px}
+.readout b{font-size:1.15rem}.readout .ok{color:var(--good)}.readout .no{color:var(--bad)}
+.row{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0;align-items:center}
+button,select,input{font:inherit;color:inherit;background:#18202b;border:1px solid #596170;border-radius:8px;padding:9px 12px;min-height:42px}
+button.primary{background:var(--orange);color:#101217;border-color:var(--orange);font-weight:700}button:disabled{opacity:.45}
+input[type=text],input[type=number]{flex:1;min-width:0}input[type=number]{max-width:84px;flex:none}
+label{font-size:.8rem;color:var(--muted);display:flex;gap:6px;align-items:center}
+.people{display:flex;gap:6px;flex-wrap:wrap}.people span{background:#18202b;border:1px solid #596170;border-radius:999px;padding:4px 10px;font-size:.8rem}
+table{width:100%;border-collapse:collapse;font-size:.75rem;font-variant-numeric:tabular-nums}th,td{padding:5px 4px;text-align:right;border-bottom:1px solid var(--line)}th:first-child,td:first-child{text-align:left}th{color:var(--muted);font-weight:500}
+#status{min-height:1.2em;color:var(--orange)}
+</style></head>
+<body>
+<h1>Face lock test</h1>
+<p>Measures how well on-device face recognition identifies an enrolled person as they move away. Everything runs on this phone: camera frames and face data are never uploaded or saved, and are gone when you reload.</p>
+<p id="status" role="status">Tap Start camera.</p>
+<div class="row"><button id="start" class="primary">Start camera</button><button id="flip" disabled>Flip camera</button><label>Photo instead <input id="photo" type="file" accept="image/*" style="max-width:150px"></label></div>
+<div class="stage"><video id="video" autoplay muted playsinline></video><img id="still" alt="" hidden><canvas id="overlay"></canvas><div class="readout"><b id="verdict">No face yet</b><span id="detail">—</span><span id="timing">—</span></div></div>
+<div class="row"><label>Zoom pass <select id="zoom"><option value="1">Off</option><option value="2">2×</option><option value="3" selected>3×</option><option value="4">4×</option></select></label><label>Capture <select id="capture"><option value="3840x2160">4K</option><option value="1920x1080">1080p</option></select></label></div>
+<h1>1 · Enrol</h1>
+<p>Fill the frame with one face, type a name and tap Enrol. For 6 seconds slowly turn your head left, right and down, and raise your phone the way you hold it in a match. Enrol a second person too, so you can see whether it tells you apart.</p>
+<div class="row"><input id="name" type="text" maxlength="20" placeholder="Name" autocomplete="off"><button id="enrol" class="primary" disabled>Enrol this face</button></div>
+<div id="people" class="people"></div>
+<h1>2 · Measure range</h1>
+<p>Point the camera at the enrolled person (or prop the phone up and walk away from the front camera). At each distance enter the metres, pick who is in view, and tap Record for a 5-second measurement.</p>
+<div class="row"><input id="metres" type="number" min="0" step="0.5" value="2" aria-label="Distance in metres"><span style="font-size:.8rem;color:var(--muted)">m</span><select id="expected" aria-label="Who is in view"></select><button id="record" disabled>Record 5 s</button><button id="clear">Clear</button></div>
+<table><thead><tr><th>Distance · who</th><th>Face found</th><th>Right</th><th>Wrong</th><th>Score</th><th>Face px</th><th>ms</th></tr></thead><tbody id="results"></tbody></table>
+<p>Score is the distance between faces: 0 is identical, different people sit around 1.2 to 1.4, and under 1.0 can count as the same person. A name is only shown once 3 of the last 5 frames agree, and never for faces under 32 px wide. “Right” is the share of frames identified as the chosen person; “Wrong” is identified as someone else, which should stay at 0%.</p>
+<script type="module" src="face-test.js?v=face8"></script>
+</body></html>

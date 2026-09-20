@@ -6,6 +6,9 @@ import {colorProfile,similarity,validProfile,coverRect} from '../dist/shirt.js';
 const profile=rgb=>colorProfile(new Uint8ClampedArray(Array.from({length:64},()=>[...rgb,255]).flat()));
 const red=profile([220,30,30]),blue=profile([30,30,220]);
 import {createGameServer} from '../server/index.js';
+import {encodeDescriptor,DESCRIPTOR_LENGTH} from '../dist/face-id.js';
+// A stand-in face signature: any unit vector in the wire format.
+const faceOf=seed=>{const v=Array.from({length:DESCRIPTOR_LENGTH},(_,i)=>Math.sin(seed*31+i*1.3)),n=Math.hypot(...v);return [encodeDescriptor(v.map(x=>x/n))];};
 const player=id=>({id,health:100,connected:true,cooldowns:{},shieldUntil:0});
 test('spells enforce phase, cooldown, shield and health bounds',()=>{
  const room={phase:'playing',players:[player('a'),player('b')]};
@@ -34,17 +37,22 @@ test('fireball damage occurs at impact, expires, and respects tracking loss and 
  assert.ok(impactFireball(room,'a','three',true,9401).error);
  launchFireball(room,'a','b','four',10000);assert.equal(impactFireball(room,'a','four',true,14000).missed,true);
 });
-test('one shared arena, authoritative controller, shirt registration and delayed impact, reconnect and round outcome',async t=>{
+test('one shared arena, authoritative controller, face registration and delayed impact, reconnect and round outcome',async t=>{
  const game=createGameServer();await new Promise(r=>game.server.listen(0,'127.0.0.1',r));t.after(()=>game.close());const url=`ws://127.0.0.1:${game.server.address().port}/ws`;
  async function client(name,token){const ws=new WebSocket(url),messages=[];ws.on('message',b=>messages.push(JSON.parse(b)));await new Promise(r=>ws.on('open',r));const send=m=>ws.send(JSON.stringify(m));const next=async(type,predicate=()=>true)=>{const end=Date.now()+2500;while(Date.now()<end){const i=messages.findIndex(m=>m.type===type&&predicate(m));if(i>=0)return messages.splice(i,1)[0];await new Promise(r=>setTimeout(r,10));}throw Error('Timed out waiting for '+type);};send({type:'join',name,token});return {ws,send,next,messages};}
  const a=await client('Merlin'),aw=await a.next('welcome');const b=await client('Morgana'),bw=await b.next('welcome');assert.equal(aw.code,bw.code);
  b.send({type:'start'});assert.match((await b.next('error')).message,/host/);
  const third=await client('Third');await third.next('welcome');await a.next('state',m=>m.room.players.length===3);third.send({type:'leave'});await a.next('state',m=>m.room.players.length===2);
- a.send({type:'start'});assert.match((await a.next('error')).message,/register/);
+ a.send({type:'start'});assert.match((await a.next('error')).message,/scan their face/);
+ a.send({type:'face',samples:['nonsense']});assert.match((await a.next('error')).message,/not readable/);
+ // Headband samples are still accepted but no longer let a round start.
  a.send({type:'shirt',profile:{}});assert.match((await a.next('error')).message,/Invalid headband/);
- a.send({type:'shirt',profile:red});b.send({type:'shirt',profile:red});await a.next('state',m=>m.room.players.every(p=>p.shirt));
- a.send({type:'start'});assert.match((await a.next('error')).message,/too similar/);
- b.send({type:'shirt',profile:blue});await a.next('state',m=>similarity(m.room.players.find(p=>p.id===bw.id)?.shirt,blue)>.9);
+ a.send({type:'shirt',profile:red});b.send({type:'shirt',profile:blue});await a.next('state',m=>m.room.players.every(p=>p.shirt));assert.ok(similarity((await b.next('state',m=>m.room.players.every(p=>p.shirt))).room.players.find(p=>p.id===bw.id).shirt,blue)>.9);
+ a.send({type:'start'});assert.match((await a.next('error')).message,/scan their face/);
+ // Each scan reaches every player once as a 'faces' message and never rides along in the state broadcast.
+ assert.deepEqual((await b.next('faces')).faces,{});a.send({type:'face',samples:faceOf(1)});const shared=await b.next('faces',m=>m.faces[aw.id]);assert.deepEqual(shared.faces[aw.id],faceOf(1));
+ b.send({type:'face',samples:faceOf(2)});const ready=await a.next('state',m=>m.room.players.every(p=>p.faceReady));assert.ok(!JSON.stringify(ready.room).includes(faceOf(1)[0].slice(0,40)));
+ const late=await client('Late');await late.next('welcome');assert.deepEqual(Object.keys((await late.next('faces')).faces).sort(),[aw.id,bw.id].sort());late.send({type:'leave'});await a.next('state',m=>m.room.players.length===2);
  a.send({type:'start'});const started=await a.next('state',m=>m.room.phase==='playing');assert.equal(started.room.combat.mana.max,10);assert.ok(started.room.players.every(p=>p.mana===10));assert.deepEqual(started.room.shots,[]);
  a.send({type:'cast',spell:'fireball',targetId:bw.id});const shot=await a.next('spell');const flying=await b.next('state',m=>m.room.shots.some(s=>s.shotId===shot.shotId));assert.equal(shot.impactAt,shot.at+1400);assert.equal(flying.room.shots[0].actorId,aw.id);assert.ok(flying.room.players.find(p=>p.id===aw.id).mana<7.1);
  await new Promise(r=>setTimeout(r,1400));a.send({type:'impact',shotId:shot.shotId,tracked:true});await b.next('state',m=>m.room.players.find(p=>p.id===bw.id).health===75);
