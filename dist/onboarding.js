@@ -1,11 +1,7 @@
-// Three one-line coach marks for a first-time player, shown once while they wait for the host. Each one dims
-// the arena except the controls it is about, which stay tappable, so people learn where the buttons are
-// instead of reading a wall of text. Builds its own elements and styles. Skip ends it, How to play brings it back.
-// gate: the step cannot be stepped past until that named check passes, so nobody skims past enabling voice.
+// Two skippable voice-casting tips, remembered on this device after skip or completion.
 export const STEPS=Object.freeze([
- {key:'voice',anchor:'voice',gate:'voice',text:'Tap Enable voice, then say a spell to cast it.'},
- {key:'attack',anchor:'attack',text:'Your two primary spells.'},
- {key:'defence',anchor:'defence',text:'Shield blocks primary attacks, Heal recovers health.'},
+ {key:'attack',anchor:'attack',text:"Aim at a player and say a spell’s name to attack."},
+ {key:'defence',anchor:'defence',text:"Say “Shield” to block or “Heal” to recover health."},
 ]);// A brand new player only: after their face is scanned, before any round is running, and never over the face scan.
 export function shouldOpen({seen,practice,faceReady,phase,scanOpen,open}){
  return !seen&&!practice&&!!faceReady&&!open&&!scanOpen&&(phase==='lobby'||phase==='finished');
@@ -72,13 +68,12 @@ export function createOnboarding({container,anchors={},gates={},onFinish=()=>{}}
   hole.hidden=!lit;if(lit)Object.assign(hole.style,{left:lit.x+'px',top:lit.y+'px',width:lit.width+'px',height:lit.height+'px'});
   card.style.top=plan.top+'px';
  }
- // A gated step keeps Next disabled until its check passes, and the lit control can swap out underneath
- // (Enable voice becomes the live transcript), so both are re-read on a tick rather than once per step.
+ // Reposition the tips if the HUD changes size.
  function sync(){if(!open)return;next.disabled=!passed(STEPS[index]);place();}
  function render(){
   const step=STEPS[index];text.textContent=step.text;
   for(const [i,dot] of [...dots.children].entries())dot.className=i===index?'active':i<index?'done':'';
-  next.textContent=index===STEPS.length-1?'Got it':'Next';skip.hidden=index===STEPS.length-1;
+  next.textContent=index===STEPS.length-1?'Got it':'Next';skip.hidden=false;
   sync();requestAnimationFrame(place);
  }
  function finish(){if(!open)return;open=false;clearInterval(timer);timer=null;root.hidden=true;onFinish();}

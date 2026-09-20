@@ -13,7 +13,7 @@ export const SPELL_INFO=Object.freeze({
  arrows:{label:'Arrows',symbol:'➶',blurb:'10 damage · fast · splash',words:['arrows','arrow'],css:'arrows',rgb:'255,232,170'},
  zap:{label:'Zap',symbol:'⚡',blurb:'Ignores shield · stuns',words:['zap','zapp'],css:'zap',rgb:'255,230,80',bolt:true},
  shield:{label:'Shield',symbol:'◇',blurb:'Blocks Fireball, Poison, Arrows',words:['shield'],css:'shield',rgb:'107,210,255'},
- heal:{label:'Heal',symbol:'+',blurb:'Restore 20',words:['heal'],css:'heal',rgb:'120,255,170'}
+ heal:{label:'Heal',symbol:'+',blurb:'Restore 20',words:['heal','heel'],css:'heal',rgb:'120,255,170'}
 });
 export const deckWords=deck=>Object.fromEntries(deck.map(id=>[id,SPELL_INFO[id].words]));
 export const labelOf=id=>SPELL_INFO[id]?.label||id;

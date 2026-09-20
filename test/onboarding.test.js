@@ -4,18 +4,15 @@ import {readFileSync} from 'node:fs';
 import {STEPS,shouldOpen,shouldClose,frame,union} from '../dist/onboarding.js';
 import {PERSONAS,SPELLS} from '../dist/rules.js';
 const fresh={seen:false,practice:false,faceReady:true,phase:'lobby',scanOpen:false,open:false};
-test('three one-line coach marks run voice, then the attacking pair, then the defensive pair',()=>{
- assert.deepEqual(STEPS.map(s=>s.anchor),['voice','attack','defence']);
+test('two skippable tips teach voice casting with no activation step',()=>{
+ assert.deepEqual(STEPS.map(s=>s.anchor),['attack','defence']);
  for(const step of STEPS){
   assert.ok(step.text.length>10&&step.text.length<70,`${step.key} stays a one-liner`);
   assert.equal(step.text.split(/(?<=[.!?])\s+/).filter(Boolean).length,1,`${step.key} is a single sentence`);
   assert.ok(!('title' in step)&&!('fine' in step),`${step.key} carries nothing but its line`);
  }
- // Nobody may skim past enabling voice, and no other step blocks on anything.
- assert.equal(STEPS[0].gate,'voice');
- assert.deepEqual(STEPS.slice(1).map(s=>s.gate),[undefined,undefined]);
- assert.match(STEPS[0].text,/Enable voice/);
- assert.match(STEPS[2].text,/Shield/);assert.match(STEPS[2].text,/Heal/);
+ for(const step of STEPS){assert.equal(step.gate,undefined);assert.match(step.text,/say/i);assert.doesNotMatch(step.text,/enable|tap|click/i);}
+ assert.match(STEPS[1].text,/Shield/);assert.match(STEPS[1].text,/Heal/);
 });
 test('the lit control stays tappable: only the dark panels and the card take taps',()=>{
  const css=readFileSync(new URL('../dist/onboarding.js',import.meta.url),'utf8');
@@ -69,7 +66,7 @@ test('the card drops below a control with no room above it, and nothing visible 
 test('the attack and defence steps light the right cards for every persona',()=>{
  const app=readFileSync(new URL('../dist/app.js',import.meta.url),'utf8'),html=readFileSync(new URL('../dist/index.html',import.meta.url),'utf8');
  const anchors=app.match(/anchors:\{(.*?)\},gates:/)[1];
- for(const id of ['voice','voice-status'])assert.ok(anchors.includes(`$('${id}')`)&&html.includes(`id="${id}"`),`#${id} anchors the voice step`);
+ assert.ok(!anchors.includes('voice'),'there is no voice activation step');
  // The spell bar is emptied and rebuilt per persona, so these two steps must take slots, never spell names.
  assert.ok(html.includes('id="spells" class="spells"></div>'),'the spell bar is built at runtime');
  assert.match(anchors,/attack:\(\)=>spellCards\(\)\.slice\(0,2\)/);

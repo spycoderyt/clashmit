@@ -33,3 +33,11 @@ test('an interim “skeleton” followed by the full phrase is still one cast',(
  const witch=deckWords(PERSONAS.witch);
  assert.equal(spellsFromText('skeleton',witch).length,1);assert.equal(spellsFromText('skeleton army',witch).length,1);
 });
+
+test('heel is recognized as Heal in every deck, with whole-word matching',()=>{
+ for(const words of [undefined,...Object.values(PERSONAS).map(deckWords)]){
+  assert.deepEqual(spellsFromText('heel',words),['heal']);
+  assert.deepEqual(spellsFromText('HEAL heel',words),['heal','heal']);
+  assert.deepEqual(spellsFromText('wheel heels heeling',words),[]);
+ }
+});

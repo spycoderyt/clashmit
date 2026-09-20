@@ -11,9 +11,9 @@ const el=(tag,attrs={},parent)=>{const node=document.createElementNS(SVG,tag);fo
 // A stable, well separated color per player, derived from their id.
 const colorFor=id=>{let hash=0;for(const ch of String(id))hash=(hash*31+ch.charCodeAt(0))>>>0;return `hsl(${hash%360} 85% 62%)`;};
 export function createMinimap({container,send,notify=()=>{},geolocation=globalThis.navigator?.geolocation}){
- if(!document.querySelector('link[data-minimap]')){const link=document.createElement('link');link.rel='stylesheet';link.href='minimap.css?v=map8';link.dataset.minimap='';document.head.append(link);}
+ if(!document.querySelector('link[data-minimap]')){const link=document.createElement('link');link.rel='stylesheet';link.href='minimap.css?v=automap2';link.dataset.minimap='';document.head.append(link);}
  const root=document.createElement('div');root.className='minimap';root.hidden=true;
- root.innerHTML='<div class="minimap-frame" role="button" tabindex="0"><span class="minimap-cta"></span></div><span class="minimap-range"></span><button type="button" class="minimap-close" aria-label="Close map">✕</button><button type="button" class="minimap-recenter" aria-label="Centre the map on me">◎</button><div class="minimap-foot"><button type="button" class="minimap-stop">Stop sharing</button><span class="minimap-gps"></span><span class="minimap-credit"></span></div>';
+ root.innerHTML='<div class="minimap-frame" role="button" aria-label="Open the full-screen map" tabindex="0"><span class="minimap-cta"></span></div><span class="minimap-range"></span><button type="button" class="minimap-close" aria-label="Close map">✕</button><button type="button" class="minimap-recenter" aria-label="Centre the map on me">◎</button><div class="minimap-foot"><button type="button" class="minimap-stop">Stop sharing</button><span class="minimap-gps"></span><span class="minimap-credit"></span></div>';
  const frame=root.querySelector('.minimap-frame'),cta=root.querySelector('.minimap-cta'),rangeLabel=root.querySelector('.minimap-range'),gpsLabel=root.querySelector('.minimap-gps'),credit=root.querySelector('.minimap-credit'),recenter=root.querySelector('.minimap-recenter');
  // ?map=<theme> previews another map theme without changing the default in minimap-tiles.js.
  const svg=el('svg',{'aria-hidden':'true'});frame.prepend(svg);const tiles=createTileMap(frame,{theme:new URLSearchParams(location.search).get('map')||undefined});credit.textContent=tiles.attribution;
@@ -34,6 +34,7 @@ export function createMinimap({container,send,notify=()=>{},geolocation=globalTh
  const selfLayer=el('g',{},svg),dots=el('g',{},svg),self=marker(selfLayer),selfBeak=el('path',{class:'minimap-beak'},self.g);self.g.classList.add('minimap-me');let avatars=new Map();
  container.append(root);
  let players=[],myId=null,skew=0,position=null,heading=null,headingAt=0,watchId=null,sendTimer=null,lastSent=0,lastSentFix=0,compass=false,full=false,following=true,centredAt=0,wired=false,dirty=true,frameRequest=0,size='';
+ let locationStatus='Locating…';
  const nodes=new Map(),sharing=()=>watchId!==null;
  const invalidate=()=>{dirty=true;if(!frameRequest)frameRequest=requestAnimationFrame(()=>{frameRequest=0;if(dirty&&!root.hidden)render();});};
  function onOrientation(event){const next=cameraHeading(event);if(next===null)return;const before=heading;heading=smoothHeading(heading,next);headingAt=Date.now();if(before===null||Math.abs(heading-before)>.5)invalidate();}
@@ -41,18 +42,18 @@ export function createMinimap({container,send,notify=()=>{},geolocation=globalTh
  function publish(){if(!position||document.hidden)return;const at=Date.now();if(position.at<=lastSentFix&&at-lastSent<RESEND_MS)return;lastSent=at;lastSentFix=position.at;send({type:'location',location:{latitude:position.latitude,longitude:position.longitude,accuracy:position.accuracy}});}
  // compassGranted: the join screen already asked for motion access inside its tap, so asking again here
  // (outside any tap, where iOS would refuse) is skipped.
- async function enable({compassGranted=false}={}){
-  if(sharing())return;if(!geolocation){notify('Location is unavailable in this browser.');return;}
+ async function enable({compassGranted=false,requestCompass=true}={}){
+  if(sharing())return;if(!geolocation){locationStatus='Location unavailable';invalidate();notify('Location is unavailable in this browser.');return;}
   // iOS only grants compass access from inside a tap, so ask before anything else.
-  try{if(compassGranted)listenCompass();else if(typeof DeviceOrientationEvent!=='undefined'){if(typeof DeviceOrientationEvent.requestPermission==='function'){if(await DeviceOrientationEvent.requestPermission()==='granted')listenCompass();}else listenCompass();}}catch{}
+  try{if(compassGranted)listenCompass();else if(typeof DeviceOrientationEvent!=='undefined'){if(typeof DeviceOrientationEvent.requestPermission==='function'){if(requestCompass&&await DeviceOrientationEvent.requestPermission()==='granted')listenCompass();}else listenCompass();}}catch{}
   if(sharing())return;
-  watchId=geolocation.watchPosition(p=>{position={latitude:p.coords.latitude,longitude:p.coords.longitude,accuracy:p.coords.accuracy,at:Date.now()};publish();invalidate();},e=>{if(e.code===1){disable();notify('Allow location access in your browser settings to use the map.');}else if(!position)notify('No GPS fix yet. The map works best outdoors.');},{enableHighAccuracy:true,maximumAge:2000,timeout:20000});
+  locationStatus='Locating…';watchId=geolocation.watchPosition(p=>{position={latitude:p.coords.latitude,longitude:p.coords.longitude,accuracy:p.coords.accuracy,at:Date.now()};publish();invalidate();},e=>{if(e.code===1){disable();locationStatus='Location blocked';invalidate();notify('Allow location access in your browser settings to use the map.');}else if(!position)notify('No GPS fix yet. The map works best outdoors.');},{enableHighAccuracy:true,maximumAge:2000,timeout:20000});
   sendTimer=setInterval(publish,SEND_MS);invalidate();tiles.load().then(()=>{if(!wired){wired=true;tiles.onMove(invalidate);tiles.onGrab(()=>{if(full&&following){following=false;invalidate();}});}size='';invalidate();},()=>{});
  }
  function disable(){
   if(watchId!==null)geolocation.clearWatch(watchId);watchId=null;clearInterval(sendTimer);sendTimer=null;
   if(compass){compass=false;window.removeEventListener('deviceorientationabsolute',onOrientation);window.removeEventListener('deviceorientation',onOrientation);}
-  if(position||lastSent)send({type:'location',location:null});position=null;heading=null;lastSent=0;lastSentFix=0;setFull(false);invalidate();
+  if(position||lastSent)send({type:'location',location:null});position=null;heading=null;lastSent=0;lastSentFix=0;locationStatus='Location off';setFull(false);invalidate();
  }
  function setFull(next){if(full===next)return;full=next;following=true;size='';root.classList.toggle('full',full);tiles.setInteractive(full);frame.setAttribute('aria-label',full?'Map':'Open the full-screen map');frame.tabIndex=full?-1:0;invalidate();}
  const open=()=>{if(full)return;if(!sharing())void enable();else if(position)setFull(true);};
@@ -63,7 +64,7 @@ export function createMinimap({container,send,notify=()=>{},geolocation=globalTh
  document.addEventListener('keydown',e=>{if(e.key==='Escape'&&full)setFull(false);});
  function render(){
   dirty=false;const active=sharing()&&!!position,facing=heading!==null&&Date.now()-headingAt<3000?heading:null,width=frame.clientWidth,height=frame.clientHeight;
-  root.classList.toggle('active',active);cta.textContent=active?'':sharing()?'Locating…':'Tap to share location';if(!active&&full)setFull(false);
+  root.classList.toggle('active',active);cta.textContent=active?'':sharing()?'Locating…':locationStatus;if(!active&&full)setFull(false);
   const resized=size!==`${width}x${height}x${full}`;if(resized){size=`${width}x${height}x${full}`;tiles.resize();svg.setAttribute('viewBox',full?`0 0 ${width} ${height}`:`${-VIEW} ${-VIEW} ${VIEW*2} ${VIEW*2}`);}
   // Corner view: the map is a backdrop scaled so 50 m reaches the edge. Full view: the map decides, we project onto it.
   let mapped=false;
@@ -102,9 +103,10 @@ export function createMinimap({container,send,notify=()=>{},geolocation=globalTh
   update(room,id){players=room.players||[];myId=id;if(Number.isFinite(room.serverTime))skew=Date.now()-room.serverTime;root.hidden=false;invalidate();},
   // avatars: Map of player id to a small face photo (data URL) from their scan.
   setAvatars(next){avatars=next;invalidate();},
-  stop(){disable();players=[];root.hidden=true;},
+  stop(){disable();locationStatus='Locating…';players=[];root.hidden=true;},
   // Starts sharing without a tap on the map, for players who allowed location when they joined.
   enable,
+  setPermission(state){if(!sharing()&&state==='denied'){locationStatus='Location blocked';invalidate();}},
   sharing,
  };
 }

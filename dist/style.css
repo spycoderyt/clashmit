@@ -168,18 +168,25 @@
 @keyframes skel-scatter{to{transform:translateY(24px) rotate(80deg) scale(.6)}}
 @media (prefers-reduced-motion:reduce){.skel .leg,.skel .arm,.skel.gone svg,.band-target.poisoned,.arena.poisoned::after,.spell.clears-swarm{animation:none}.arena.stunned::before{display:none}}
 
-/* Health reads like the elixir bar: one tall meter with the number on its right. */
-.health-row{display:flex;align-items:center;gap:10px;margin:0 0 10px;font-size:.6rem;text-shadow:0 1px 4px #000}
-.health-row>span{display:none}
-.health-row>b{min-width:58px;text-align:right;font-variant-numeric:tabular-nums;font-size:1.1rem;font-weight:800;color:#e6ffe9;text-shadow:0 2px 4px #000,0 0 10px #4fd06b66}
-.health-track{position:relative;flex:1;max-width:none;height:26px;border-radius:13px;border:2px solid #b0f5bd8c;background:#102a19e8;box-shadow:inset 0 2px 7px #000a;overflow:hidden}
-#health-fill{height:100%;background:linear-gradient(180deg,#b6ffc0,#40cf67 45%,#1d8f3e);box-shadow:0 0 14px #6bff8c55;transition:width .25s}
-.health-track::after{content:'';position:absolute;left:3px;right:3px;top:2px;height:36%;border-radius:11px 11px 40% 40%/11px 11px 60% 60%;background:linear-gradient(#ffffff40,#ffffff03);pointer-events:none;z-index:2}
-
-/* The live transcript takes over the Enable voice slot while the microphone is listening. */
-.voice-live{flex:1;min-width:0;background:#2b1d13d9;border:1px solid var(--orange);border-radius:8px;color:#ffd8b4;font-size:.75rem;font-weight:600;line-height:1.3;padding:8px 12px;text-align:left;overflow:hidden;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2}
-
-/* Both meters end at the same point: one fixed column wide enough for 100 / 100. */
-.health-row>b,.mana-row>b{flex:0 0 92px;width:92px;min-width:0;text-align:right}
-
-@media(max-height:700px){.health-track{height:20px}.health-row>b{font-size:1rem}}
+/* Compact camera HUD: live health standings opposite the map, hearts above mana. */
+.spell{cursor:default}.spell.unavailable{opacity:.4}
+.health-hearts{display:flex;gap:5px;align-items:center;margin:0 0 7px;min-height:19px}
+.pixel-heart{width:22px;height:20px;flex:0 1 22px;overflow:visible;shape-rendering:crispEdges;filter:drop-shadow(1px 0 #100d14) drop-shadow(-1px 0 #100d14) drop-shadow(0 2px #100d14)}
+.arena.healed-self .health-hearts{filter:brightness(1.5)}
+.health-leaderboard{position:absolute;top:calc(var(--hud-below,62px) + 29px);left:12px;width:min(160px,calc(100% - 158px));max-height:19dvh;overflow:auto;z-index:3;scrollbar-width:thin;pointer-events:auto;font-size:.64rem;text-shadow:0 1px 3px #000}
+.health-standing{display:grid;grid-template-columns:minmax(0,1fr) auto;column-gap:6px;row-gap:3px;padding:3px 0 5px}
+.health-standing-name{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.health-standing b{font-variant-numeric:tabular-nums;font-weight:500}
+.health-standing-track{grid-column:1/-1;height:3px;background:#ffffff26;overflow:hidden;border-radius:2px}
+.health-standing-track i{display:block;height:100%;transition:width .2s,background .2s}.health-standing.is-out{opacity:.45}
+.status-strip{top:var(--hud-below,62px);right:146px;display:flex;flex-direction:column;align-items:flex-start;gap:2px;line-height:12px}
+.status-strip #vision-status{max-width:100%;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;width:100%}
+.hud-top>div{min-width:0;flex:1}.hud-top>.small-button{flex-shrink:0}
+#phase{overflow-wrap:anywhere}
+.voice-live{font-size:.65rem;line-height:1.25;color:#ecd7c5;min-width:0;flex:1;overflow:hidden;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;text-shadow:0 1px 4px #000}
+.actions{align-items:center;margin-top:4px;gap:8px;min-height:16px}.actions #start-round{min-height:28px;padding:5px 8px;font-size:.68rem;flex-shrink:0}
+.mana-row>b{flex:0 0 58px;width:58px;min-width:0;text-align:right}
+.band-target-label meter{appearance:none;-webkit-appearance:none;background:#252b35;border:0;border-radius:2px;--health-color:#8aec3e}
+.band-target-label meter::-webkit-meter-bar{background:#252b35;border:0;border-radius:2px}
+.band-target-label meter::-webkit-meter-optimum-value,.band-target-label meter::-webkit-meter-suboptimum-value,.band-target-label meter::-webkit-meter-even-less-good-value{background:var(--health-color)}
+.band-target-label meter::-moz-meter-bar{background:var(--health-color)}
+@media(max-height:700px){.health-leaderboard{max-height:17dvh}.pixel-heart{height:16px;width:18px;flex-basis:18px}.health-hearts{min-height:16px;margin-bottom:5px}}

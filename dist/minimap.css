@@ -1,5 +1,5 @@
 /* Corner view: a small rounded-square map in the top-right of the arena. */
-.minimap{position:absolute;top:138px;right:12px;z-index:4;display:flex;flex-direction:column;align-items:flex-end;gap:5px;width:122px;font-size:.65rem;color:#c8cbd3;text-shadow:0 1px 3px #000}
+.minimap{position:absolute;top:var(--hud-below,62px);right:12px;z-index:4;display:flex;flex-direction:column;align-items:flex-end;gap:5px;width:122px;font-size:.65rem;color:#c8cbd3;text-shadow:0 1px 3px #000}
 .minimap[hidden]{display:none}
 .minimap-frame{position:relative;display:block;width:100%;aspect-ratio:1;border-radius:22px;border:1.5px solid #8fb4ff4d;box-shadow:0 8px 28px #000a;background:#0d131cd1;overflow:hidden;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
 .minimap-frame:focus-visible{outline:2px solid #ff9958;outline-offset:2px}
