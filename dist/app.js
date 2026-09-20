@@ -11,6 +11,7 @@ import {createHeadbandMotion} from './headband-motion.js?v=smooth1';
 import {createFlight} from './projectile-flight.js?v=face1';
 import {createPersonTracker} from './detection.js?v=smooth1';
 import {setupShirtCamera} from './shirt-camera.js?v=face1';
+import {createMinimap} from './minimap.js?v=map1';
 const $=id=>document.getElementById(id);
 const targetOverlay=createTargetOverlay($('arena'),$('boxes'));
 const audio=createSpellAudio();document.addEventListener('pointerdown',()=>{void audio.unlock();},{passive:true});
@@ -26,6 +27,7 @@ const now=()=>practice?Date.now():serverClock.now(),me=()=>room?.players.find(p=
 $('name').value=safeRead('fieldspell-name');$('server-url').value=safeRead('fieldspell-server');
 const notify=text=>{$('toast').textContent=text;clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('toast').textContent='',4000);};
 function send(message){if(socket?.readyState===WebSocket.OPEN)socket.send(JSON.stringify(message));}
+const minimap=createMinimap({container:$('arena'),send,notify});$('leave').addEventListener('click',()=>minimap.stop());window.addEventListener('pagehide',()=>minimap.stop());
 const identityTrack=createHeadbandMotion(),flights=new Map(),completedShots=new Set();
 const incoming=createIncomingFireballs({container:$('arena'),renderer:()=>fireScene,getAttacker:id=>{const p=matchedPerson();return p?.id===id&&p.confirmed&&p.fresh?{x:p.x,y:p.y}:null;},now});
 const tracker=createPersonTracker($('camera'),(people,width,height,at)=>{detection={people,width,height,at};identityTrack.update(people,at);},status=>{trackingStatus=status;},()=>({opponent:opponent()?.shirt,own:me()?.shirt,track:identityTrack.get()}));
@@ -76,6 +78,7 @@ function connect(){
  socket.onmessage=e=>{let m;try{m=JSON.parse(e.data);}catch{return;}
   if(m.type==='welcome'){clearTimeout(timer);joined=true;myId=m.id;sessionStorage.setItem('fieldspell-token',m.token);showArena();$('join').disabled=false;$('connection').textContent='Connected';}
   if(m.type==='state'){if(room&&room.endsAt!==m.room.endsAt)clearFlights();room=m.room;serverClock.bootstrap(room.serverTime);incoming.sync((room.shots||[]).filter(s=>s.targetId===myId));for(const shot of room.shots||[])if(shot.actorId===myId&&room.phase==='playing'&&now()<(shot.expiresAt??Infinity))effect(shot.spell||'fireball',{shot});renderState();}
+  if(m.type==='state')minimap.update(m.room,myId);
   if(m.type==='spell'){if(m.actorId===myId){castPending=false;effect(m.spell,{shot:m});}else if(m.targetId===myId&&m.shotId){incoming.launch(m);audio.play(m.spell);}else if(m.spell==='shield')notify('Opponent shield active · lightning pierces it');}
   if(m.type==='impact')handleImpact(m);
   if(m.type==='round-start')notify('Round started. Keep your opponent in view.');

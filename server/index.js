@@ -7,6 +7,7 @@ import {WebSocketServer,WebSocket} from 'ws';
 import {castSpell,launchProjectile,impactProjectile,expireProjectiles,replenishMana,MANA,SPELLS} from '../dist/rules.js';
 import {validProfile} from '../dist/shirt.js';
 import {bandColor} from '../dist/headband.js';
+import {validLocation} from '../dist/geo.js';
 
 const root=fileURLToPath(new URL('../dist/',import.meta.url));
 const mime={'.html':'text/html; charset=utf-8','.css':'text/css','.js':'text/javascript','.svg':'image/svg+xml','.wasm':'application/wasm'};
@@ -77,9 +78,14 @@ export function createGameServer(){
      if(room.phase==='playing')return send(ws,{type:'error',message:'Scan headbands before the round starts.'});
      if(!validProfile(m.profile)||!bandColor(m.profile.rgb))return send(ws,{type:'error',message:'Invalid headband sample. Scan red or blue fabric.'});
      player.shirt={bins:[...m.profile.bins],rgb:[...m.profile.rgb]};broadcast(room);
+    }else if(m.type==='location'){
+     // Opt-in minimap position; null stops sharing. The 500ms tick broadcasts it.
+     if(m.location===null)player.location=null;
+     else if(validLocation(m.location)&&Date.now()-(player.location?.at||0)>=500)player.location={latitude:m.location.latitude,longitude:m.location.longitude,accuracy:Math.round(m.location.accuracy),at:Date.now()};
     }else if(m.type==='leave'){room.players=room.players.filter(p=>p.id!==player.id);clients.delete(ws);if(room.hostId===player.id)room.hostId=room.players.find(p=>p.connected)?.id;finish(room);broadcast(room);ws.close(1000);}
    }catch{send(ws,{type:'error',message:'Invalid request.'});}
   });
+  ws.on('close',()=>{const current=clients.get(ws);if(current)current.player.location=null;}); // never keep a disconnected player's position
   ws.on('close',()=>{clearTimeout(timeout);const current=clients.get(ws);if(!current)return;const{room,player}=current;player.connected=false;player.disconnectedAt=Date.now();clients.delete(ws);if(room.hostId===player.id)room.hostId=room.players.find(p=>p.connected)?.id||player.id;broadcast(room);});
  });
  const tick=setInterval(()=>{for(const [code,room]of rooms){for(const p of room.players)if(!p.connected&&Date.now()-p.disconnectedAt>60000){p.health=0;p.expired=true;}room.players=room.players.filter(p=>!p.expired);if(!room.players.some(p=>p.id===room.hostId&&p.connected))room.hostId=room.players.find(p=>p.connected)?.id||room.players[0]?.id;if(!room.players.length){rooms.delete(code);continue;}finish(room);for(const event of expireProjectiles(room))broadcast(room,event);broadcast(room);}},500);tick.unref();

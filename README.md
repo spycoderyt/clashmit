@@ -147,7 +147,7 @@ See [Railway’s GitHub autodeploy instructions](https://docs.railway.com/deploy
 
 The lobby now accepts up to 12 connections, with a regression test for the limit. This is capacity plumbing only: camera targeting still selects one opponent, and red/blue bands cannot distinguish multiple individual players wearing the same color. Keep gameplay tests to two players until team health or unique player colors and multi-target tracking are implemented. The 12-player UI labels do not indicate complete multiplayer support.
 
-One shared arena, exactly two players, no room codes. The first connected player controls three-minute rounds. Everyone enters their own name and scans a red or blue headband using the selfie camera. No GPS, compass, badges, or manual identity pairing.
+One shared arena, exactly two players, no room codes. The first connected player controls three-minute rounds. Everyone enters their own name and scans a red or blue headband using the selfie camera. No badges or manual identity pairing. GPS and compass are used only by the optional minimap, never for identity or aiming.
 
 ## Run and play
 
@@ -166,6 +166,14 @@ Fireball: 25 damage / 1.4-second flight / 1.8-second cooldown / 3 mana. Lightnin
 
 Open `/?test=headband` or tap **Test my headband · 1 person**. Scan your headband, then frame your headband in the front camera. This uses the actual color and motion tracking pipeline; the sample represents the test target. No second player or multiplayer connection is needed. The name, headband confirmation, homing fireball, and target health are visible. **Reset target** restores 100 HP. This test does not establish how well two different headband colors separate; use the two-player arena for that.
 
+## Minimap (opt-in location sharing)
+
+The multiplayer arena shows a small round map in the top-right corner. Tap it and allow **Location** (and **Motion & Orientation** on iPhone) to share your position and see every other player who has done the same. A real street map (OpenStreetMap) is drawn under the radar, centred on you and scaled so the outer ring is the stated radius. You are at the centre; other players are dots in their scanned headband color with a faint circle for GPS uncertainty. With a compass the radar is heading-up (the arrow is the way your camera faces and the orange **N** moves around the rim); without one it says “north up”. Tap the map again to enlarge it with names, distances, **− / Auto zoom / +** buttons and a **Stop sharing** button. The range adjusts automatically unless you zoom by hand, and players beyond it pin to the rim as smaller dots. If the map library or tiles cannot load (for example on a blocked network), the plain radar keeps working.
+
+Location is never required to play. A player’s position is sent about once a second only after they tap the radar, is held in server memory only, and is cleared when they tap Stop sharing, leave, or disconnect. Dots fade after 10 seconds without an update and disappear after 30. Anyone in the arena can see the positions of players who opted in, so share the game URL only with people you trust. Solo practice and the one-person headband test never show the map. Map images come from `tile.openstreetmap.org`, so that service sees the phone’s IP address and which map squares it requested; no names or game data are sent to it. No API key is needed. OpenStreetMap’s tile policy allows light use with the attribution shown under the enlarged map; change `TILES` in `dist/minimap-tiles.js` to a keyed provider before a large event.
+
+Expect roughly ±3–10 m outdoors and ±10–50 m indoors, so players standing a few metres apart will overlap; the map is for finding each other across a field, not for aiming. Browsers stop location updates when the page is in the background. The map lives in `dist/minimap.js`, `dist/minimap-tiles.js`, `dist/minimap.css` and `dist/geo.js`; `dist/app.js` only creates it and passes it server state, and the server stores positions from `location` messages.
+
 ## Recognition and privacy
 
 Identity comes from a scanned red or blue headband. The camera is first searched for connected pixels close to the registered opponent color, with hue/saturation tolerance and a margin over the player's own color. Tiny speckles, very large regions, and shapes unlike a band are filtered. If there is no candidate color region, no person inference is run for that frame.
@@ -176,7 +184,7 @@ Two observations establish a lock. Position and velocity smoothing, an 80ms pred
 
 Removing the face/body gate means matching-color paper or another similar object can be acquired as a band. Keep spare colored material out of the play area. This is a two-color game target, not authenticated person recognition. The earlier photo checks documented the face-gated version; they do not establish false-positive performance for this new color-only path.
 
-The scan uses a narrow guide and accepts red or blue fabric. One player must use red and the other blue. The numerical color profile still uses the legacy `shirt` wire field for compatibility, but no shirt or torso color is used for identification. The small outline over the band shows the actual detected color region. All image processing remains on the device; only names, numerical color samples, and game events are shared.
+The scan uses a narrow guide and accepts red or blue fabric. One player must use red and the other blue. The numerical color profile still uses the legacy `shirt` wire field for compatibility, but no shirt or torso color is used for identification. The small outline over the band shows the actual detected color region. All image processing remains on the device; only names, numerical color samples, game events, and the position of players who opt in to the minimap are shared.
 
 Voice uses the browser's speech recognition service, which may process audio remotely. Complete interim spell words trigger casts; final transcripts do not duplicate them. Browser support and Siri settings can affect availability.
 
@@ -192,6 +200,6 @@ Optional `ALLOWED_ORIGINS` is a comma-separated browser origin allowlist; same o
 
 ## Verification
 
-`npm test` covers color matching/ambiguity, connected regions, headband/person association helpers, fast headband motion/scale changes and ambiguity, screen crop coordinates, spell rules, tracking-loss misses, delayed impacts, shields at impact, replay/early-impact rejection, two-client WebSocket state, required headband registration, two-player capacity, reconnection, host control, and streaming voice behavior.
+`npm test` covers color matching/ambiguity, connected regions, headband/person association helpers, fast headband motion/scale changes and ambiguity, screen crop coordinates, spell rules, tracking-loss misses, delayed impacts, shields at impact, replay/early-impact rejection, two-client WebSocket state, required headband registration, two-player capacity, reconnection, host control, streaming voice behavior, minimap distance/bearing/radar math, and opt-in location sharing with clearing on stop and disconnect.
 
-Third-party assets: Three.js (MIT), MediaPipe Tasks Vision (Apache-2.0), Google's EfficientDet Lite0 and BlazeFace short-range models. See `dist/vendor/THREE-LICENSE.txt` and `dist/vendor/mediapipe/NOTICE.txt`.
+Third-party assets: Three.js (MIT), Leaflet 1.9.4 (BSD-2-Clause, `dist/vendor/leaflet/LICENSE`), map data © OpenStreetMap contributors (ODbL), MediaPipe Tasks Vision (Apache-2.0), Google's EfficientDet Lite0 and BlazeFace short-range models. See `dist/vendor/THREE-LICENSE.txt` and `dist/vendor/mediapipe/NOTICE.txt`.
