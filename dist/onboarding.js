@@ -1,15 +1,12 @@
-// Five one-line coach marks for a first-time player, shown once while they wait for the host. Each one dims
+// Three one-line coach marks for a first-time player, shown once while they wait for the host. Each one dims
 // the arena except the controls it is about, which stay tappable, so people learn where the buttons are
 // instead of reading a wall of text. Builds its own elements and styles. Skip ends it, How to play brings it back.
 // gate: the step cannot be stepped past until that named check passes, so nobody skims past enabling voice.
 export const STEPS=Object.freeze([
  {key:'voice',anchor:'voice',gate:'voice',text:'Tap Enable voice, then say a spell to cast it.'},
- {key:'health',anchor:'health',text:'Protect your health.'},
- {key:'mana',anchor:'mana',text:'Use mana for spells.'},
  {key:'attack',anchor:'attack',text:'Your two primary spells.'},
  {key:'defence',anchor:'defence',text:'Shield blocks primary attacks, Heal recovers health.'},
-]);
-// A brand new player only: after their face is scanned, before any round is running, and never over the face scan.
+]);// A brand new player only: after their face is scanned, before any round is running, and never over the face scan.
 export function shouldOpen({seen,practice,faceReady,phase,scanOpen,open}){
  return !seen&&!practice&&!!faceReady&&!open&&!scanOpen&&(phase==='lobby'||phase==='finished');
 }
@@ -47,7 +44,8 @@ const CSS='.coach{position:absolute;inset:0;z-index:6;font-size:1rem}.coach[hidd
  +'.coach-next{margin-left:auto;background:var(--orange,#ff9958);color:#24160e;border-radius:8px;font-weight:700;padding:11px 22px;font-size:.9rem;min-height:40px}'
  +'@keyframes coach-glow{50%{box-shadow:0 0 0 3px var(--orange,#ff9958),0 0 34px #ff9958b0}}'
  +'@media(prefers-reduced-motion:reduce){.coach-hole{animation:none}}';
-// anchors: the real HUD elements each step lights up, one or several, by the step's `anchor` key.
+// anchors: the real HUD elements each step lights up, one or several, by the step's `anchor` key. A function
+// is called each time the step is placed, for controls that are built or replaced while the game runs.
 // gates: named checks a step waits on, by the step's `gate` key.
 export function createOnboarding({container,anchors={},gates={},onFinish=()=>{}}){
  const style=document.createElement('style');style.textContent=CSS;document.head.append(style);
@@ -66,7 +64,7 @@ export function createOnboarding({container,anchors={},gates={},onFinish=()=>{}}
  function place(){
   if(!open)return;
   const step=STEPS[index],box=container.getBoundingClientRect();
-  const targets=[anchors[step.anchor]].flat().filter(Boolean).map(el=>el.getBoundingClientRect());
+  const named=anchors[step.anchor],targets=[typeof named==='function'?named():named].flat().filter(Boolean).map(el=>el.getBoundingClientRect());
   // 8px of breathing room, so a control's glow does not sit on its own edge.
   const spread=union(targets),lit=spread?{x:spread.x-box.left-8,y:spread.y-box.top-8,width:spread.width+16,height:spread.height+16}:null;
   const plan=frame(lit,{width:box.width,height:box.height},{height:card.getBoundingClientRect().height||150});

@@ -7,17 +7,17 @@ export function createTargetOverlay(arena,container){
  const text=(element,value)=>{if(element.textContent!==value)element.textContent=value;};
  function size(){if(!width||!height||!observer){const rect=arena.getBoundingClientRect();width=rect.width;height=rect.height;}return{width,height};}
  function hide(){frame.hidden=true;label.hidden=true;}
- function update(target,player,{shielded=false,simulated=false}={}){
+ function update(target,player,{shielded=false,simulated=false,poisoned=false,healed=false,accent='',piercer='Lightning'}={}){
   if(!target||!player||player.health<=0){hide();return;}
   const viewport=size(),box=target.box,x=box.x*viewport.width,y=box.y*viewport.height,w=box.width*viewport.width,h=box.height*viewport.height;
   frame.hidden=false;label.hidden=false;
-  frame.classList.toggle('matched',!!target.confirmed);frame.classList.toggle('shielded',shielded);frame.classList.toggle('tracking-gap',!target.fresh);
+  frame.classList.toggle('matched',!!target.confirmed);frame.classList.toggle('shielded',shielded);frame.classList.toggle('poisoned',poisoned);frame.classList.toggle('healed',healed);frame.classList.toggle('tracking-gap',!target.fresh);if(frame.dataset.accent!==accent){frame.dataset.accent=accent;frame.style.setProperty('--persona-accent',accent||'#a8d9ff');}
   frame.style.transform=`translate3d(${x.toFixed(2)}px,${y.toFixed(2)}px,0)`;frame.style.width=w.toFixed(2)+'px';frame.style.height=h.toFixed(2)+'px';
   label.classList.toggle('shielded',shielded);label.classList.toggle('tracking-gap',!target.fresh);
   const center=Math.max(76,Math.min(viewport.width-76,x+w/2)),top=Math.max(116,y-7);
   label.style.transform=`translate3d(${center.toFixed(2)}px,${top.toFixed(2)}px,0) translate(-50%,-100%)`;
-  text(title,player.name||'Target');if(meter.value!==player.health)meter.value=player.health;meter.hidden=!!target.pending;
-  text(info,shielded?'◇ Shield · lightning pierces':simulated?'Simulated':target.pending?'Hold steady':target.source==='body'?'Following · face hidden':target.confirmed?(target.fresh?'Face locked':'Tracking…'):'Identifying…');
+  text(title,(player.score?`#${player.score.rank} `:'')+(player.name||'Target'));if(meter.value!==player.health)meter.value=player.health;meter.hidden=!!target.pending;
+  text(info,shielded?`◇ Shield · ${piercer} pierces`:poisoned?'☣ Poisoned':simulated?'Simulated':target.pending?'Hold steady':target.source==='body'?'Following · face hidden':target.confirmed?(target.fresh?'Face locked':'Tracking…'):'Identifying…');
  }
  hide();return{update,hide,size,dispose(){observer?.disconnect();frame.remove();label.remove();}};
 }

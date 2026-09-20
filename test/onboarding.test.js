@@ -2,9 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {STEPS,shouldOpen,shouldClose,frame,union} from '../dist/onboarding.js';
+import {PERSONAS,SPELLS} from '../dist/rules.js';
 const fresh={seen:false,practice:false,faceReady:true,phase:'lobby',scanOpen:false,open:false};
-test('five one-line coach marks run voice, health, mana, attack, defence in that order',()=>{
- assert.deepEqual(STEPS.map(s=>s.anchor),['voice','health','mana','attack','defence']);
+test('three one-line coach marks run voice, then the attacking pair, then the defensive pair',()=>{
+ assert.deepEqual(STEPS.map(s=>s.anchor),['voice','attack','defence']);
  for(const step of STEPS){
   assert.ok(step.text.length>10&&step.text.length<70,`${step.key} stays a one-liner`);
   assert.equal(step.text.split(/(?<=[.!?])\s+/).filter(Boolean).length,1,`${step.key} is a single sentence`);
@@ -12,9 +13,9 @@ test('five one-line coach marks run voice, health, mana, attack, defence in that
  }
  // Nobody may skim past enabling voice, and no other step blocks on anything.
  assert.equal(STEPS[0].gate,'voice');
- assert.deepEqual(STEPS.slice(1).map(s=>s.gate),[undefined,undefined,undefined,undefined]);
+ assert.deepEqual(STEPS.slice(1).map(s=>s.gate),[undefined,undefined]);
  assert.match(STEPS[0].text,/Enable voice/);
- assert.match(STEPS[4].text,/Shield/);assert.match(STEPS[4].text,/Heal/);
+ assert.match(STEPS[2].text,/Shield/);assert.match(STEPS[2].text,/Heal/);
 });
 test('the coach marks open once for a scanned newcomer and never over a round or the face scan',()=>{
  assert.equal(shouldOpen(fresh),true);
@@ -55,15 +56,21 @@ test('the card drops below a control with no room above it, and nothing visible 
   assert.equal(plan.top,347,'centred when there is nothing to point at');
  }
 });
-test('every coach mark points at controls that are really in the HUD',()=>{
+test('the attack and defence steps light the right cards for every persona',()=>{
  const app=readFileSync(new URL('../dist/app.js',import.meta.url),'utf8'),html=readFileSync(new URL('../dist/index.html',import.meta.url),'utf8');
- const map=app.match(/anchors:\{(.*?)\},gates:/)[1];
- const anchors=[...map.matchAll(/(\w+):(\[[^\]]*\]|\$\('[\w-]+'\))/g)].map(m=>[m[1],[...m[2].matchAll(/'([\w-]+)'/g)].map(i=>i[1])]);
- assert.deepEqual(anchors.map(([key])=>key),STEPS.map(s=>s.anchor));
- for(const [key,ids] of anchors)for(const id of ids)assert.ok(html.includes(`id="${id}"`),`#${id} for the ${key} step is in the HUD`);
- assert.deepEqual(anchors.find(([k])=>k==='attack')[1],['fireball','lightning'],'the left two spell cards');
- assert.deepEqual(anchors.find(([k])=>k==='defence')[1],['shield','heal'],'the right two spell cards');
- assert.ok(html.includes('id="how-to-play"'),'a skipped player can bring the coach marks back');
+ const anchors=app.match(/anchors:\{(.*?)\},gates:/)[1];
+ for(const id of ['voice','voice-status'])assert.ok(anchors.includes(`$('${id}')`)&&html.includes(`id="${id}"`),`#${id} anchors the voice step`);
+ // The spell bar is emptied and rebuilt per persona, so these two steps must take slots, never spell names.
+ assert.ok(html.includes('id="spells" class="spells"></div>'),'the spell bar is built at runtime');
+ assert.match(anchors,/attack:\(\)=>spellCards\(\)\.slice\(0,2\)/);
+ assert.match(anchors,/defence:\(\)=>spellCards\(\)\.slice\(-2\)/);
+ // Slot order is what makes "first pair attacks, last pair defends" true whoever the player picked.
+ for(const [name,deck] of Object.entries(PERSONAS)){
+  assert.equal(deck.length,4,`${name} has four cards`);
+  assert.deepEqual(deck.slice(-2),['shield','heal'],`${name} defends with the last two cards`);
+  assert.ok(!SPELLS[deck[0]].bypassShield,`${name}'s first card is the blockable attack`);
+  assert.ok(SPELLS[deck[1]].bypassShield,`${name}'s second card is the piercing attack`);
+ }
  // The things this HUD pass removed must stay gone.
- for(const gone of ['tracking-retry','YOUR HEALTH'])assert.ok(!html.includes(gone),`${gone} is gone from the HUD`);
+ for(const gone of ['tracking-retry','YOUR HEALTH','how-to-play'])assert.ok(!html.includes(gone),`${gone} is gone from the HUD`);
 });
