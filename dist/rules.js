@@ -1,5 +1,6 @@
 // Prototype balance: ten whole spendable units; the fractional bar fills one unit every 1.5 seconds.
 export const MANA = Object.freeze({max:10,regenPerSecond:2/3});
+export const HEALTH_REGEN=Object.freeze({amount:5,intervalMs:4000,max:100});
 export const FLIGHT_MS=1400;
 export const SPELLS = Object.freeze({
  fireball:{cooldown:1800,damage:25,manaCost:3,flightMs:FLIGHT_MS,splash:true},
@@ -45,12 +46,28 @@ const lingering=(rule,now,by)=>({by,perSecond:rule.perSecond,startedAt:now,until
 export function lingeringKiller(before){
  const worst=[before?.swarm,before?.poison].filter(Boolean).sort((a,b)=>b.perSecond-a.perSecond)[0];return worst?.by||null;
 }
-export function settle(player,now=Date.now(),dealt){replenishMana(player,now);bleed(player,'poison',now,dealt);bleed(player,'swarm',now,dealt);return player;}
+export function settle(player,now=Date.now(),dealt){
+ replenishMana(player,now);
+ const {amount,intervalMs,max}=HEALTH_REGEN;
+ if(Number.isFinite(player.healthRegenAt)){
+  // Resolve ongoing damage before each heal boundary so late ticks cannot revive a dead player
+  // or change the result compared with frequent ticks. Full health never banks unused healing.
+  let next=player.healthRegenAt+intervalMs;
+  while(next<=now&&player.health>0&&(player.poison||player.swarm)){
+   bleed(player,'poison',next,dealt);bleed(player,'swarm',next,dealt);
+   if(player.health>0&&player.connected!==false)player.health=Math.min(max,player.health+amount);
+   player.healthRegenAt=next;next+=intervalMs;
+  }
+  const ticks=Math.max(0,Math.floor((now-player.healthRegenAt)/intervalMs));
+  if(ticks){if(player.health>0&&player.connected!==false)player.health=Math.min(max,player.health+ticks*amount);player.healthRegenAt+=ticks*intervalMs;}
+ }
+ bleed(player,'poison',now,dealt);bleed(player,'swarm',now,dealt);return player;
+}
 // Returns the lingering damage just dealt as [{actorId,targetId,amount,lethal}]. A server that scores should settle
 // with the same `now` it then passes to a cast or an impact, so nothing is dealt unseen inside those calls.
 export function settleRoom(room,now=Date.now()){
  const dealt=[];
- for(const p of room.players){if(room.phase==='playing')settle(p,now,dealt);else{replenishMana(p,now);p.poison=null;p.swarm=null;}}
+ for(const p of room.players){if(room.phase==='playing'){const at=room.endsAt>0?Math.min(now,room.endsAt):now;p.healthRegenAt??=at;settle(p,at,dealt);}else{replenishMana(p,now);p.healthRegenAt=now;p.poison=null;p.swarm=null;}}
  return dealt;
 }
 function prepareCast(room,casterId,spell,targetId,now){

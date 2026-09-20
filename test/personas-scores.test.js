@@ -21,9 +21,9 @@ test('settling reports lingering damage with who cast it, and flags the point th
 test('a witch is paid for skeleton and poison damage, not only for what lands on impact',()=>{
  const room=arena('witch','mage'),[a,b]=room.players;
  const army=land(room,'a','skeletonArmy','b',1000);assert.equal(a.roundPoints,0,'the march itself deals nothing');
- tick(room,army.resolvedAt+6000);assert.equal(b.health,70);assert.equal(a.roundPoints,30*POINTS.damage,'all 30 skeleton damage is credited');
+ tick(room,army.resolvedAt+6000);assert.equal(b.health,75,'30 damage minus one 5 HP regeneration tick');assert.equal(a.roundPoints,30*POINTS.damage,'all 30 skeleton damage is credited');
  const poison=land(room,'a','poison','b',army.resolvedAt+7000);tick(room,poison.resolvedAt+5000);
- assert.equal(b.health,50);assert.equal(a.roundPoints,50*POINTS.damage,'5 on impact and 15 lingering');
+ assert.equal(b.health,65,'50 total damage offset by three regeneration ticks');assert.equal(a.roundPoints,50*POINTS.damage,'5 on impact and 15 lingering');
 });
 test('a kill by lingering damage earns the knockout, exactly once',()=>{
  const room=arena('witch','mage'),[a,b]=room.players;b.health=8;const hit=land(room,'a','poison','b',1000);

@@ -219,13 +219,15 @@ Taking damage also flashes a red vignette and briefly shakes the camera feed on 
 
 **HUD preview.** Open `/?test=hud` for a sensor-free in-game preview with simulated players, automatic health changes, and example map positions. It does not join the server or request camera, microphone, or location access.
 
+**Passive healing.** During live rounds, living connected players regenerate 5 HP (half a heart) every 4 seconds, up to 100 HP. It costs no mana, does not revive knocked-out players, and stops outside the round. Damage over time is resolved before each healing tick.
+
 **Health HUD.** Ten pixel hearts sit immediately above mana (10 HP each, with partial fills). A compact top-left list automatically sorts everyone by current health; equal health shares a rank. Its bars and the locked-target health meter shift from green through yellow to red as health falls. The health ranking is separate from the persistent points leaderboard.
 
 ## Minimap
 
 Location starts automatically after the Join permission prompts, whether permission or the server connection finishes first. Players who allow location share their position about once a second and see everyone else who does. Every player is a round face marker: the photo taken during their face scan inside a ring of their own color, or their initial until a photo arrives, with a faint circle for GPS uncertainty. A knocked-out player's marker turns grey with a red cross.
 
-**Corner map.** A small rounded square directly below the header in the top-right of the arena, centred on you and showing 50 m to each side. It turns with your compass heading (the orange **N** moves around it; without a compass it says “north up”), and players farther than 50 m pin to its edge as smaller markers. Your own marker sits in the middle in a white ring, under the others so it never hides a nearby player.
+**Corner map.** A small rounded square in the top-right corner of the arena, alongside the header, centred on you and showing 50 m to each side. It turns with your compass heading (the orange **N** moves around it; without a compass it says “north up”), and players farther than 50 m pin to its edge as smaller markers. Your own marker sits in the middle in a white ring, under the others so it never hides a nearby player.
 
 **Full-screen map.** Tap the corner map. It fills the screen, north up, and is dragged and pinched like any other map; there are no zoom buttons. It opens at the same 50 m scale and follows you until you move it, after which a **◎** button brings it back to you. Names appear under the markers, your marker's pointer shows which way your camera faces, **✕** closes it and **Stop sharing** ends location sharing.
 

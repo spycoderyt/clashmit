@@ -11,7 +11,7 @@ const el=(tag,attrs={},parent)=>{const node=document.createElementNS(SVG,tag);fo
 // A stable, well separated color per player, derived from their id.
 const colorFor=id=>{let hash=0;for(const ch of String(id))hash=(hash*31+ch.charCodeAt(0))>>>0;return `hsl(${hash%360} 85% 62%)`;};
 export function createMinimap({container,send,notify=()=>{},geolocation=globalThis.navigator?.geolocation}){
- if(!document.querySelector('link[data-minimap]')){const link=document.createElement('link');link.rel='stylesheet';link.href='minimap.css?v=automap2';link.dataset.minimap='';document.head.append(link);}
+ if(!document.querySelector('link[data-minimap]')){const link=document.createElement('link');link.rel='stylesheet';link.href='minimap.css?v=topright3';link.dataset.minimap='';document.head.append(link);}
  const root=document.createElement('div');root.className='minimap';root.hidden=true;
  root.innerHTML='<div class="minimap-frame" role="button" aria-label="Open the full-screen map" tabindex="0"><span class="minimap-cta"></span></div><span class="minimap-range"></span><button type="button" class="minimap-close" aria-label="Close map">✕</button><button type="button" class="minimap-recenter" aria-label="Centre the map on me">◎</button><div class="minimap-foot"><button type="button" class="minimap-stop">Stop sharing</button><span class="minimap-gps"></span><span class="minimap-credit"></span></div>';
  const frame=root.querySelector('.minimap-frame'),cta=root.querySelector('.minimap-cta'),rangeLabel=root.querySelector('.minimap-range'),gpsLabel=root.querySelector('.minimap-gps'),credit=root.querySelector('.minimap-credit'),recenter=root.querySelector('.minimap-recenter');

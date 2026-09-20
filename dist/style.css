@@ -190,3 +190,6 @@
 .band-target-label meter::-webkit-meter-optimum-value,.band-target-label meter::-webkit-meter-suboptimum-value,.band-target-label meter::-webkit-meter-even-less-good-value{background:var(--health-color)}
 .band-target-label meter::-moz-meter-bar{background:var(--health-color)}
 @media(max-height:700px){.health-leaderboard{max-height:17dvh}.pixel-heart{height:16px;width:18px;flex-basis:18px}.health-hearts{min-height:16px;margin-bottom:5px}}
+
+/* Leave the upper-right corner free for the map. */
+.arena:has(.minimap:not([hidden])) .hud-top{right:146px}

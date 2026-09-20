@@ -49,7 +49,7 @@ export function createGameServer({maxPlayers=null,maxBufferedBytes=256*1024,coun
   if(room.phase!=='countdown')return;clearTimeout(room.startTimer);room.startTimer=null;const now=Date.now();
   if(room.players.filter(p=>p.connected).length<2){room.phase='lobby';room.startsAt=0;broadcast(room,{type:'error',message:'Not enough players to start the round.'});return;}
   room.players=room.players.filter(p=>p.connected);
-  for(const p of room.players){p.mana=MANA.max;p.manaUpdatedAt=now;}
+  for(const p of room.players){p.mana=MANA.max;p.manaUpdatedAt=now;p.healthRegenAt=now;}
   startScoring(room);room.phase='playing';room.startsAt=now;room.endsAt=now+180000;broadcast(room,{type:'round-start'});
  }
  // The moment each player is knocked out is what the end-of-round leaderboard ranks by.

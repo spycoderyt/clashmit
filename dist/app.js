@@ -3,7 +3,7 @@ import {setupLeaderboard} from './leaderboard.js?v=scores2';
 import {setupLobbyVideo} from './lobby-video.js?v=2';
 import {createGameConnection} from './connection.js?v=hosting1';
 import {createTargetOverlay} from './target-overlay.js?v=health2';
-import {piercerOf,SPELLS,MANA,manaAt,castSpell,launchProjectile,impactProjectile,FLIGHT_MS,PERSONAS,DEFAULT_PERSONA,personaOf,settleRoom,lingeringKiller} from './rules.js?v=persona1';
+import {piercerOf,SPELLS,MANA,manaAt,castSpell,launchProjectile,impactProjectile,FLIGHT_MS,PERSONAS,DEFAULT_PERSONA,personaOf,settleRoom,lingeringKiller} from './rules.js?v=regen1';
 import {PERSONA_INFO,SPELL_INFO,deckWords,labelOf} from './personas.js?v=heel1';
 import {createSkeletonArmy,feetOf} from './skeleton-army.js?v=persona1';
 import {createServerClock} from './server-clock.js?v=combat1';
@@ -16,7 +16,7 @@ import {createFlight} from './projectile-flight.js?v=face1';
 import {createFaceTracker} from './face-tracker.js?v=face13';
 import {setupFaceScan} from './face-scan.js?v=face13';
 import {encodeDescriptor,decodeDescriptor} from './face-id.js?v=face13';
-import {createMinimap} from './minimap.js?v=automap2';
+import {createMinimap} from './minimap.js?v=topright3';
 import {createHaptics} from './haptics.js?v=haptic4';
 import {requestAllPermissions} from './permissions.js?v=perm1';
 import {createRoundOverlay} from './round-overlay.js?v=scores2';
@@ -169,7 +169,7 @@ $('join-form').onsubmit=e=>{
  // Start speech inside the Join gesture so Safari can request speech access here.
  voice.enable();connect();
 };
-function beginPractice(realTracking=false){clearFlights();trackingPractice=realTracking;practice=true;connection.stop();myId='self';const make=(id,name,who=persona)=>({id,name,persona:who,health:100,mana:MANA.max,manaUpdatedAt:Date.now(),shieldUntil:0,cooldowns:{},connected:true});room={phase:'playing',hostId:myId,endsAt:Date.now()+180000,winners:[],players:[make(myId,$('name').value.trim()||'You'),make('dummy','Practice target',practiceFoe())]};showArena();$('connection').textContent=trackingPractice?'Local face test · no server':'Solo · simulated target';renderState();if(trackingPractice){room.players[1].name='You';faceScan.open();}else{startCamera();dummyTimer=setInterval(dummyTurn,3500);}}
+function beginPractice(realTracking=false){clearFlights();trackingPractice=realTracking;practice=true;connection.stop();myId='self';const make=(id,name,who=persona)=>({id,name,persona:who,health:100,mana:MANA.max,manaUpdatedAt:Date.now(),healthRegenAt:Date.now(),shieldUntil:0,cooldowns:{},connected:true});room={phase:'playing',hostId:myId,endsAt:Date.now()+180000,winners:[],players:[make(myId,$('name').value.trim()||'You'),make('dummy','Practice target',practiceFoe())]};showArena();$('connection').textContent=trackingPractice?'Local face test · no server':'Solo · simulated target';renderState();if(trackingPractice){room.players[1].name='You';faceScan.open();}else{startCamera();dummyTimer=setInterval(dummyTurn,3500);}}
 // ?test=solo&vs=witch: a simulated opponent that casts its deck back, so every persona's incoming effects, status chips and clears can be seen on one device.
 function practiceFoe(){const vs=new URLSearchParams(location.search).get('vs');return Object.hasOwn(PERSONAS,vs)?vs:'witch';}
 function dummyTurn(){
@@ -240,7 +240,7 @@ function renderArmy(){
   mobbed:live?room.players.filter(p=>p.id!==myId&&p.health>0&&active(p.swarm,at)).map(p=>({who:p.id,feet:feetFor(p.id)})):[],
   onMe:live&&!trackingPractice&&active(me()?.swarm,at),ground:rect.height?(hud.top-top)/rect.height:.62});
 }
-$('start-round').onclick=()=>{if(practice){clearFlights();if(trackingPractice){opponent().health=100;room.phase='playing';room.endsAt=Date.now()+180000;room.winners=[];room.shots=[];me().cooldowns={};me().mana=MANA.max;me().manaUpdatedAt=Date.now();me().shieldUntil=0;for(const p of room.players){p.poison=null;p.swarm=null;p.stunUntil=0;}renderState();}else beginPractice(false);return;}send({type:'start'});};
+$('start-round').onclick=()=>{if(practice){clearFlights();if(trackingPractice){opponent().health=100;room.phase='playing';room.endsAt=Date.now()+180000;room.winners=[];room.shots=[];me().cooldowns={};me().mana=MANA.max;me().manaUpdatedAt=Date.now();me().healthRegenAt=Date.now();me().shieldUntil=0;for(const p of room.players){p.poison=null;p.swarm=null;p.stunUntil=0;}renderState();}else beginPractice(false);return;}send({type:'start'});};
 const voice=setupVoice({Recognition:window.SpeechRecognition||window.webkitSpeechRecognition,status:$('voice-status'),onSpell:cast,getWords:()=>deckWords(myDeck()),describe:()=>myDeck().map(labelOf).join(', ')});
 function renderCombat(){
  const p=me();if(!p)return;const at=now(),mana=Math.min(MANA.max,Math.max(0,manaAt(p,at))),shieldRemaining=Math.max(0,p.shieldUntil-at);
