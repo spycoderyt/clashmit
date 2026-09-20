@@ -1,7 +1,7 @@
 // Standalone range test for on-device face recognition. Not part of the game loop yet:
 // it exists to measure detection and match rates on real phones before face lock is built.
-import {loadFaceEngine,describeFaces} from './face-engine.js?v=face8';
-import {MATCH,matchFace,createIdentityVoter,addSample,estimateMetres,summarize} from './face-id.js?v=face8';
+import {loadFaceEngine,describeFaces} from './face-engine.js?v=face10';
+import {MATCH,matchFace,createIdentityVoter,addSample,estimateMetres,summarize} from './face-id.js?v=face10';
 const $=id=>document.getElementById(id);
 const video=$('video'),still=$('still'),overlay=$('overlay'),ctx=overlay.getContext('2d');
 const gallery=[],voter=createIdentityVoter();let stream=null,facing='user',source=null,busy=false,running=false,enrolling=null,recording=null,lastFaces=[];

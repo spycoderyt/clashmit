@@ -22,6 +22,28 @@ export function matchFace(descriptor,gallery,{threshold=MATCH.threshold,margin=M
  const [best,second]=ranked,runnerUp=second?.distance??Infinity,tooSmall=facePx<minFacePx;
  return {...best,runnerUp,tooSmall,confident:!tooSmall&&best.distance<=threshold&&runnerUp-best.distance>=margin};
 }
+// Upper-face matching, for players aiming with a phone in front of their nose and mouth. Measured with a
+// phone-sized block drawn over 22 faces: the same person scores about 0.4 (0.55 at worst) on upper descriptors
+// while the covered whole face drifts to about 0.9; different people score about 1.2 to 1.35 on upper descriptors.
+// In the live pipeline a covered face scored 0.74 to 0.86 (the detector's box swells around the phone), so the
+// threshold leaves room above that and asks for a wider lead over every other player instead.
+export const UPPER={threshold:1,margin:.2};
+// face: {descriptor, upper?}. gallery people may carry `upper` samples next to `samples`. The whole face is
+// tried first. The upper face is only believed when the whole face has no clear opinion of its own, so a
+// clearly visible different player is never overruled by a similar pair of eyes.
+export function matchPlayer(face,gallery,{facePx=Infinity}={}){
+ const full=matchFace(face.descriptor,gallery,{facePx});if(full.confident||!face.upper)return{...full,via:'full'};
+ const uppers=gallery.filter(p=>p.upper?.length).map(p=>({id:p.id,name:p.name,samples:p.upper}));if(!uppers.length)return{...full,via:'full'};
+ const upper=matchFace(face.upper,uppers,{threshold:UPPER.threshold,margin:UPPER.margin,facePx});
+ if(upper.confident&&(full.id===upper.id||full.distance>MATCH.threshold))return{...upper,via:'upper',fullDistance:full.distance};
+ return{...full,via:'full'};
+}
+// How far a face is from one particular player, on both signatures. Used to notice that a followed head
+// no longer looks like the player whose name it carries.
+export function distanceToPlayer(face,person){
+ const nearest=(descriptor,samples)=>descriptor&&samples?.length?Math.min(...samples.map(s=>descriptorDistance(descriptor,s))):Infinity;
+ return{full:nearest(face.descriptor,person?.samples),upper:nearest(face.upper,person?.upper)};
+}
 // One frame can be wrong; several in a row rarely are. Feed every frame's match for one tracked
 // face and read back an identity only once `needed` of the last `window` frames confidently
 // agree and none of them confidently named somebody else.
@@ -50,6 +72,9 @@ export function summarize(frames,expectedId=null){
  const found=frames.filter(f=>f.found),named=found.filter(f=>f.id),right=named.filter(f=>expectedId!==null&&f.id===expectedId),rate=list=>frames.length?list.length/frames.length:0;
  return {frames:frames.length,detectRate:rate(found),rightRate:rate(right),wrongRate:rate(named)-rate(right),medianDistance:median(found.map(f=>f.distance).filter(Number.isFinite)),medianFacePx:median(found.map(f=>f.facePx)),medianMs:median(frames.map(f=>f.ms).filter(Number.isFinite))};
 }
+// Rows of the aligned 112x112 face kept for an upper-face descriptor: forehead, brows and eyes (the eyes sit near
+// row 52, the nose tip near row 72). This is what stays visible when a player aims with the phone at their face.
+export const UPPER_FACE_ROWS=62;
 // Where ArcFace expects the eyes, nose and mouth corners inside its 112x112 input.
 export const FACE_TEMPLATE=[[38.2946,51.6963],[73.5318,51.5014],[56.0252,71.7366],[41.5493,92.3655],[70.7299,92.2041]];
 // Least-squares similarity transform (rotate, scale, move) taking the five landmarks onto the template.

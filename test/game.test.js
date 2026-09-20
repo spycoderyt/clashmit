@@ -50,7 +50,7 @@ test('one shared arena, authoritative controller, face registration and delayed 
  a.send({type:'shirt',profile:red});b.send({type:'shirt',profile:blue});await a.next('state',m=>m.room.players.every(p=>p.shirt));assert.ok(similarity((await b.next('state',m=>m.room.players.every(p=>p.shirt))).room.players.find(p=>p.id===bw.id).shirt,blue)>.9);
  a.send({type:'start'});assert.match((await a.next('error')).message,/scan their face/);
  // Each scan reaches every player once as a 'faces' message and never rides along in the state broadcast.
- assert.deepEqual((await b.next('faces')).faces,{});a.send({type:'face',samples:faceOf(1)});const shared=await b.next('faces',m=>m.faces[aw.id]);assert.deepEqual(shared.faces[aw.id],faceOf(1));
+ assert.deepEqual((await b.next('faces')).faces,{});a.send({type:'face',samples:faceOf(1),upper:['x']});assert.match((await a.next('error')).message,/not readable/);a.send({type:'face',samples:faceOf(1),upper:faceOf(11)});const shared=await b.next('faces',m=>m.faces[aw.id]);assert.deepEqual(shared.faces[aw.id],{samples:faceOf(1),upper:faceOf(11)});
  b.send({type:'face',samples:faceOf(2)});const ready=await a.next('state',m=>m.room.players.every(p=>p.faceReady));assert.ok(!JSON.stringify(ready.room).includes(faceOf(1)[0].slice(0,40)));
  const late=await client('Late');await late.next('welcome');assert.deepEqual(Object.keys((await late.next('faces')).faces).sort(),[aw.id,bw.id].sort());late.send({type:'leave'});await a.next('state',m=>m.room.players.length===2);
  a.send({type:'start'});const started=await a.next('state',m=>m.room.phase==='playing');assert.equal(started.room.combat.mana.max,10);assert.ok(started.room.players.every(p=>p.mana===10));assert.deepEqual(started.room.shots,[]);

@@ -7,9 +7,9 @@ import {setupVoice} from './voice.js?v=combat1';
 import {coverRect} from './shirt.js?v=face1';
 import {aimContains} from './target-track.js?v=face1';
 import {createFlight} from './projectile-flight.js?v=face1';
-import {createFaceTracker} from './face-tracker.js?v=face8';
-import {setupFaceScan} from './face-scan.js?v=face8';
-import {encodeDescriptor,decodeDescriptor} from './face-id.js?v=face8';
+import {createFaceTracker} from './face-tracker.js?v=face10';
+import {setupFaceScan} from './face-scan.js?v=face10';
+import {encodeDescriptor,decodeDescriptor} from './face-id.js?v=face10';
 import {createMinimap} from './minimap.js?v=map1';
 import {createHaptics} from './haptics.js?v=haptic4';
 const $=id=>document.getElementById(id);
@@ -26,7 +26,7 @@ const serverClock=createServerClock();
 const now=()=>practice?Date.now():serverClock.now(),me=()=>room?.players.find(p=>p.id===myId),opponent=()=>room?.players.find(p=>p.id===focusId&&p.id!==myId)||room?.players.find(p=>p.id!==myId);
 // Face lock: decoded face signatures by player id, the player the camera is on, and the solo test's own face.
 const faces=new Map();let focusId=null,localFace=null,autoScanOffered=false,mySamples=null,faceResent=false;
-const gallery=()=>trackingPractice?(localFace?[{id:'dummy',name:'You',samples:localFace}]:[]):(room?.players||[]).filter(p=>p.id!==myId&&p.connected&&faces.has(p.id)).map(p=>({id:p.id,name:p.name,samples:faces.get(p.id)}));
+const gallery=()=>trackingPractice?(localFace?[{id:'dummy',name:'You',...localFace}]:[]):(room?.players||[]).filter(p=>p.id!==myId&&p.connected&&faces.has(p.id)).map(p=>({id:p.id,name:p.name,...faces.get(p.id)}));
 $('name').value=safeRead('fieldspell-name');$('server-url').value=safeRead('fieldspell-server');
 const notify=text=>{$('toast').textContent=text;clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('toast').textContent='',4000);};
 function send(message){if(socket?.readyState===WebSocket.OPEN)socket.send(JSON.stringify(message));}
@@ -95,11 +95,12 @@ function connect(){
   if(m.type==='welcome'){clearTimeout(timer);joined=true;myId=m.id;sessionStorage.setItem('fieldspell-token',m.token);showArena();$('join').disabled=false;$('connection').textContent='Connected';}
   if(m.type==='state'){if(room&&room.endsAt!==m.room.endsAt)clearFlights();room=m.room;serverClock.bootstrap(room.serverTime);incoming.sync((room.shots||[]).filter(s=>s.targetId===myId));for(const shot of room.shots||[])if(shot.actorId===myId&&room.phase==='playing'&&now()<(shot.expiresAt??Infinity))effect(shot.spell||'fireball',{shot});renderState();}
   if(m.type==='state')minimap.update(m.room,myId);
-  if(m.type==='faces')for(const [id,samples] of Object.entries(m.faces||{})){const decoded=(samples||[]).map(decodeDescriptor).filter(Boolean);if(decoded.length)faces.set(id,decoded);else faces.delete(id);}
+  // Each player's scan: whole-face samples plus upper-face ones for when a phone hides their nose and mouth.
+  if(m.type==='faces')for(const [id,scan] of Object.entries(m.faces||{})){const decode=list=>(list||[]).map(decodeDescriptor).filter(Boolean),samples=decode(scan?.samples);if(samples.length)faces.set(id,{samples,upper:decode(scan.upper)});else faces.delete(id);}
   // First thing a new player sees after joining: the face scan, without having to find a button. A player who
   // already scanned (the server restarted, or they rejoined) silently sends the same signature again instead.
   if(m.type==='welcome')faceResent=false;
-  if(m.type==='state'&&joined&&me()&&!me().faceReady&&room.phase!=='playing'){if(mySamples){if(!faceResent){faceResent=true;send({type:'face',samples:mySamples});}}else if(!autoScanOffered){autoScanOffered=true;faceScan.open();}}
+  if(m.type==='state'&&joined&&me()&&!me().faceReady&&room.phase!=='playing'){if(mySamples){if(!faceResent){faceResent=true;send({type:'face',...mySamples});}}else if(!autoScanOffered){autoScanOffered=true;faceScan.open();}}
   if(m.type==='spell'){if(m.actorId===myId){castPending=false;effect(m.spell,{shot:m});}else if(m.targetId===myId&&m.shotId){incoming.launch(m);audio.play(m.spell);}else if(m.spell==='shield')notify('Opponent shield active · lightning pierces it');}
   if(m.type==='impact')handleImpact(m);
   if(m.type==='round-start')notify('Round started. Keep your opponent in view.');
@@ -125,7 +126,7 @@ async function startCamera(){
  try{const next=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:trackingPractice?'user':'environment'},width:{ideal:1920},height:{ideal:1080}},audio:false});if($('arena').hidden||epoch!==cameraEpoch||faceScan.isOpen){next.getTracks().forEach(t=>t.stop());return;}stream=next;$('camera').srcObject=stream;await $('camera').play();$('camera-prompt').hidden=true;if(!simulated())faceTracker.start();}
  catch(e){stopCamera();$('camera-prompt').hidden=false;notify(e.name==='NotAllowedError'?'Allow camera access in browser settings, then retry.':'Could not open camera. Close other camera apps and retry.');}finally{cameraStarting=false;$('camera-start').disabled=false;}
 }
-const faceScan=setupFaceScan({beforeOpen:()=>{voice.stop();stopCamera();fireScene?.clear();},onSample:()=>haptics.play('tap'),onSave:samples=>{if(trackingPractice){localFace=samples;renderState();notify('Face saved. Step back and watch the lock follow you.');}else{mySamples=samples.map(encodeDescriptor);send({type:'face',samples:mySamples});notify('Face saved. Point your camera at another player.');}},onClose:()=>{if(!$('arena').hidden)startCamera();}});
+const faceScan=setupFaceScan({beforeOpen:()=>{voice.stop();stopCamera();fireScene?.clear();},onSample:()=>haptics.play('tap'),onSave:(samples,upper)=>{if(trackingPractice){localFace={samples,upper};renderState();notify('Face saved. Step back and watch the lock follow you.');}else{mySamples={samples:samples.map(encodeDescriptor),upper:upper.map(encodeDescriptor)};send({type:'face',...mySamples});notify('Face saved. Point your camera at another player.');}},onClose:()=>{if(!$('arena').hidden)startCamera();}});
 $('shirt-open').onclick=()=>{if(!practice&&room?.phase==='playing'){notify('Wait until the round ends to rescan your face.');return;}faceScan.open();};
 $('camera-start').onclick=()=>{if((trackingPractice&&!localFace)||(!practice&&!me()?.faceReady))faceScan.open();else startCamera();};
 $('tracking-retry').onclick=()=>{if(stream?.active)faceTracker.start();else startCamera();};

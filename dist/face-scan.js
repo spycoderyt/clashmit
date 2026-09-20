@@ -1,7 +1,7 @@
 // Guided face scan that replaces the headband dialog. It runs itself: the player only has to
 // follow one short instruction at a time while a ring fills up. Builds its own dialog and styles.
-import {startFaceEngine,detectFaces} from './face-client.js?v=face8';
-import {MATCH,MAX_SAMPLES,addSample,headTurn} from './face-id.js?v=face8';
+import {startFaceEngine,detectFaces} from './face-client.js?v=face10';
+import {MATCH,MAX_SAMPLES,addSample,headTurn} from './face-id.js?v=face10';
 // need: samples to collect in this step. turn: which way the head must face. settle: a short pause so
 // the player can get into the pose first. Every step gives up after `limit` and moves on, so nobody gets stuck.
 const STEPS=[
@@ -31,7 +31,7 @@ export function setupFaceScan({beforeOpen=()=>{},onSave,onClose=()=>{},onSample=
   if(Math.abs(cx-.5)>.22||Math.abs(cy-.5)>.25)return'Centre your face in the circle';if(face.score<.6)return'Find brighter light';return null;
  }
  async function run(){
-  const e=++epoch,person={samples:[]};saved=false;dialog.classList.remove('done');retry.hidden=true;progress(0);for(const dot of dots.children)dot.className='';
+  const e=++epoch,person={samples:[]},uppers=[];saved=false;dialog.classList.remove('done');retry.hidden=true;progress(0);for(const dot of dots.children)dot.className='';
   say('Getting ready… (one-time download)');
   const engine=startFaceEngine(text=>{if(e===epoch&&!stream)say(text);});
   try{
@@ -45,19 +45,19 @@ export function setupFaceScan({beforeOpen=()=>{},onSave,onClose=()=>{},onSample=
    const step=STEPS[index],now=Date.now();dots.children[index].className='active';
    if(now-stepStarted>step.limit){dots.children[index].className=taken?'complete':'';index++;taken=0;stepStarted=Date.now();continue;}
    if(video.readyState<2||!video.videoWidth){await new Promise(r=>setTimeout(r,100));continue;}
-   let face=null;try{face=(await detectFaces(video,[{x:0,y:0,width:video.videoWidth,height:video.videoHeight,maxSize:640,detectSize:640,full:true}],{describeMax:1,focus:{x:video.videoWidth/2,y:video.videoHeight/2}})).faces.sort((a,b)=>b.box.width-a.box.width)[0]||null;}catch{}
+   let face=null;try{face=(await detectFaces(video,[{x:0,y:0,width:video.videoWidth,height:video.videoHeight,maxSize:640,detectSize:640,full:true}],{describeMax:1,upper:true,focus:{x:video.videoWidth/2,y:video.videoHeight/2}})).faces.sort((a,b)=>b.box.width-a.box.width)[0]||null;}catch{}
    if(e!==epoch||!dialog.open)return;
    const issue=problem(face,video.videoWidth,video.videoHeight);
    if(issue){say(issue,true);stepStarted+=120;await new Promise(r=>setTimeout(r,60));continue;}
    say(step.text);const turn=headTurn(face.landmarks),posed=step.turn==='front'?Math.abs(turn)<.18:step.turn==='side'?Math.abs(turn)>.22:step.turn==='other'?Math.abs(turn)>.22&&Math.sign(turn)!==firstSide:true;
    if(posed&&face.descriptor&&Date.now()-stepStarted>(step.settle||0)&&Date.now()-lastSample>SAMPLE_GAP_MS&&person.samples.length<MAX_SAMPLES&&addSample(person,face.descriptor,{max:MAX_SAMPLES,minSpacing:0})){
-    lastSample=Date.now();taken++;if(step.turn==='side')firstSide=Math.sign(turn);progress(person.samples.length);stage.classList.remove('pulse');void stage.offsetWidth;stage.classList.add('pulse');onSample(person.samples.length);
+    if(face.upper)uppers.push(Array.from(face.upper));lastSample=Date.now();taken++;if(step.turn==='side')firstSide=Math.sign(turn);progress(person.samples.length);stage.classList.remove('pulse');void stage.offsetWidth;stage.classList.add('pulse');onSample(person.samples.length);
     if(taken>=step.need){dots.children[index].className='complete';index++;taken=0;stepStarted=Date.now();}
    }
    await new Promise(r=>setTimeout(r,40));
   }
   if(e!==epoch||!dialog.open)return;
-  if(person.samples.length>=MIN_TO_PASS){saved=true;progress(TARGET);dialog.classList.add('done');say('You’re in!');onSave(person.samples);setTimeout(()=>{if(e===epoch&&dialog.open)shut();},900);}
+  if(person.samples.length>=MIN_TO_PASS){saved=true;progress(TARGET);dialog.classList.add('done');say('You’re in!');onSave(person.samples,uppers);setTimeout(()=>{if(e===epoch&&dialog.open)shut();},900);}
   else{say('That didn’t get a clear view. Face a light, hold the phone at arm’s length, then tap Try again',true);retry.hidden=false;}
  }
  retry.onclick=()=>{stop();void run();};

@@ -26,7 +26,7 @@ export function createGameServer(){
    const body=await readFile(path);res.writeHead(200,{'Content-Type':mime[extname(path)]||'application/octet-stream','X-Content-Type-Options':'nosniff','Referrer-Policy':'same-origin','Cache-Control':extname(path)==='.html'?'no-store':'public, max-age=60'});res.end(req.method==='HEAD'?undefined:body);
   }catch{res.writeHead(404);res.end('Not found');}
  });
- const wss=new WebSocketServer({server,path:'/ws',maxPayload:8192,verifyClient:({origin,req})=>!allowedOrigins.length||allowedOrigins.includes(origin)||origin===`https://${req.headers.host}`||origin===`http://${req.headers.host}`});
+ const wss=new WebSocketServer({server,path:'/ws',maxPayload:16384,verifyClient:({origin,req})=>!allowedOrigins.length||allowedOrigins.includes(origin)||origin===`https://${req.headers.host}`||origin===`http://${req.headers.host}`});
  const send=(ws,msg)=>{if(ws.readyState===WebSocket.OPEN)ws.send(JSON.stringify(msg));};
  function view(room){const now=Date.now();for(const p of room.players)replenishMana(p,now);return {maxPlayers:MAX_PLAYERS,code:room.code,hostId:room.hostId,phase:room.phase,endsAt:room.endsAt,winners:room.winners,players:room.players.map(({token,socket,disconnectedAt,...p})=>p),shots:room.shots||[],combat:{mana:MANA,spells:SPELLS},serverTime:now};}
  function broadcast(room,event){for(const p of room.players){if(event)send(p.socket,event);send(p.socket,{type:'state',room:view(room)});}}
@@ -83,8 +83,9 @@ export function createGameServer(){
      // Face signatures live beside the room, not on the player, so the frequent state broadcast stays small.
      // They are held in memory only and removed when the player leaves or expires.
      if(room.phase==='playing')return send(ws,{type:'error',message:'Scan your face before the round starts.'});
-     if(!validEncodedSamples(m.samples))return send(ws,{type:'error',message:'That face scan was not readable. Scan again.'});
-     (room.faces??={})[player.id]=[...m.samples];player.faceReady=true;for(const p of room.players)send(p.socket,{type:'faces',faces:{[player.id]:room.faces[player.id]}});broadcast(room);
+     if(!validEncodedSamples(m.samples)||(m.upper!==undefined&&!validEncodedSamples(m.upper)))return send(ws,{type:'error',message:'That face scan was not readable. Scan again.'});
+     // upper: the same scan described from the eyes and forehead only, for players aiming with a phone over their face.
+     (room.faces??={})[player.id]={samples:[...m.samples],upper:[...(m.upper||[])]};player.faceReady=true;for(const p of room.players)send(p.socket,{type:'faces',faces:{[player.id]:room.faces[player.id]}});broadcast(room);
     }else if(m.type==='location'){
      // Opt-in minimap position; null stops sharing. The 500ms tick broadcasts it.
      if(m.location===null)player.location=null;

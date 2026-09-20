@@ -4,7 +4,7 @@
 // Both come from InsightFace's buffalo_sc pack: NON-COMMERCIAL RESEARCH licence, see
 // models/face/NOTICE.txt. Frames and descriptors never leave the page unless the caller sends them.
 import * as ort from './vendor/onnxruntime/ort.wasm.bundle.min.js';
-import {alignmentTransform} from './face-id.js?v=face8';
+import {alignmentTransform,FACE_TEMPLATE,UPPER_FACE_ROWS} from './face-id.js?v=face10';
 const asset=path=>new URL(path,import.meta.url).href;
 const ALIGNED=112,STRIDES=[8,16,32];
 let loading,detector,recogniser;
@@ -58,9 +58,14 @@ export async function detectRegion(source,region,minScore=.5,DETECT=640){
  found.sort((a,b)=>b.score-a.score);const kept=[];for(const face of found)if(!kept.some(k=>iou(k.box,face.box)>.4))kept.push(face);return kept;
 }
 // The 512-number unit descriptor for one face, given its five landmarks in source pixels.
-export async function describe(source,landmarks){
- const ctx=alignCanvas.getContext('2d',{willReadFrequently:true}),{a,b,tx,ty}=alignmentTransform(landmarks);
+// upper: describe only the eyes, brows and forehead. The face is aligned on the two eyes alone (the nose and
+// mouth landmarks are guesses when a phone covers them) and everything below the eyes is blanked, so the
+// result does not depend on what is covering the lower face. Compare it only with other upper descriptors.
+export async function describe(source,landmarks,{upper=false}={}){
+ const ctx=alignCanvas.getContext('2d',{willReadFrequently:true}),{a,b,tx,ty}=upper?alignmentTransform(landmarks.slice(0,2),FACE_TEMPLATE.slice(0,2)):alignmentTransform(landmarks);
  ctx.setTransform(1,0,0,1,0,0);ctx.fillStyle='#000';ctx.fillRect(0,0,ALIGNED,ALIGNED);ctx.imageSmoothingQuality='high';ctx.setTransform(a,b,-b,a,tx,ty);ctx.drawImage(source,0,0);ctx.setTransform(1,0,0,1,0,0);
+ // Mid grey becomes zero after normalisation, which is the recogniser's "no information".
+ if(upper){ctx.fillStyle='rgb(127,127,127)';ctx.fillRect(0,UPPER_FACE_ROWS,ALIGNED,ALIGNED-UPPER_FACE_ROWS);}
  const output=Object.values(await recogniser.run({[recogniser.inputNames[0]]:toTensor(ctx.getImageData(0,0,ALIGNED,ALIGNED).data,ALIGNED,127.5)}))[0].data;
  let norm=0;for(const v of output)norm+=v*v;norm=Math.sqrt(norm)||1;return Float32Array.from(output,v=>v/norm);
 }
