@@ -1,3 +1,5 @@
+import {createSharedMusic} from './music.js';
+import {createOrbitalAudio,hearsFlashbang} from './combat-audio.js';
 import {createReaperEffect} from './reaper-effect.js';
 import {createHealFeedback} from './heal-effect.js';
 import {createUpgradeEffects} from './upgrade-effects.js';
@@ -56,6 +58,8 @@ const simulated=()=>practice&&!trackingPractice;
 const serverClock=createServerClock();
 const arenaEvents=createArenaEvents($('arena'),{audio,getMyId:()=>myId,now:()=>practice?Date.now():serverClock.now()});$('leave').addEventListener('click',()=>arenaEvents.clear());
 const now=()=>practice?Date.now():serverClock.now(),me=()=>room?.players.find(p=>p.id===myId),opponent=()=>room?.players.find(p=>p.id===focusId&&p.id!==myId)||room?.players.find(p=>p.id!==myId);
+const sharedMusic=createSharedMusic({now,getBaseUrl:()=>endpoint().replace(/^ws/,'http')});
+document.addEventListener('pointerdown',()=>{if(joined&&!$('arena').hidden)void sharedMusic.unlock();},{passive:true});
 // Face lock: decoded face signatures by player id, the player the camera is on, and the solo test's own face.
 // avatars: each player's small face photo from their scan, used as their marker on the minimap.
 const faces=new Map(),avatars=new Map();let myAvatar=null,focusId=null,localFace=null,autoScanOffered=false,mySamples=null,faceResent=false,permissionsReady=Promise.resolve(),joinPermissions=null;
@@ -78,7 +82,9 @@ function send(message){return connection.send(message);}
 const minimap=createMinimap({container:$('arena'),send:message=>hudPreview?false:send(message),notify,...(hudPreview?{geolocation:previewGps}:{})});$('leave').addEventListener('click',()=>minimap.stop());window.addEventListener('pagehide',()=>minimap.stop());
 const coinEffects=createCoinEffects($('arena'),{audio,destination:()=>($('player-score').querySelector('.coin-icon')||$('player-score')).getBoundingClientRect()});
 const orbitalView=createOrbitalView($('arena'),{now,audio,getAvatar:id=>avatars.get(id),getLocation:()=>minimap.currentLocation()||me()?.location,onLaunchView:s=>minimap.showStrike(s),getMapPoint:p=>minimap.projectStrike(p)});
-const orbitalButton=document.createElement('button');orbitalButton.className='orbital-button';orbitalButton.textContent='Summon Orbital Airstrike';orbitalButton.hidden=true;orbitalButton.onclick=()=>minimap.beginAirstrike(point=>{if(hudPreview){minimap.endAirstrike();orbitalView.sync([{id:crypto.randomUUID(),actorId:myId,name:'You',point,radius:10,startsAt:now(),endsAt:now()+5000,victims:[{id:'dummy'}]}],myId);}else send({type:'orbital',point});});$('arena').append(orbitalButton);
+const orbitalAudio=createOrbitalAudio({audio,now,getLocation:()=>minimap.currentLocation()||me()?.location});
+function previewOrbital(strikes,id){orbitalAudio.sync(strikes,id);orbitalView.sync(strikes,id);}
+const orbitalButton=document.createElement('button');orbitalButton.className='orbital-button';orbitalButton.textContent='Summon Orbital Airstrike';orbitalButton.hidden=true;orbitalButton.onclick=()=>minimap.beginAirstrike(point=>{if(hudPreview){minimap.endAirstrike();previewOrbital([{id:crypto.randomUUID(),actorId:myId,name:'You',point,radius:10,startsAt:now(),endsAt:now()+5000,victims:[{id:'dummy'}]}],myId);}else send({type:'orbital',point});});$('arena').append(orbitalButton);
 const flashScreen=document.createElement('div');flashScreen.className='flashbang-screen';flashScreen.setAttribute('aria-hidden','true');$('arena').append(flashScreen);
 $('leave').addEventListener('click',()=>{faces.clear();avatars.clear();minimap.setAvatars(avatars);myAvatar=null;focusId=null;localFace=null;autoScanOffered=false;mySamples=null;});
 const haptics=createHaptics({isMuted:()=>audio.muted,stage:$('arena'),shakeTarget:$('camera')});if(new URLSearchParams(location.search).get('test')==='haptics')haptics.showTestPanel();
@@ -164,17 +170,18 @@ const connection=createGameConnection({
  onDisconnect:()=>{selected=null;lockId=null;castPending=false;clearFlights();},
  onError:message=>{setError(message);$('connection').textContent='Disconnected · rejoin the arena';},
  onMessage:m=>{
+  if(m.type==='music'&&joined&&!$('arena').hidden)sharedMusic.sync(m.music);
   if(m.type==='damage')damageFlash.receive(m);
   if(m.type==='spell'&&m.actorId===myId&&m.targetId)damageFlash.prepare(m.targetId);
   if(m.type==='assist'){arenaEvents.receive({...m,kind:'assist',text:`You assisted in killing ${m.victim}. +${m.coins} coins!`});}
   if(m.type==='arena-event'){arenaEvents.receive(m);killIntro.receive(m);if(m.kind==='kill'&&m.actorId===myId)coinEffects.collect(targetPoint(m.targetId),m.coins??COINS_PER_KILL,m.id,m.victim);}
-  if(m.type==='orbital'){minimap.endAirstrike();orbitalView.sync([m.strike],myId);}
+  if(m.type==='orbital'){orbitalAudio.sync([m.strike],myId);minimap.endAirstrike();orbitalView.sync([m.strike],myId);}
   if(m.type==='killstreak'&&m.actorId!==myId)killStreak.announce(m.name,m.streak);
   if(m.type==='welcome'){if(myId&&myId!==m.id){clearFlights();completedShots.clear();faceTracker.reset();room=null;notify('The arena restarted. Rejoining with your face scan.');}serverClock.reset();joined=true;myId=m.id;sessionStorage.setItem('fieldspell-token',m.token);safeWrite('clashmit-player-token',m.token);safeWrite('clashmit-player-id',m.id);showArena();startJoinedSensors();$('join').disabled=false;}
   // The knock-out banner names whoever landed the last hit. A death that no hit announced since the last state was
   // dealt by poison or skeletons, so name their caster instead of whoever happened to hit that player last.
   if(m.type==='state'){const previous=me()?.score?.currentStreak,next=m.room.players.find(p=>p.id===myId)?.score?.currentStreak;if(previous!==undefined&&next>previous)killStreak.show(next);if(room)for(const p of m.room.players){const was=room.players.find(o=>o.id===p.id);if(was?.health>0&&!(p.health>0)&&!hitSinceState.has(p.id)){const by=lingeringKiller(was);if(by)roundOverlay.impact({targetId:p.id,actorId:by});}}hitSinceState.clear();}
-  if(m.type==='state'){if(room&&(room.endsAt!==m.room.endsAt||room.startsAt!==m.room.startsAt)){clearFlights();damageFlash.clear();orbitalView.clear();}if(m.room.continuous&&me()&&(me().life!==m.room.players.find(p=>p.id===myId)?.life||me().health>0&&m.room.players.find(p=>p.id===myId)?.health<=0)){clearFlights();completedShots.clear();castPending=false;selected=null;lockId=null;}if(m.room.players.find(p=>p.id===myId)?.health>0&&me()?.health<=0)killIntro.clear();room=m.room;if(room.eventRound){for(const p of [...(room.eventRound.leaders||[]),room.eventRound.king].filter(Boolean))p.avatar=avatars.get(p.id)||p.avatar;}serverClock.bootstrap(room.serverTime);arenaEvents.sync(room.announcements);orbitalView.sync(room.airstrikes||[],myId);incoming.sync((room.shots||[]).filter(s=>s.targetId===myId));for(const shot of room.shots||[])if(shot.actorId===myId&&room.phase==='playing'&&now()<(shot.expiresAt??Infinity))effect(shot.spell||'fireball',{shot});renderState();}
+  if(m.type==='state'){if(room&&(room.endsAt!==m.room.endsAt||room.startsAt!==m.room.startsAt)){clearFlights();damageFlash.clear();orbitalAudio.clear();orbitalView.clear();}if(m.room.continuous&&me()&&(me().life!==m.room.players.find(p=>p.id===myId)?.life||me().health>0&&m.room.players.find(p=>p.id===myId)?.health<=0)){clearFlights();completedShots.clear();castPending=false;selected=null;lockId=null;}if(m.room.players.find(p=>p.id===myId)?.health>0&&me()?.health<=0)killIntro.clear();room=m.room;if(room.eventRound){for(const p of [...(room.eventRound.leaders||[]),room.eventRound.king].filter(Boolean))p.avatar=avatars.get(p.id)||p.avatar;}serverClock.bootstrap(room.serverTime);if(joined&&!$('arena').hidden)sharedMusic.sync(room.music);arenaEvents.sync(room.announcements);orbitalAudio.sync(room.airstrikes||[],myId);orbitalView.sync(room.airstrikes||[],myId);incoming.sync((room.shots||[]).filter(s=>s.targetId===myId));for(const shot of room.shots||[])if(shot.actorId===myId&&room.phase==='playing'&&now()<(shot.expiresAt??Infinity))effect(shot.spell||'fireball',{shot});renderState();}
   if(m.type==='state')minimap.update(m.room,myId);
   if(m.type==='impact'){roundOverlay.impact(m);if(!m.missed&&!m.blocked&&m.targetId)hitSinceState.add(m.targetId);}
   if(m.type==='state'){roundOverlay.update(m.room,myId);if(m.room.phase==='countdown')$('phase').textContent='Round starting…';}
@@ -187,8 +194,9 @@ const connection=createGameConnection({
   if(m.type==='welcome')faceResent=false;
   if(m.type==='state'&&joined&&me()&&!me().faceReady&&(room.continuous||room.phase!=='playing')){if(mySamples){if(!faceResent){faceResent=true;send({type:'face',...mySamples});if(myAvatar)send({type:'avatar',image:myAvatar});}}else if(!autoScanOffered){autoScanOffered=true;void permissionsReady.then(()=>{if(joined&&!practice&&!$('arena').hidden&&!me()?.faceReady&&!faceScan.isOpen)faceScan.open();});}}
   if(m.type==='spell'&&m.spell==='flashbang'){
-   if(m.actorId===myId){castPending=false;audio.play('flashbang');notify(`Flashbang · ${m.affectedIds?.length||0} nearby players blinded`);}
-   else if(m.affectedIds?.includes(myId)){audio.play('flashbang');haptics.play('hit');notify('Flashbanged · 3 seconds');}
+   if(hearsFlashbang(m,myId))audio.play('flashbang');
+   if(m.actorId===myId){castPending=false;notify(`Flashbang · ${m.affectedIds?.length||0} nearby players blinded`);}
+   else if(m.affectedIds?.includes(myId)){haptics.play('hit');notify('Flashbanged · 3 seconds');}
    else if(m.blockedIds?.includes(myId))notify('Your shield blocked the flashbang');
   }
   if(m.type==='spell'&&m.spell!=='flashbang'){if(m.actorId===myId){castPending=false;effect(m.spell,{shot:m});}else if(m.targetId===myId&&m.shotId){incoming.launch(m);if(!m.super)audio.play(m.spell);}else if(m.spell==='shield')notify(`Opponent shield active · Lightning pierces it`);else if(m.spell==='heal'){healed.set(m.actorId,Date.now()+900);notify(`${room?.players.find(p=>p.id===m.actorId)?.name||'Opponent'} healed +${m.healedAmount??(room.economy?50:m.super?35:20)}`);}else if(m.clearedSwarm)notify('Your skeletons were cleared');}
@@ -213,7 +221,7 @@ $('join-form').onsubmit=e=>{
  const asked=requestAllPermissions({onLocation:()=>{if(joinPermissions===asked)startJoinedSensors();}});
  joinPermissions=asked;permissionsReady=asked.ready.catch(()=>{});
  // Start speech inside the Join gesture so Safari can request speech access here.
- voice.enable();connect();
+ void sharedMusic.unlock();voice.enable();connect();
 };
 function beginPractice(realTracking=false){clearFlights();trackingPractice=realTracking;practice=true;connection.stop();myId='self';const make=(id,name,who=persona)=>({id,name,persona:who,health:100,mana:MANA.max,manaUpdatedAt:Date.now(),healthRegenAt:Date.now(),shieldUntil:0,cooldowns:{},connected:true});room={phase:'playing',hostId:myId,endsAt:Date.now()+180000,winners:[],players:[make(myId,$('name').value.trim()||'You'),make('dummy','Practice target',practiceFoe())]};showArena();$('connection').textContent=trackingPractice?'Local face test · no server':'Solo · simulated target';renderState();if(trackingPractice){room.players[1].name='You';faceScan.open();}else{startCamera();dummyTimer=setInterval(dummyTurn,3500);}}
 // ?test=solo&vs=witch: a simulated opponent that casts its deck back, so every persona's incoming effects, status chips and clears can be seen on one device.
@@ -224,7 +232,7 @@ function dummyTurn(){
  setTimeout(()=>{if(!simulated()||room?.endsAt!==round)return;const hit=impactProjectile(room,foe.id,shot.shotId,true);if(hit.error)return;handleImpact(hit);if(me().health<=0){room.phase='finished';room.winners=[foe.id];}renderState();},shot.flightMs);
 }
 function stopCamera(){damageFlash.clear();cameraEpoch++;faceTracker.stop();stream?.getTracks().forEach(t=>t.stop());stream=null;$('camera').srcObject=null;trackingStatus='Camera off';selected=null;lockId=null;targetOverlay.hide();}
-function stopSensors(){clearFlights();stopCamera();faceScan.stop();fireScene?.clear();clearTimeout(effectTimer);$('fx').className='';$('fx').replaceChildren();voice.stop();}
+function stopSensors(){sharedMusic.stop();orbitalAudio.clear();audio.stop();clearFlights();stopCamera();faceScan.stop();fireScene?.clear();clearTimeout(effectTimer);$('fx').className='';$('fx').replaceChildren();voice.stop();}
 $('leave').onclick=()=>{orbitalView.clear();if(!practice)send({type:'leave'});connection.stop();sessionStorage.removeItem('fieldspell-token');$('arena').hidden=true;joinPermissions=null;stopSensors();completedShots.clear();serverClock.reset();deckSignature='';healed.clear();room=null;myId=null;practice=false;trackingPractice=false;joined=false;$('lobby').hidden=false;$('camera-prompt').hidden=false;targetOverlay.hide();$('join-status').textContent='Everyone joins the same game.';};
 async function startCamera(){
  if(cameraStarting||stream?.active)return;if(!navigator.mediaDevices?.getUserMedia){notify('Camera requires Safari or Chrome over HTTPS.');return;}
@@ -306,7 +314,7 @@ function renderArmy(){
 $('start-round').onclick=()=>{if(practice){clearFlights();if(trackingPractice){opponent().health=100;room.phase='playing';room.endsAt=Date.now()+180000;room.winners=[];room.shots=[];me().cooldowns={};me().mana=MANA.max;me().manaUpdatedAt=Date.now();me().healthRegenAt=Date.now();me().shieldUntil=0;for(const p of room.players){p.poison=null;p.swarm=null;p.stunUntil=0;}renderState();}else beginPractice(false);return;}send({type:'start'});};
 const voice=setupVoice({Recognition:window.SpeechRecognition||window.webkitSpeechRecognition,status:$('voice-status'),onSpell:cast,getWords:()=>room?.economy?wordsFor(me()):deckWords(myDeck()),describe:()=>room?.economy?Object.keys(wordsFor(me())).map(id=>skillName(me(),id)).join(', '):myDeck().map(labelOf).join(', ')});
 function renderCombat(){
- const p=me();if(!p)return;orbitalButton.hidden=!(p.airstrikeCharges>0&&p.health>0&&room.phase==='playing'&&!(p.actionLockUntil>now()));flashScreen.style.opacity=p.flashUntil>now()?'1':0;const at=now(),mana=Math.min(MANA.max,Math.max(0,manaAt(p,at))),shieldRemaining=Math.max(0,p.shieldUntil-at);
+ orbitalAudio.tick();const p=me();if(!p)return;orbitalButton.hidden=!(p.airstrikeCharges>0&&p.health>0&&room.phase==='playing'&&!(p.actionLockUntil>now()));flashScreen.style.opacity=p.flashUntil>now()?'1':0;const at=now(),mana=Math.min(MANA.max,Math.max(0,manaAt(p,at))),shieldRemaining=Math.max(0,p.shieldUntil-at);
  $('mana-fill').style.width=100*mana/MANA.max+'%';$('mana-value').textContent=`${Math.floor(mana)} / ${MANA.max}`;$('mana-track').setAttribute('aria-valuenow',mana.toFixed(1));
  $('own-shield').classList.toggle('active',shieldRemaining>0);$('own-shield').classList.toggle('own-super-shield',p.superShieldUntil>at);$('shield-status').hidden=!shieldRemaining;$('shield-status').textContent=p.economy?`◇ Shield ${(shieldRemaining/1000).toFixed(1)}s · Lightning pierces`:p.superShieldUntil>at?`◇ Aegis ${(shieldRemaining/1000).toFixed(1)}s · Lightning pierces`:`◇ Shield ${(shieldRemaining/1000).toFixed(1)}s · Lightning, Skeletons, Zap pierce`;
  for(const row of $('inventory').children){const id=row.dataset.consumable,item=CONSUMABLES[id];if(!item)continue;const remaining=Math.max(0,(p.cooldowns[id]||0)-at),percent=Math.max(0,Math.min(100,100*(1-remaining/item.cooldown))).toFixed(1);row.classList.toggle('is-cooling',remaining>0);row.classList.toggle('is-empty',!(p.loadout?.consumables?.[id]>0));row.style.setProperty('--consumable-ready',percent+'%');const label=`${p.loadout?.consumables?.[id]||0} ${item.name}${remaining?`, ready in ${Math.ceil(remaining/1000)} seconds`:''}`;if(row.getAttribute('aria-label')!==label)row.setAttribute('aria-label',label);}
@@ -333,7 +341,7 @@ setInterval(()=>{if(!room)return;if(practice){if(room.continuous){if(advanceResp
 },100);
 document.addEventListener('visibilitychange',()=>{if(document.hidden){voice.pause();faceTracker.reset();if(joined&&!practice){send({type:'inactive'});faceResent=false;connection.stop();}}else if(joined&&!practice){if(!faceScan.isOpen)voice.resume();connection.start();notify('Find your opponent again before casting.');}});
 window.addEventListener('online',()=>{if(joined&&!practice)connection.check();});
-window.addEventListener('pageshow',event=>{if(event.persisted&&joined&&!practice){voice.enable();connect();}});
+window.addEventListener('pageshow',event=>{if(event.persisted&&joined&&!practice){void sharedMusic.unlock();voice.enable();connect();}});
 window.addEventListener('pagehide',()=>{if(joined&&!practice)send({type:'inactive'});$('arena').hidden=true;stopSensors();connection.stop();});
 
 if(new URLSearchParams(location.search).get('test')==='face')beginPractice(true);
@@ -398,7 +406,7 @@ if(hudPreview){
  if(previewMode==='coins'){const demo=document.createElement('button');demo.textContent='Preview coin pickup';demo.className='respawn-demo-repeat';demo.onclick=async()=>{await audio.unlock();coinEffects.collect({x:.5,y:.4},COINS_PER_KILL,crypto.randomUUID(),'Alex');};$('arena').append(demo);}
  if(previewMode==='airstrike'){
   const controls=document.createElement('details');controls.className='airstrike-preview-controls';controls.innerHTML='<summary>Preview controls</summary>';
-  function previewStrike(caster=false,escape=false){controls.open=false;previewLocation={latitude:42.3601,longitude:-71.0942,accuracy:4};previewFix?.();const point={...previewLocation};orbitalView.clear();orbitalView.sync([{id:crypto.randomUUID(),actorId:caster?myId:'dummy',name:caster?'You':'Alex',point,radius:10,startsAt:now(),endsAt:now()+5000,victims:caster?[]:[{id:myId}]}],myId);if(escape)setTimeout(()=>{previewLocation={...previewLocation,latitude:42.3603};previewFix?.();},1300);}
+  function previewStrike(caster=false,escape=false){controls.open=false;previewLocation={latitude:42.3601,longitude:-71.0942,accuracy:4};previewFix?.();const point={...previewLocation};orbitalView.clear();previewOrbital([{id:crypto.randomUUID(),actorId:caster?myId:'dummy',name:caster?'You':'Alex',point,radius:10,startsAt:now(),endsAt:now()+5000,victims:caster?[]:[{id:myId}]}],myId);if(escape)setTimeout(()=>{previewLocation={...previewLocation,latitude:42.3603};previewFix?.();},1300);}
   for(const [text,fn]of [['Preview incoming strike',()=>previewStrike()],['Preview launcher view',()=>previewStrike(true)],['Preview escaping the radius',()=>previewStrike(false,true)]]){const button=document.createElement('button');button.textContent=text;button.onclick=fn;controls.append(button);}$('arena').append(controls);room.continuous=true;room.phase='playing';room.endsAt=0;renderState();
  }
 

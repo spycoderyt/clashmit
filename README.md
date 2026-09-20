@@ -259,10 +259,10 @@ Production players have **7 hearts / 70 HP**. Each class starts with only its qu
 | Class | Quick: damage / mana / cooldown | Heavy | Ultimate |
 | --- | --- | --- | --- |
 | Mage | Lightning: 10 / 2 / 1s | Fireball: 25 / 4 / 2.4s | Meteor: 60 / 10 / 15s |
-| Witch | Poison: 5 + 6 over 3s / 1 / 1s | Skeletons: 25 over 5s / 4 / 5s | Soul Reaper: 60 / 10 / 15s |
+| Witch | Poison: 5 + 6 over 3s / 1 / 1s | Skeletons: 25 over 5s / 4 / 5s | Reaper: 60 / 10 / 15s |
 | Archer | Arrows: 8 / 1 / 0.65s | Bomb Arrow: 25 / 4 / 2.4s | Ballista: 60 / 10 / 15s |
 
-Paid names: Chain Lightning (14), Wildfire (32), Extinction (67); Plague (8 + 6 lingering), Bone Legion (35 lingering), Grim Reaper (67); Arrow Storm (12), Explosive Arrow (32), Railgun (67). Numbers are HP. Ultimates require and spend all 10 mana. Voice accepts base and upgraded names, common aliases including “heel” and “flash bank”, and bounded spelling variation; locked attacks and empty consumables remain server-rejected.
+Paid names: Chain Lightning (14), Wildfire (32), Extinction (67); Plague (8 + 6 lingering), Super Skeleton (35 lingering), Soul Reaper (67); Arrow Storm (12), Explosive Arrow (32), Railgun (67). Numbers are HP. Ultimates require and spend all 10 mana. Voice accepts base and upgraded names, common aliases including “heel” and “flash bank”, and bounded spelling variation; locked attacks and empty consumables remain server-rejected.
 
 The FFA death screen is a shop with a 10-second minimum wait. Buy or upgrade skills, choose a character, and buy Shield (30 coins, 7s), Heal (30 coins, restores 50 HP, capped at 70), or Flashbang (50 coins, 3s blind/stun for other unshielded players within 10m of the caster; fresh GPS required). Press **Respawn** when ready after the countdown. Shield blocks all normal attacks/ultimates and Flashbang except Lightning, and clears poison/skeletons. Orbital Airstrike ignores shields. Inventory appears bottom-right, skills above mana, and coin balance above your hearts.
 
@@ -340,3 +340,11 @@ Active combat also pays 10 coins per 30 eligible seconds (20 per minute). A serv
 Both additional attacks cost 200 coins per class (60 + 140). Ten active minutes plus zero, three, or seven normal kills earns about 200, 350, or 550 coins. This targets all three attacks in one class within ten minutes if unlocks take priority. Consumables and upgrades use the same balance and can delay this. Full class upgrades cost another 480 coins. A 150-coin bounty adds 100 above the normal kill reward. Assists pay 20 coins to each non-killer who dealt damage within the previous 10 seconds of that victim’s current life. Each helper receives a private reward message.
 
 The live display uses half the desktop screen for a GPS map. It shows active player positions and recent spell paths, impacts, and orbital zones. The leaderboard, kill feed, logo, and join QR use the other half. On phones, the sections stack. `/live?demo=1` shows test data; `/live` uses the real arena. Visible pages poll every 500 ms and pause when hidden. The public `/api/live` response includes recent player locations for this display. Positions and paths are GPS estimates, not camera tracking.
+
+Selected sound effects: Shield uses Fortnite Shield Potion, Heal uses Fortnite Heal, Flashbang uses the selected flashbang clip for both caster and affected players, and Orbital Airstrike uses Tactical Nuke Incoming for all joined players. A player who leaves the strike radius stops hearing that strike. Sound source links are shown on `/sounds.html`.
+
+### Shared music
+
+Open `/admin`, sign in, and use **Background music**. Paste a YouTube watch link and press **Convert to MP3**, or upload an MP3. Then press **Play for everyone**. The default volume is 12%; admin can set 0–30%, stop playback, or turn looping off. Music starts after a player joins and stops when they leave. The front page stays silent. Players use server time to join at the current song position; browser and network delays can cause small timing differences.
+
+YouTube conversion supports a single video up to 10 minutes. Uploads are limited to 20 MB. Some videos cannot be downloaded; the admin page shows the error and still accepts MP3 uploads. The Docker image includes yt-dlp and FFmpeg. Local servers need those commands installed, or `YT_DLP_PATH` and `FFMPEG_PATH` set to their executable paths. Set `ADMIN_PASSWORD` to enable admin. When `DATA_DIR` uses the Railway volume, the selected song is saved in its `music` folder. Playback stays stopped after a server restart until admin presses Play.

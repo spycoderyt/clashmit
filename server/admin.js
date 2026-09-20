@@ -1,6 +1,6 @@
 import {createHash,randomBytes,timingSafeEqual} from 'node:crypto';
 const digest=value=>createHash('sha256').update(value).digest();
-export function createAdmin({password='',getState,onCommand,now=Date.now}){
+export function createAdmin({password='',getState,onCommand,onMusicUpload,onMusicConvert,onMusicCommand,now=Date.now}){
  const sessions=new Map(),attempts=new Map();let globalAttempts=[];
  const reply=(res,status,body,headers={})=>{res.writeHead(status,{'Content-Type':'application/json','Cache-Control':'no-store','X-Content-Type-Options':'nosniff',...headers});res.end(JSON.stringify(body));};
  async function body(req){if(!req.headers['content-type']?.startsWith('application/json'))throw Error('Send JSON.');let text='';for await(const chunk of req){text+=chunk;if(Buffer.byteLength(text)>2048)throw Error('Request too large.');}return JSON.parse(text||'{}');}
@@ -22,6 +22,9 @@ export function createAdmin({password='',getState,onCommand,now=Date.now}){
   }
   const token=authenticated(req);if(!token){reply(res,401,{error:'Sign in first.'});return true;}
   if(url.pathname==='/api/admin/logout'){sessions.delete(token);reply(res,200,{ok:true},{'Set-Cookie':'clashmit_admin=; HttpOnly; SameSite=Strict; Path=/api/admin; Max-Age=0'});return true;}
+  if(url.pathname==='/api/admin/music/upload'&&onMusicUpload){const result=await onMusicUpload(req,url);reply(res,result.error?(result.status||400):200,result.error?{error:result.error}:{ok:true,...getState()});return true;}
+  if(url.pathname==='/api/admin/music/youtube'&&onMusicConvert){try{const input=await body(req),result=await onMusicConvert(input.url);reply(res,result.error?(result.status||400):200,result.error?{error:result.error}:{ok:true,...getState()});}catch{reply(res,400,{error:'Invalid YouTube conversion request.'});}return true;}
+  if(url.pathname==='/api/admin/music'&&onMusicCommand){try{const result=await onMusicCommand(await body(req));reply(res,result.error?400:200,result.error?result:{ok:true,...getState()});}catch{reply(res,400,{error:'Invalid music command.'});}return true;}
   if(url.pathname!=='/api/admin/command'){reply(res,404,{error:'Not found.'});return true;}
   try{const data=await body(req),result=onCommand(data);reply(res,result.error?400:200,result.error?result:{ok:true,...getState()});}catch{reply(res,400,{error:'Invalid command.'});}return true;
  };

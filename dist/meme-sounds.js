@@ -1,5 +1,9 @@
 // Downloaded clips are bundled so gameplay never depends on a soundboard service.
 export const MEME_CLIPS={
+ 'shield-custom':{name:'Fortnite Shield Potion',author:'Ultimate Sound Effects Channel',source:'https://www.youtube.com/watch?v=U0goOGwZGnA',license:'User-selected source; license not specified'},
+ 'heal-custom':{name:'Fortnite Heal',author:'Creator Templates',source:'https://www.youtube.com/watch?v=1XgGupI7DgY',license:'User-selected source; license not specified'},
+ 'flashbang-custom':{name:'Flashbang',author:'FX Studio Sounds',source:'https://www.youtube.com/watch?v=eCIkubIERIY',license:'User-selected source; license not specified'},
+ 'orbital-custom':{name:'Tactical Nuke Incoming',author:'Sath Buttons',source:'https://www.youtube.com/watch?v=7olVDwbX8ao',license:'User-selected source; license not specified'},
  coin:{name:'16-bit coin pickup',author:'rigor789',source:'https://freesound.org/people/rigor789/sounds/341979/',license:'CC0'},
  bruh:{name:'Bruh',author:'DXRKCLAN',source:'https://freesound.org/people/DXRKCLAN/sounds/704942/',license:'CC0'},
  pipe:{name:'Metal pipe drop',author:'gamer500',source:'https://freesound.org/people/gamer500/sounds/680841/',license:'CC0'},
@@ -8,11 +12,12 @@ export const MEME_CLIPS={
  boing:{name:'Cartoon boing',author:'sdroliasnick',source:'https://freesound.org/people/sdroliasnick/sounds/731262/',license:'CC0'},
  fart:{name:'Funny fart',author:'Crimsonblaze',source:'https://freesound.org/people/Crimsonblaze/sounds/833105/',license:'CC BY 4.0'}
 };
-export const SPELL_MEMES={fireball:'boom',lightning:'pipe',skeletonArmy:'pipe',poison:'fart',arrows:'boing',zap:'bruh',shield:'boing',heal:'wow',meteor:'boom',soulReaper:'fart',bombArrow:'boom',ballista:'pipe',flashbang:'pipe',orbital:'boom',coins:'coin'};
+export const SPELL_MEMES={fireball:'boom',lightning:'pipe',skeletonArmy:'pipe',poison:'fart',arrows:'boing',zap:'bruh',shield:'shield-custom',heal:'heal-custom',meteor:'boom',soulReaper:'fart',bombArrow:'boom',ballista:'pipe',flashbang:'flashbang-custom',orbital:'orbital-custom',coins:'coin'};
 const cue=(clip,rate=1,delay=0,gain=1,length=1.3)=>({clip,rate,delay,gain,length});
 export function soundCues(spell,kind='cast'){
  if(spell==='coins')return Array.from({length:6},(_,i)=>cue('coin',1+i*.075,i*.095,.38,.5));
- if(spell==='orbital')return[cue('boom',.6,0,.7,2),cue('boom',.85,5,1,1.5)];
+ if(spell==='orbital')return[cue('orbital-custom',1,0,1,10)];
+ if(['shield','heal','flashbang'].includes(spell)&&['cast','super','impact'].includes(kind))return[cue(SPELL_MEMES[spell],1,0,1,spell==='shield'?8:5)];
  if(kind==='announcement')return[cue('wow',1.25,0,.5,.6)];
  if(kind==='parry')return[cue('pipe',1.3,0,.65),cue('bruh',1,.15,.75,.8)];
  if(kind==='block')return[cue('boing',.75,0,.7)];
