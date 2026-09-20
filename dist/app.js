@@ -1,6 +1,7 @@
+import {createArenaLeaders} from './arena-leaders.js?v=1';
 import {createKillStreak} from './killstreak.js?v=1';
 import {respawnSeconds,advanceRespawns} from './respawn.js?v=1';
-import {createHealthHud} from './health-hud.js?v=1';
+import {createHealthHud} from './health-hud.js?v=smallhearts2';
 import {setupLeaderboard} from './leaderboard.js?v=kd1';
 import {setupLobbyVideo} from './lobby-video.js?v=2';
 import {createGameConnection} from './connection.js?v=hosting1';
@@ -27,6 +28,7 @@ const $=id=>document.getElementById(id);
 const previewMode=new URLSearchParams(location.search).get('test'),hudPreview=['hud','coach','respawn'].includes(previewMode);
 const previewGps={watchPosition(onFix){queueMicrotask(()=>onFix({coords:{latitude:42.3601,longitude:-71.0942,accuracy:4}}));return 1;},clearWatch(){}};
 setupLobbyVideo({video:$('lobby-background'),lobby:$('lobby'),button:$('background-toggle'),headline:$('lobby-headline')});
+const arenaLeaders=createArenaLeaders($('arena'));
 const killStreak=createKillStreak($('arena'));$('leave').addEventListener('click',()=>killStreak.clear());
 const targetOverlay=createTargetOverlay($('arena'),$('boxes'));
 const audio=createSpellAudio();document.addEventListener('pointerdown',()=>{void audio.unlock();},{passive:true});
@@ -193,7 +195,7 @@ async function startCamera(){
 }
 const faceScan=setupFaceScan({beforeOpen:()=>{voice.pause();stopCamera();fireScene?.clear();},onSample:()=>haptics.play('tap'),onSave:(samples,upper,avatar)=>{if(trackingPractice){localFace={samples,upper};renderState();notify('Face saved. Step back and watch the lock follow you.');}else{mySamples={samples:samples.map(encodeDescriptor),upper:upper.map(encodeDescriptor)};send({type:'face',...mySamples});myAvatar=avatar;if(avatar)send({type:'avatar',image:avatar});notify('Face saved. Point your camera at another player.');}},onClose:()=>{if(!$('arena').hidden){startCamera();if(!document.hidden)voice.resume();}}});
 $('camera-start').onclick=()=>{if((trackingPractice&&!localFace)||(!practice&&!me()?.faceReady))faceScan.open();else startCamera();};
-function renderState(){if(!me())return;renderDeck();
+function renderState(){if(!me())return;renderDeck();arenaLeaders.update(room.leaders||[],myId);
  // Poison and skeletons kill between impacts, on the server's tick, so no impact announces that death. Feel it here, once.
  {const health=trackingPractice?100:me().health;if(lastHealth>0&&health<=0&&!deathFelt){deathFelt=true;haptics.play('death');}if(health>0)deathFelt=false;lastHealth=health;}
 $('arena').classList.toggle('round-live',room.phase==='playing');const p=me(),displayHealth=trackingPractice?opponent()?.health:p.health;healthHud.update(room.players,myId,displayHealth,trackingPractice?'Target health':'Your health');$('room-label').textContent=hudPreview?'HUD PREVIEW':trackingPractice?'ONE PERSON FACE TEST':practice?'SOLO PRACTICE':'MULTIPLAYER ARENA';$('start-round').hidden=room.continuous||room.hostId!==myId;$('start-round').disabled=!trackingPractice&&room.phase==='playing';$('start-round').textContent=trackingPractice?'Reset target':room.phase==='finished'?'New round':'Start round';
@@ -284,8 +286,10 @@ function placeHud(){
  if($('arena').hidden)return;
  const header=document.querySelector('.hud-top'),top=header.getBoundingClientRect().bottom-$('arena').getBoundingClientRect().top+8;
  $('arena').style.setProperty('--hud-below',`${top}px`);
+ const bottom=$('arena').getBoundingClientRect().bottom-document.querySelector('.bottom-hud').getBoundingClientRect().top+10;
+ $('arena').style.setProperty('--hud-bottom-height',`${bottom}px`);
 }
-new ResizeObserver(placeHud).observe(document.querySelector('.hud-top'));
+const hudObserver=new ResizeObserver(placeHud);hudObserver.observe(document.querySelector('.hud-top'));hudObserver.observe(document.querySelector('.bottom-hud'));
 window.addEventListener('resize',placeHud);
 
 // A sensor-free preview of the actual HUD, with simulated health changes and map positions.
@@ -293,6 +297,7 @@ if(hudPreview){
  practice=true;myId='preview-you';
  const make=(id,name,health,latitude,longitude)=>({id,name,health,persona:'mage',connected:true,faceReady:true,mana:7,manaUpdatedAt:Date.now(),shieldUntil:0,cooldowns:{},location:{latitude,longitude,accuracy:3,at:Date.now()}});
  room={phase:'lobby',hostId:'dummy',serverTime:Date.now(),endsAt:Date.now()+180000,winners:[],players:[make(myId,'You',75,42.3601,-71.0942),make('dummy','Alex',100,42.36025,-71.09405),make('preview-leon','Leon',50,42.36003,-71.0944),make('preview-john','John',20,42.35985,-71.0941)]};
+ room.leaders=[{id:'dummy',name:'Alex',rank:1,bestStreak:8},{id:'preview-leon',name:'Leon',rank:2,bestStreak:5},{id:'preview-you',name:'You',rank:3,bestStreak:3}];
  showArena();$('camera-prompt').hidden=true;$('camera').hidden=true;
  $('connection').textContent='Preview · simulated players';$('voice-status').textContent='Preview only · in a game, voice and location start on Join.';
  if(previewMode==='respawn'){room.continuous=true;room.phase='playing';room.endsAt=0;for(const p of room.players)p.life=1;me().health=0;me().diedAt=Date.now();me().respawnAt=Date.now()+10000;roundOverlay.update(room,myId);}

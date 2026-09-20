@@ -221,7 +221,7 @@ Taking damage also flashes a red vignette and briefly shakes the camera feed on 
 
 **Passive healing.** During live rounds, living connected players regenerate 5 HP (half a heart) every 4 seconds, up to 100 HP. It costs no mana, does not revive knocked-out players, and stops outside the round. Damage over time is resolved before each healing tick.
 
-**Health HUD.** Ten pixel hearts sit immediately above mana (10 HP each, with partial fills). A compact top-left list automatically sorts everyone by current health; equal health shares a rank. Its bars and the locked-target health meter shift from green through yellow to red as health falls. The health ranking is separate from the persistent points leaderboard.
+**Health HUD.** Ten pixel hearts sit immediately above mana (10 HP each, with partial fills). A compact top-left list automatically sorts everyone by current health and uses smaller pixel hearts, including partial hearts; equal health shares a rank. The locked-target health meter shifts from green through yellow to red as health falls. A bottom-right top-three panel shows medals, names and best streaks from the global leaderboard, above the spell controls. The health ranking is separate from the persistent points leaderboard.
 
 ## Minimap
 
