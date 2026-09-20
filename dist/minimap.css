@@ -5,13 +5,10 @@
 .minimap-frame:focus-visible{outline:2px solid #ff9958;outline-offset:2px}
 .minimap.active .minimap-frame{border-color:#9cc2ff66}
 .minimap-frame svg{position:absolute;inset:0;display:block;width:100%;height:100%;pointer-events:none}
-/* The street map is recolored to a flat dark navy that matches the HUD. In the corner it is larger than its frame
-   so that turning it with the compass never uncovers a corner. */
-.minimap-map{position:absolute;inset:-21%;pointer-events:none;visibility:hidden;filter:grayscale(1) invert(1) contrast(.8) brightness(.9) sepia(.45) hue-rotate(190deg) saturate(1.5)}
+/* The street map: vector shapes only (no text), drawn by MapLibre in the colors of the chosen theme. Two classes
+   here so the library's own positioning rule for its container cannot collapse it. */
+.minimap .minimap-map{position:absolute;inset:0;pointer-events:none;visibility:hidden}
 .minimap.mapped .minimap-map{visibility:visible}
-.minimap-map.leaflet-container{background:#e9e4da;font:inherit}
-/* At in-between zoom levels neighbouring tiles can leave a hairline gap; drawing each a pixel larger closes it. */
-.minimap-map .leaflet-tile{width:513px!important;height:513px!important}
 .minimap-cta{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;text-align:center;padding:14px;font-size:.72rem;font-weight:700;line-height:1.25;color:#f6f4ef}
 .minimap-cta:empty{display:none}
 .minimap-north{font-size:16px;font-weight:800;fill:#ff9958;stroke:#0d131c;stroke-width:4;paint-order:stroke}
@@ -31,7 +28,7 @@
 /* Full view: the same map over the whole arena, north up, dragged and pinched like any map. */
 .minimap.full{inset:0;top:0;right:0;width:auto;z-index:30;gap:0;text-shadow:none}
 .minimap.full .minimap-frame{position:absolute;inset:0;width:auto;aspect-ratio:auto;border:0;border-radius:0;box-shadow:none;background:#0d131c;cursor:default;backdrop-filter:none;-webkit-backdrop-filter:none;touch-action:none}
-.minimap.full .minimap-map{inset:0;pointer-events:auto}
+.minimap.full .minimap-map{pointer-events:auto}
 .minimap.full .minimap-close,.minimap.full .minimap-recenter{display:flex;align-items:center;justify-content:center;position:absolute;z-index:2;width:46px;height:46px;border-radius:14px;border:1px solid #6b7a9480;background:#121a27eb;color:#f6f4ef;font-size:1.15rem;box-shadow:0 6px 20px #0009}
 .minimap.full .minimap-close{top:max(14px,env(safe-area-inset-top));left:14px}
 .minimap.full .minimap-recenter{right:14px;bottom:calc(max(14px,env(safe-area-inset-bottom)) + 56px);font-size:1.4rem}
