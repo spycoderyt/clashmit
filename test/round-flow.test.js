@@ -29,6 +29,7 @@ test('starting a round runs a shared countdown, then records when each player is
  a.send({type:'cast',spell:'lightning',targetId:bw.id});const shot=await a.next('spell');await new Promise(r=>setTimeout(r,260));a.send({type:'impact',shotId:shot.shotId,tracked:true});
  const over=await a.next('state',m=>m.room.phase==='finished');const out=over.room.players.find(p=>p.id===bw.id);assert.equal(out.health,0);assert.ok(out.diedAt>=over.room.startsAt&&out.diedAt<=Date.now());
  assert.deepEqual(rankPlayers(over.room.players).map(p=>p.name),['Ada','Bo']);assert.deepEqual(over.room.winners,[aw.id]);
+ assert.equal(over.room.results.players.find(p=>p.id===aw.id).earnedPoints,295);assert.equal(over.room.results.players.find(p=>p.id===aw.id).wins,1);assert.equal(over.room.players.find(p=>p.id===aw.id).score.points,295);assert.equal(over.room.results.players.find(p=>p.id===bw.id).earnedPoints,25);
  // A new round counts down again and clears the old knock-out times.
  a.send({type:'start'});await a.next('countdown');const again=await a.next('state',m=>m.room.phase==='countdown');assert.ok(again.room.players.every(p=>p.health===100&&!p.diedAt));
  a.ws.close();b.ws.close();

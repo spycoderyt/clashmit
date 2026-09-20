@@ -6,5 +6,6 @@ COPY server ./server
 COPY dist ./dist
 ENV NODE_ENV=production PORT=3000
 EXPOSE 3000
+RUN mkdir -p /app/data && chown node:node /app/data
 USER node
 CMD ["node","server/index.js"]

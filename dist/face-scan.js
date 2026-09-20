@@ -1,7 +1,7 @@
 // Guided face scan shown right after joining. It runs itself: the player only has to
 // follow one short instruction at a time while a ring fills up. Builds its own dialog and styles.
-import {startFaceEngine,detectFaces} from './face-client.js?v=face12';
-import {MATCH,MAX_SAMPLES,AVATAR,addSample,headTurn,avatarCrop} from './face-id.js?v=face12';
+import {startFaceEngine,detectFaces} from './face-client.js?v=face13';
+import {MATCH,MAX_SAMPLES,AVATAR,addSample,headTurn,avatarCrop} from './face-id.js?v=face13';
 // need: samples to collect in this step. turn: which way the head must face. settle: a short pause so
 // the player can get into the pose first. Every step gives up after `limit` and moves on, so nobody gets stuck.
 const STEPS=[
@@ -38,12 +38,13 @@ export function setupFaceScan({beforeOpen=()=>{},onSave,onClose=()=>{},onSample=
  async function run(){
   const e=++epoch,person={samples:[]},uppers=[];let avatar=null;saved=false;dialog.classList.remove('done');retry.hidden=true;progress(0);for(const dot of dots.children)dot.className='';
   say('Getting ready… (one-time download)');
-  const engine=startFaceEngine(text=>{if(e===epoch&&!stream)say(text);});
+  // Loading progress is only worth showing until the camera is up, and never over a camera error.
+  let cameraFailed=false;const engine=startFaceEngine(text=>{if(e===epoch&&!stream&&!cameraFailed)say(text);});
   try{
    if(!navigator.mediaDevices?.getUserMedia)throw Object.assign(Error('no camera'),{name:'NotSupportedError'});
    const s=await navigator.mediaDevices.getUserMedia({video:{facingMode:'user',width:{ideal:960},height:{ideal:1280}},audio:false});
    if(e!==epoch||!dialog.open){s.getTracks().forEach(t=>t.stop());return;}stream=s;video.srcObject=s;await video.play();
-  }catch(error){if(e!==epoch)return;say(error.name==='NotAllowedError'?'Allow camera access, then tap Try again':'Could not open the camera. Close other camera apps, then tap Try again',true);retry.hidden=false;return;}
+  }catch(error){if(e!==epoch)return;cameraFailed=true;say(error.name==='NotAllowedError'?'Allow camera access, then tap Try again':'Could not open the camera. Close other camera apps, then tap Try again',true);retry.hidden=false;return;}
   try{say('Getting ready… (one-time download)');await engine;}catch{if(e!==epoch)return;say('Face recognition could not load. Check your connection, then tap Try again',true);retry.hidden=false;return;}
   let index=0,taken=0,stepStarted=Date.now(),lastSample=0,firstSide=0;
   while(e===epoch&&dialog.open&&index<STEPS.length){

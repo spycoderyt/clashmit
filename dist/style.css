@@ -100,3 +100,17 @@
 .lobby .join-panel{width:100%;margin:0;align-self:center;text-align:center}
 .lobby .join-panel input{text-align:center}
 .lobby .credits{align-self:end;margin:0}
+
+.lobby-play{width:100%;align-self:center}
+.lobby-leaderboard{margin-top:22px;background:#101722e8;border:1px solid #ffffff24;border-radius:12px;padding:16px;text-align:left}
+.lobby-leaderboard h2{font-size:1.1rem;margin:0 0 12px}
+.leaderboard-scroll{max-height:250px;overflow:auto}
+.lobby-leaderboard table{border-collapse:collapse;width:100%;font-size:.83rem;font-variant-numeric:tabular-nums}
+.lobby-leaderboard th{font-weight:500;color:#bfc8d3;background:#131b29;position:sticky;top:0}
+.lobby-leaderboard th,.lobby-leaderboard td{padding:9px 5px;border-bottom:1px solid #ffffff13;text-align:right}
+.lobby-leaderboard th:nth-child(2),.lobby-leaderboard td:nth-child(2){text-align:left;max-width:150px;overflow-wrap:anywhere}
+.lobby-leaderboard th:first-child,.lobby-leaderboard td:first-child{text-align:left}
+.lobby-leaderboard tr.is-you{background:#ff99581c;color:#ffd2ac}
+.lobby-leaderboard p{font-size:.73rem;line-height:1.6;color:#bbc4d0;margin:10px 0 0}
+.lobby-leaderboard summary{font-size:.78rem;color:#ffd2ac;cursor:pointer;padding:12px 0 0}
+.player-score{margin:0 0 7px;font-size:.66rem;color:#ffd2ac;text-shadow:0 1px 4px #000}

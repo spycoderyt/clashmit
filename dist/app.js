@@ -1,6 +1,7 @@
+import {setupLeaderboard} from './leaderboard.js?v=scores1';
 import {setupLobbyVideo} from './lobby-video.js?v=2';
 import {createGameConnection} from './connection.js?v=hosting1';
-import {createTargetOverlay} from './target-overlay.js?v=smooth1';
+import {createTargetOverlay} from './target-overlay.js?v=scores1';
 import {SPELLS,MANA,manaAt,castSpell,launchProjectile,impactProjectile,FLIGHT_MS} from './rules.js?v=combat1';
 import {createServerClock} from './server-clock.js?v=combat1';
 import {createSpellAudio} from './sound.js?v=combat1';
@@ -9,13 +10,13 @@ import {setupVoice} from './voice.js?v=combat1';
 import {coverRect} from './shirt.js?v=face1';
 import {aimContains} from './target-track.js?v=face1';
 import {createFlight} from './projectile-flight.js?v=face1';
-import {createFaceTracker} from './face-tracker.js?v=face12';
-import {setupFaceScan} from './face-scan.js?v=face12';
-import {encodeDescriptor,decodeDescriptor} from './face-id.js?v=face12';
+import {createFaceTracker} from './face-tracker.js?v=face13';
+import {setupFaceScan} from './face-scan.js?v=face13';
+import {encodeDescriptor,decodeDescriptor} from './face-id.js?v=face13';
 import {createMinimap} from './minimap.js?v=map7';
 import {createHaptics} from './haptics.js?v=haptic4';
 import {requestAllPermissions} from './permissions.js?v=perm1';
-import {createRoundOverlay} from './round-overlay.js?v=round2';
+import {createRoundOverlay} from './round-overlay.js?v=scores2';
 const $=id=>document.getElementById(id);
 setupLobbyVideo({video:$('lobby-background'),lobby:$('lobby'),button:$('background-toggle'),headline:$('lobby-headline')});
 const targetOverlay=createTargetOverlay($('arena'),$('boxes'));
@@ -95,14 +96,15 @@ function handleImpact(m){
 function showArena(){loadGraphics();$('lobby').hidden=true;$('arena').hidden=false;$('shirt-open').hidden=simulated();$('tracking-retry').hidden=simulated();$('camera-instructions').textContent=trackingPractice?'Scan your face, then step back and see how far the lock holds.':practice?'Practice a 3D fireball over your camera with a simulated target.':'Scan your face once, then point the camera at another player.';$('camera-privacy').textContent='Camera video stays on your phone.';$('camera-prompt').hidden=!!stream?.active;}
 function setError(text){$('join-status').textContent=text;$('join').disabled=false;notify(text);}
 function endpoint(){const url=new URL(location.hostname.endsWith('.chatgpt.site')?'https://clashmit-production.up.railway.app':location.origin);url.protocol=url.protocol==='https:'?'wss:':'ws:';url.pathname='/ws';url.search='';url.hash='';return url.href;}
+const leaderboard=setupLeaderboard({root:$('leaderboard'),lobby:$('lobby'),url:()=>{const u=new URL(endpoint());u.protocol=u.protocol==='wss:'?'https:':'http:';u.pathname='/api/leaderboard';return u.href;},getMyId:()=>safeRead('clashmit-player-id')});
 const connection=createGameConnection({
  url:endpoint,
- join:()=>({type:'join',name:$('name').value.trim(),token:sessionStorage.getItem('fieldspell-token')}),
+ join:()=>({type:'join',name:$('name').value.trim(),token:safeRead('clashmit-player-token')||sessionStorage.getItem('fieldspell-token')}),
  onStatus:status=>{$('connection').textContent=status==='connected'?'Connected':status==='connecting'?'Connecting…':'Reconnecting · casting paused';if(!$('lobby').hidden)$('join-status').textContent=status==='connected'?'Joined':status==='connecting'?'Joining the game…':'Trying to reconnect…';},
  onDisconnect:()=>{selected=null;lockId=null;castPending=false;clearFlights();},
  onError:message=>{setError(message);$('connection').textContent='Disconnected · rejoin the arena';},
  onMessage:m=>{
-  if(m.type==='welcome'){if(myId&&myId!==m.id){clearFlights();completedShots.clear();faceTracker.reset();room=null;rosterSignature='';notify('The arena restarted. Rejoining with your face scan.');}serverClock.reset();joined=true;myId=m.id;sessionStorage.setItem('fieldspell-token',m.token);showArena();$('join').disabled=false;}
+  if(m.type==='welcome'){if(myId&&myId!==m.id){clearFlights();completedShots.clear();faceTracker.reset();room=null;rosterSignature='';notify('The arena restarted. Rejoining with your face scan.');}serverClock.reset();joined=true;myId=m.id;sessionStorage.setItem('fieldspell-token',m.token);safeWrite('clashmit-player-token',m.token);safeWrite('clashmit-player-id',m.id);showArena();$('join').disabled=false;}
   if(m.type==='state'){if(room&&room.endsAt!==m.room.endsAt)clearFlights();room=m.room;serverClock.bootstrap(room.serverTime);incoming.sync((room.shots||[]).filter(s=>s.targetId===myId));for(const shot of room.shots||[])if(shot.actorId===myId&&room.phase==='playing'&&now()<(shot.expiresAt??Infinity))effect(shot.spell||'fireball',{shot});renderState();}
   if(m.type==='state')minimap.update(m.room,myId);
   if(m.type==='impact')roundOverlay.impact(m);
@@ -142,8 +144,9 @@ $('shirt-open').onclick=()=>{if(!practice&&room?.phase==='playing'){notify('Wait
 $('camera-start').onclick=()=>{if((trackingPractice&&!localFace)||(!practice&&!me()?.faceReady))faceScan.open();else startCamera();};
 $('tracking-retry').onclick=()=>{if(stream?.active)faceTracker.start();else startCamera();};
 function renderState(){if(!me())return;$('arena').classList.toggle('round-live',room.phase==='playing');const p=me(),displayHealth=trackingPractice?opponent()?.health:p.health;$('health-title').textContent=trackingPractice?'TARGET HEALTH':'YOUR HEALTH';$('health-value').innerHTML=`${displayHealth} <small>/ 100</small>`;$('health-fill').style.width=displayHealth+'%';$('room-label').textContent=trackingPractice?'ONE PERSON FACE TEST':practice?'SOLO PRACTICE':'MULTIPLAYER ARENA';$('start-round').hidden=room.hostId!==myId;$('start-round').disabled=!trackingPractice&&room.phase==='playing';$('start-round').textContent=trackingPractice?'Reset target':room.phase==='finished'?'New round':'Start round';$('shirt-open').textContent=(trackingPractice?localFace:p.faceReady)?'Rescan face':'Scan face';$('shirt-open').disabled=!practice&&room.phase==='playing';
- const signature=JSON.stringify(room.players.map(p=>[p.id,p.name,p.health,p.connected,!!p.faceReady]));if(signature!==rosterSignature){rosterSignature=signature;$('players').replaceChildren(...room.players.filter(p=>p.id!==myId).map(p=>{const el=document.createElement('div');el.className='player'+(p.health<=0?' dead':'');const name=document.createElement('b');name.textContent=p.name;const status=document.createElement('small');status.textContent=!p.connected?'Reconnecting…':`${p.health} HP · ${practice?'simulated':p.faceReady?'face scanned':'needs face scan'}`;el.append(name,status);return el;}));}
- if(room.phase==='finished'){const winners=room.players.filter(p=>room.winners.includes(p.id)).map(p=>p.name);$('phase').textContent=winners.length===1?`${winners[0]} wins`:winners.length?'Round tied':'Round ended';}else if(room.phase==='lobby')$('phase').textContent=room.hostId===myId?`${room.players.length}${room.maxPlayers?`/${room.maxPlayers}`:''} joined · you control the arena`:'Waiting for the host';
+ $('player-score').hidden=practice||!p.score;$('player-score').textContent=p.score?`Overall #${p.score.rank} · ${p.score.points} pts · ${p.score.wins} wins${room.phase==='playing'?` · +${p.roundPoints||0} this round`:''}`:'';
+ const signature=JSON.stringify(room.players.map(p=>[p.id,p.name,p.health,p.connected,!!p.faceReady,p.score]));if(signature!==rosterSignature){rosterSignature=signature;$('players').replaceChildren(...room.players.filter(p=>p.id!==myId).map(p=>{const el=document.createElement('div');el.className='player'+(p.health<=0?' dead':'');const name=document.createElement('b');name.textContent=(p.score?`#${p.score.rank} `:'')+p.name;const status=document.createElement('small');status.textContent=!p.connected?'Reconnecting…':`${p.health} HP · ${practice?'simulated':p.faceReady?'face scanned':'needs face scan'}`;el.append(name,status);return el;}));}
+ if(room.phase==='finished'){const winners=room.players.filter(p=>room.winners.includes(p.id)).map(p=>p.name);$('phase').textContent=room.results?(room.results.winnerId?`${room.results.players.find(p=>p.id===room.results.winnerId)?.name} wins`:'Time up · no last-standing win'):(winners.length===1?`${winners[0]} wins`:winners.length?'Round tied':'Round ended');}else if(room.phase==='lobby')$('phase').textContent=room.hostId===myId?`${room.players.length}${room.maxPlayers?`/${room.maxPlayers}`:''} joined · you control the arena`:'Waiting for the host';
 }
 function renderAim(){
  if(!room)return;const match=simulated()?{id:'dummy',x:.5,y:.4,confirmed:true,fresh:true,box:{x:.36,y:.23,width:.28,height:.34}}:matchedPerson();
