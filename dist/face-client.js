@@ -4,7 +4,7 @@ let worker=null,ready=null,seq=0;const pending=new Map(),listeners=new Set();
 export function startFaceEngine(onProgress){
  if(onProgress)listeners.add(onProgress);
  ready??=new Promise((resolve,reject)=>{
-  try{worker=new Worker(new URL('./face-worker.js?v=face11',import.meta.url),{type:'module'});}catch(e){reject(e);return;}
+  try{worker=new Worker(new URL('./face-worker.js?v=face12',import.meta.url),{type:'module'});}catch(e){reject(e);return;}
   worker.onerror=e=>{const error=Error(e.message||'Face engine failed to start');reject(error);for(const entry of pending.values())entry.reject(error);pending.clear();worker=null;ready=null;};
   worker.onmessage=({data})=>{
    if(data.type==='progress')for(const listener of listeners)listener(data.text);

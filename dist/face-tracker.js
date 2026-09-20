@@ -1,8 +1,8 @@
 // In-game face lock. Feeds camera regions to the recognition worker, keeps the tracks in
 // face-tracks.js up to date, and wakes the person detector only while a named player's face
 // is hidden, so their body carries the lock until the face comes back.
-import {createFaceTracks} from './face-tracks.js?v=face11';
-import {startFaceEngine,detectFaces,grabRegion,clampRegion} from './face-client.js?v=face11';
+import {createFaceTracks} from './face-tracks.js?v=face12';
+import {startFaceEngine,detectFaces,grabRegion,clampRegion} from './face-client.js?v=face12';
 const FULL_EVERY_MS=700,RETICLE_EVERY_MS=500,BODY_EVERY_MS=250,BODY_IDLE_MS=1200,MIN_TICK_MS=50;
 // A face half hidden behind a phone scores lower with the detector. Searches stay fairly strict so stray
 // patterns are not boxed, but a face already being followed is allowed to score much lower.
@@ -12,7 +12,7 @@ export function createFaceTracker(video,{getGallery,onStatus=()=>{},focus={x:.5,
  let active=false,generation=0,timer=null,width=0,height=0,lastFrameAt=0,lastFull=0,lastReticle=0,tight=false,bodyWorker=null,bodyReady=false,bodyBusy=false,lastBodies=0,bodySeq=0;
  function startBodyWorker(){
   if(bodyWorker||!window.Worker)return;
-  try{bodyWorker=new Worker(new URL('./detection-worker.js?v=face11',import.meta.url));}catch{return;}
+  try{bodyWorker=new Worker(new URL('./detection-worker.js?v=face12',import.meta.url));}catch{return;}
   bodyWorker.onerror=()=>{bodyWorker?.terminate();bodyWorker=null;bodyReady=false;bodyBusy=false;};
   bodyWorker.onmessage=({data})=>{
    if(data.type==='ready'){bodyReady=true;return;}

@@ -7,7 +7,7 @@ import {WebSocketServer,WebSocket} from 'ws';
 import {castSpell,launchProjectile,impactProjectile,expireProjectiles,replenishMana,MANA,SPELLS} from '../dist/rules.js';
 import {profileId} from '../dist/shirt.js';
 import {validLocation} from '../dist/geo.js';
-import {validEncodedSamples} from '../dist/face-id.js';
+import {validEncodedSamples,validAvatar} from '../dist/face-id.js';
 import {serveVideo} from './video.js';
 
 const root=fileURLToPath(new URL('../dist/',import.meta.url));
@@ -76,7 +76,7 @@ export function createGameServer({maxPlayers=null,maxBufferedBytes=256*1024,coun
       if(room.players.some(p=>p.name.toLowerCase()===name.toLowerCase()))return send(ws,{type:'error',message:'That mage name is taken. Choose another.'});
       player={id:randomUUID(),token:randomBytes(24).toString('hex'),name,health:100,mana:MANA.max,manaUpdatedAt:Date.now(),shieldUntil:0,cooldowns:{},connected:true,shirt:null,socket:ws};room.players.push(player);if(!room.players.some(p=>p.id===room.hostId&&p.connected))room.hostId=player.id;
      }
-     clients.set(ws,{room,player});clearTimeout(timeout);send(ws,{type:'welcome',id:player.id,token:player.token,code:room.code});send(ws,{type:'faces',faces:room.faces||{}});broadcast(room);return;
+     clients.set(ws,{room,player});clearTimeout(timeout);send(ws,{type:'welcome',id:player.id,token:player.token,code:room.code});send(ws,{type:'faces',faces:room.faces||{}});send(ws,{type:'avatars',avatars:room.avatars||{}});broadcast(room);return;
     }
     const current=clients.get(ws);if(!current)return;const {room,player}=current;
     if(m.type==='start'){
@@ -111,17 +111,21 @@ export function createGameServer({maxPlayers=null,maxBufferedBytes=256*1024,coun
      if(!validEncodedSamples(m.samples)||(m.upper!==undefined&&!validEncodedSamples(m.upper)))return send(ws,{type:'error',message:'That face scan was not readable. Scan again.'});
      // upper: the same scan described from the eyes and forehead only, for players aiming with a phone over their face.
      (room.faces??={})[player.id]={samples:[...m.samples],upper:[...(m.upper||[])]};player.faceReady=true;for(const p of room.players)send(p.socket,{type:'faces',faces:{[player.id]:room.faces[player.id]}});broadcast(room);
+    }else if(m.type==='avatar'){
+     // The player's map marker. Relayed once like a face signature, kept in memory only, removed when they leave.
+     if(!validAvatar(m.image))return send(ws,{type:'error',message:'That photo could not be used as your map marker.'});
+     (room.avatars??={})[player.id]=m.image;for(const p of room.players)send(p.socket,{type:'avatars',avatars:{[player.id]:m.image}});
     }else if(m.type==='location'){
      // Opt-in minimap position; null stops sharing. The 500ms tick broadcasts it.
      if(m.location===null)player.location=null;
      else if(validLocation(m.location)&&Date.now()-(player.location?.at||0)>=500)player.location={latitude:m.location.latitude,longitude:m.location.longitude,accuracy:Math.round(m.location.accuracy),at:Date.now()};
-    }else if(m.type==='leave'){if(room.faces)delete room.faces[player.id];room.players=room.players.filter(p=>p.id!==player.id);clients.delete(ws);if(room.hostId===player.id)room.hostId=room.players.find(p=>p.connected)?.id;finish(room);broadcast(room);ws.close(1000);}
+    }else if(m.type==='leave'){if(room.faces)delete room.faces[player.id];if(room.avatars){delete room.avatars[player.id];for(const p of room.players)if(p.id!==player.id)send(p.socket,{type:'avatars',avatars:{[player.id]:null}});}room.players=room.players.filter(p=>p.id!==player.id);clients.delete(ws);if(room.hostId===player.id)room.hostId=room.players.find(p=>p.connected)?.id;finish(room);broadcast(room);ws.close(1000);}
    }catch{send(ws,{type:'error',message:'Invalid request.'});}
   });
   ws.on('close',()=>{const current=clients.get(ws);if(current)current.player.location=null;}); // never keep a disconnected player's position
   ws.on('close',()=>{clearTimeout(timeout);const current=clients.get(ws);if(!current)return;const{room,player}=current;player.connected=false;player.disconnectedAt=Date.now();clients.delete(ws);if(room.hostId===player.id)room.hostId=room.players.find(p=>p.connected)?.id||player.id;broadcast(room);});
  });
- const tick=setInterval(()=>{for(const [code,room]of rooms){for(const p of room.players)if(!p.connected&&Date.now()-p.disconnectedAt>60000){p.health=0;p.expired=true;}room.players=room.players.filter(p=>!p.expired);if(room.faces)for(const id of Object.keys(room.faces))if(!room.players.some(p=>p.id===id))delete room.faces[id];if(!room.players.some(p=>p.id===room.hostId&&p.connected))room.hostId=room.players.find(p=>p.connected)?.id||room.players[0]?.id;if(!room.players.length){clearTimeout(room.startTimer);rooms.delete(code);continue;}finish(room);for(const event of expireProjectiles(room))broadcast(room,event);broadcast(room);}},500);tick.unref();
+ const tick=setInterval(()=>{for(const [code,room]of rooms){for(const p of room.players)if(!p.connected&&Date.now()-p.disconnectedAt>60000){p.health=0;p.expired=true;}room.players=room.players.filter(p=>!p.expired);if(room.faces)for(const id of Object.keys(room.faces))if(!room.players.some(p=>p.id===id))delete room.faces[id];if(room.avatars)for(const id of Object.keys(room.avatars))if(!room.players.some(p=>p.id===id))delete room.avatars[id];if(!room.players.some(p=>p.id===room.hostId&&p.connected))room.hostId=room.players.find(p=>p.connected)?.id||room.players[0]?.id;if(!room.players.length){clearTimeout(room.startTimer);rooms.delete(code);continue;}finish(room);for(const event of expireProjectiles(room))broadcast(room,event);broadcast(room);}},500);tick.unref();
  const heartbeat=setInterval(()=>{for(const ws of wss.clients){if(!ws.isAlive){ws.terminate();continue;}ws.isAlive=false;ws.ping();}},15000);heartbeat.unref();
  function close({graceMs=0}={}){
   if(closePromise)return closePromise;

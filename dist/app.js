@@ -9,10 +9,10 @@ import {setupVoice} from './voice.js?v=combat1';
 import {coverRect} from './shirt.js?v=face1';
 import {aimContains} from './target-track.js?v=face1';
 import {createFlight} from './projectile-flight.js?v=face1';
-import {createFaceTracker} from './face-tracker.js?v=face11';
-import {setupFaceScan} from './face-scan.js?v=face11';
-import {encodeDescriptor,decodeDescriptor} from './face-id.js?v=face11';
-import {createMinimap} from './minimap.js?v=map3';
+import {createFaceTracker} from './face-tracker.js?v=face12';
+import {setupFaceScan} from './face-scan.js?v=face12';
+import {encodeDescriptor,decodeDescriptor} from './face-id.js?v=face12';
+import {createMinimap} from './minimap.js?v=map5';
 import {createHaptics} from './haptics.js?v=haptic4';
 import {requestAllPermissions} from './permissions.js?v=perm1';
 import {createRoundOverlay} from './round-overlay.js?v=round1';
@@ -30,13 +30,14 @@ const simulated=()=>practice&&!trackingPractice;
 const serverClock=createServerClock();
 const now=()=>practice?Date.now():serverClock.now(),me=()=>room?.players.find(p=>p.id===myId),opponent=()=>room?.players.find(p=>p.id===focusId&&p.id!==myId)||room?.players.find(p=>p.id!==myId);
 // Face lock: decoded face signatures by player id, the player the camera is on, and the solo test's own face.
-const faces=new Map();let focusId=null,localFace=null,autoScanOffered=false,mySamples=null,faceResent=false,permissionsReady=Promise.resolve();
+// avatars: each player's small face photo from their scan, used as their marker on the minimap.
+const faces=new Map(),avatars=new Map();let myAvatar=null,focusId=null,localFace=null,autoScanOffered=false,mySamples=null,faceResent=false,permissionsReady=Promise.resolve();
 const gallery=()=>trackingPractice?(localFace?[{id:'dummy',name:'You',...localFace}]:[]):(room?.players||[]).filter(p=>p.id!==myId&&p.connected&&faces.has(p.id)).map(p=>({id:p.id,name:p.name,...faces.get(p.id)}));
 $('name').value=safeRead('fieldspell-name');
 const notify=text=>{$('toast').textContent=text;clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('toast').textContent='',4000);};
 function send(message){return connection.send(message);}
 const minimap=createMinimap({container:$('arena'),send,notify});$('leave').addEventListener('click',()=>minimap.stop());window.addEventListener('pagehide',()=>minimap.stop());
-$('leave').addEventListener('click',()=>{faces.clear();focusId=null;localFace=null;autoScanOffered=false;mySamples=null;});
+$('leave').addEventListener('click',()=>{faces.clear();avatars.clear();minimap.setAvatars(avatars);myAvatar=null;focusId=null;localFace=null;autoScanOffered=false;mySamples=null;});
 const haptics=createHaptics({isMuted:()=>audio.muted,stage:$('arena'),shakeTarget:$('camera')});document.querySelectorAll('.spell').forEach(button=>haptics.attachTap(button));if(new URLSearchParams(location.search).get('test')==='haptics')haptics.showTestPanel();
 // Synchronised 5-4-3-2-1 before every round and the leaderboard after it; a tick is felt on each second.
 const roundOverlay=createRoundOverlay({container:$('arena'),now:()=>serverClock.now(),onTick:second=>haptics.play(second?'tap':'hit')});$('leave').addEventListener('click',()=>roundOverlay.hide());
@@ -107,10 +108,11 @@ const connection=createGameConnection({
   if(m.type==='state'){roundOverlay.update(m.room,myId);if(m.room.phase==='countdown')$('phase').textContent='Round starting…';}
   // Each player's scan: whole-face samples plus upper-face ones for when a phone hides their nose and mouth.
   if(m.type==='faces')for(const [id,scan] of Object.entries(m.faces||{})){const decode=list=>(list||[]).map(decodeDescriptor).filter(Boolean),samples=decode(scan?.samples);if(samples.length)faces.set(id,{samples,upper:decode(scan.upper)});else faces.delete(id);}
+  if(m.type==='avatars'){for(const [id,image] of Object.entries(m.avatars||{})){if(typeof image==='string'&&image.startsWith('data:image/jpeg;base64,'))avatars.set(id,image);else avatars.delete(id);}minimap.setAvatars(avatars);}
   // First thing a new player sees after the permission prompts: the face scan, without having to find a button.
   // A player who already scanned (the server restarted, or they rejoined) silently sends the same signature again.
   if(m.type==='welcome')faceResent=false;
-  if(m.type==='state'&&joined&&me()&&!me().faceReady&&room.phase!=='playing'){if(mySamples){if(!faceResent){faceResent=true;send({type:'face',...mySamples});}}else if(!autoScanOffered){autoScanOffered=true;void permissionsReady.then(()=>{if(joined&&!practice&&!$('arena').hidden&&!me()?.faceReady&&!faceScan.isOpen)faceScan.open();});}}
+  if(m.type==='state'&&joined&&me()&&!me().faceReady&&room.phase!=='playing'){if(mySamples){if(!faceResent){faceResent=true;send({type:'face',...mySamples});if(myAvatar)send({type:'avatar',image:myAvatar});}}else if(!autoScanOffered){autoScanOffered=true;void permissionsReady.then(()=>{if(joined&&!practice&&!$('arena').hidden&&!me()?.faceReady&&!faceScan.isOpen)faceScan.open();});}}
   if(m.type==='spell'){if(m.actorId===myId){castPending=false;effect(m.spell,{shot:m});}else if(m.targetId===myId&&m.shotId){incoming.launch(m);audio.play(m.spell);}else if(m.spell==='shield')notify('Opponent shield active · lightning pierces it');}
   if(m.type==='impact')handleImpact(m);
   if(m.type==='round-start')notify('Round started. Keep your opponent in view.');
@@ -134,7 +136,7 @@ async function startCamera(){
  try{const next=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:trackingPractice?'user':'environment'},width:{ideal:1920},height:{ideal:1080}},audio:false});if($('arena').hidden||epoch!==cameraEpoch||faceScan.isOpen){next.getTracks().forEach(t=>t.stop());return;}stream=next;$('camera').srcObject=stream;await $('camera').play();$('camera-prompt').hidden=true;if(!simulated())faceTracker.start();}
  catch(e){stopCamera();$('camera-prompt').hidden=false;notify(e.name==='NotAllowedError'?'Allow camera access in browser settings, then retry.':'Could not open camera. Close other camera apps and retry.');}finally{cameraStarting=false;$('camera-start').disabled=false;}
 }
-const faceScan=setupFaceScan({beforeOpen:()=>{voice.stop();stopCamera();fireScene?.clear();},onSample:()=>haptics.play('tap'),onSave:(samples,upper)=>{if(trackingPractice){localFace={samples,upper};renderState();notify('Face saved. Step back and watch the lock follow you.');}else{mySamples={samples:samples.map(encodeDescriptor),upper:upper.map(encodeDescriptor)};send({type:'face',...mySamples});notify('Face saved. Point your camera at another player.');}},onClose:()=>{if(!$('arena').hidden)startCamera();}});
+const faceScan=setupFaceScan({beforeOpen:()=>{voice.stop();stopCamera();fireScene?.clear();},onSample:()=>haptics.play('tap'),onSave:(samples,upper,avatar)=>{if(trackingPractice){localFace={samples,upper};renderState();notify('Face saved. Step back and watch the lock follow you.');}else{mySamples={samples:samples.map(encodeDescriptor),upper:upper.map(encodeDescriptor)};send({type:'face',...mySamples});myAvatar=avatar;if(avatar)send({type:'avatar',image:avatar});notify('Face saved. Point your camera at another player.');}},onClose:()=>{if(!$('arena').hidden)startCamera();}});
 $('shirt-open').onclick=()=>{if(!practice&&room?.phase==='playing'){notify('Wait until the round ends to rescan your face.');return;}faceScan.open();};
 $('camera-start').onclick=()=>{if((trackingPractice&&!localFace)||(!practice&&!me()?.faceReady))faceScan.open();else startCamera();};
 $('tracking-retry').onclick=()=>{if(stream?.active)faceTracker.start();else startCamera();};

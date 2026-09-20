@@ -1,7 +1,7 @@
 // Guided face scan shown right after joining. It runs itself: the player only has to
 // follow one short instruction at a time while a ring fills up. Builds its own dialog and styles.
-import {startFaceEngine,detectFaces} from './face-client.js?v=face11';
-import {MATCH,MAX_SAMPLES,addSample,headTurn} from './face-id.js?v=face11';
+import {startFaceEngine,detectFaces} from './face-client.js?v=face12';
+import {MATCH,MAX_SAMPLES,AVATAR,addSample,headTurn,avatarCrop} from './face-id.js?v=face12';
 // need: samples to collect in this step. turn: which way the head must face. settle: a short pause so
 // the player can get into the pose first. Every step gives up after `limit` and moves on, so nobody gets stuck.
 const STEPS=[
@@ -15,7 +15,7 @@ const CSS='.face-dialog{text-align:center}.face-dialog h2{margin:0 0 4px}.face-s
 export function setupFaceScan({beforeOpen=()=>{},onSave,onClose=()=>{},onSample=()=>{}}){
  const style=document.createElement('style');style.textContent=CSS;document.head.append(style);
  const dialog=document.createElement('dialog');dialog.className='face-dialog';dialog.setAttribute('aria-labelledby','face-title');
- dialog.innerHTML='<h2 id="face-title">Scan your face</h2><p class="face-sub">This is how other players’ phones recognise you. Nothing to wear or hold.</p><div class="face-stage"><video autoplay muted playsinline></video><svg class="face-ring" viewBox="0 0 100 100" aria-hidden="true"><circle class="track" cx="50" cy="50" r="47"/><circle class="progress" cx="50" cy="50" r="47"/></svg><div class="face-check" aria-hidden="true">✓</div></div><p class="face-step" role="status" aria-live="polite"></p><ol class="face-dots" aria-hidden="true"></ol><button type="button" class="primary face-retry" hidden>Try again</button><button type="button" class="text-button face-cancel">Cancel</button><p class="fine">No photo leaves your phone. Only a numeric face signature is shared with players in this arena, and it is deleted when you leave.</p>';
+ dialog.innerHTML='<h2 id="face-title">Scan your face</h2><p class="face-sub">This is how other players’ phones recognise you. Nothing to wear or hold.</p><div class="face-stage"><video autoplay muted playsinline></video><svg class="face-ring" viewBox="0 0 100 100" aria-hidden="true"><circle class="track" cx="50" cy="50" r="47"/><circle class="progress" cx="50" cy="50" r="47"/></svg><div class="face-check" aria-hidden="true">✓</div></div><p class="face-step" role="status" aria-live="polite"></p><ol class="face-dots" aria-hidden="true"></ol><button type="button" class="primary face-retry" hidden>Try again</button><button type="button" class="text-button face-cancel">Cancel</button><p class="fine">Shared with players in this arena only, and deleted when you leave: a numeric face signature, and one small face photo used as your marker on the map. Nothing else leaves your phone.</p>';
  document.body.append(dialog);
  const video=dialog.querySelector('video'),stage=dialog.querySelector('.face-stage'),ring=dialog.querySelector('.progress'),stepText=dialog.querySelector('.face-step'),dots=dialog.querySelector('.face-dots'),retry=dialog.querySelector('.face-retry');
  dots.replaceChildren(...STEPS.map(()=>document.createElement('li')));
@@ -23,6 +23,11 @@ export function setupFaceScan({beforeOpen=()=>{},onSave,onClose=()=>{},onSample=
  const say=(text,warn=false)=>{if(stepText.textContent!==text)stepText.textContent=text;stepText.classList.toggle('warn',warn);};
  const progress=count=>{ring.style.strokeDashoffset=String(295.3*(1-Math.min(1,count/TARGET)));};
  function stop(){epoch++;stream?.getTracks().forEach(t=>t.stop());stream=null;video.srcObject=null;}
+ function snapshot(box){
+  try{const crop=avatarCrop(box,video.videoWidth,video.videoHeight),canvas=document.createElement('canvas');canvas.width=canvas.height=AVATAR.size;canvas.getContext('2d').drawImage(video,crop.x,crop.y,crop.size,crop.size,0,0,AVATAR.size,AVATAR.size);
+   for(const quality of [.72,.55,.4]){const image=canvas.toDataURL('image/jpeg',quality);if(image.length<=AVATAR.maxLength)return image;}}catch{}
+  return null;
+ }
  // What is wrong with the current view, in words a first-time player can act on. Null means it is good.
  function problem(face,width,height){
   if(!face)return'Put your face inside the circle';
@@ -31,7 +36,7 @@ export function setupFaceScan({beforeOpen=()=>{},onSave,onClose=()=>{},onSample=
   if(Math.abs(cx-.5)>.22||Math.abs(cy-.5)>.25)return'Centre your face in the circle';if(face.score<.6)return'Find brighter light';return null;
  }
  async function run(){
-  const e=++epoch,person={samples:[]},uppers=[];saved=false;dialog.classList.remove('done');retry.hidden=true;progress(0);for(const dot of dots.children)dot.className='';
+  const e=++epoch,person={samples:[]},uppers=[];let avatar=null;saved=false;dialog.classList.remove('done');retry.hidden=true;progress(0);for(const dot of dots.children)dot.className='';
   say('Getting ready… (one-time download)');
   const engine=startFaceEngine(text=>{if(e===epoch&&!stream)say(text);});
   try{
@@ -51,13 +56,15 @@ export function setupFaceScan({beforeOpen=()=>{},onSave,onClose=()=>{},onSample=
    if(issue){say(issue,true);stepStarted+=120;await new Promise(r=>setTimeout(r,60));continue;}
    say(step.text);const turn=headTurn(face.landmarks),posed=step.turn==='front'?Math.abs(turn)<.18:step.turn==='side'?Math.abs(turn)>.22:step.turn==='other'?Math.abs(turn)>.22&&Math.sign(turn)!==firstSide:true;
    if(posed&&face.descriptor&&Date.now()-stepStarted>(step.settle||0)&&Date.now()-lastSample>SAMPLE_GAP_MS&&person.samples.length<MAX_SAMPLES&&addSample(person,face.descriptor,{max:MAX_SAMPLES,minSpacing:0})){
-    if(face.upper)uppers.push(Array.from(face.upper));lastSample=Date.now();taken++;if(step.turn==='side')firstSide=Math.sign(turn);progress(person.samples.length);stage.classList.remove('pulse');void stage.offsetWidth;stage.classList.add('pulse');onSample(person.samples.length);
+    if(face.upper)uppers.push(Array.from(face.upper));lastSample=Date.now();taken++;
+    // The map marker: the first straight-on frame, cropped to the head and shrunk to a small square.
+    if(!avatar&&step.turn==='front')avatar=snapshot(face.box);if(step.turn==='side')firstSide=Math.sign(turn);progress(person.samples.length);stage.classList.remove('pulse');void stage.offsetWidth;stage.classList.add('pulse');onSample(person.samples.length);
     if(taken>=step.need){dots.children[index].className='complete';index++;taken=0;stepStarted=Date.now();}
    }
    await new Promise(r=>setTimeout(r,40));
   }
   if(e!==epoch||!dialog.open)return;
-  if(person.samples.length>=MIN_TO_PASS){saved=true;progress(TARGET);dialog.classList.add('done');say('You’re in!');onSave(person.samples,uppers);setTimeout(()=>{if(e===epoch&&dialog.open)shut();},900);}
+  if(person.samples.length>=MIN_TO_PASS){saved=true;progress(TARGET);dialog.classList.add('done');say('You’re in!');onSave(person.samples,uppers,avatar);setTimeout(()=>{if(e===epoch&&dialog.open)shut();},900);}
   else{say('That didn’t get a clear view. Face a light, hold the phone at arm’s length, then tap Try again',true);retry.hidden=false;}
  }
  retry.onclick=()=>{stop();void run();};
