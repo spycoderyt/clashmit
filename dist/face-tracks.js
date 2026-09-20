@@ -24,13 +24,13 @@ const iou=(a,b)=>{const w=Math.min(a.originX+a.width,b.originX+b.width)-Math.max
 // Where the head sits inside a person box: centred, just below the top edge.
 const headOf=(body,headWidth)=>({x:body.originX+body.width/2,y:body.originY+Math.max(headWidth*.6,body.height*.1)});
 export function createFaceTracks(){
- let tracks=[],nextKey=1;
+ let tracks=[],nextKey=1,pass=0;
  const predicted=(t,at)=>{const dt=Math.min(250,Math.max(0,at-t.seenAt));return{x:t.cx+t.vx*dt,y:t.cy+t.vy*dt};};
  function drop(at){tracks=tracks.filter(t=>{const faceGap=at-t.seenAt;if(faceGap<=LOCK.coastMs)return true;return !!t.id&&!!t.body&&at-t.body.at<=LOCK.bodyFreshMs&&faceGap<=LOCK.bodyHoldMs;});}
  // faces: [{box:{x,y,width,height},score,descriptor?,pixels?}] in source pixels. pixels is the face
  // width in the pixels the descriptor was actually computed from, which gates recognition.
  function updateFaces(faces,at,gallery){
-  drop(at);const unused=new Set(faces.map((_,i)=>i)),pairs=[];
+  pass++;drop(at);const unused=new Set(faces.map((_,i)=>i)),pairs=[];
   for(const t of tracks){
    // A body-carried track expects its face back at the estimated head, with a generous gate.
    const carried=t.body&&at-t.seenAt>LOCK.bodyAfterMs,p=carried?headOf(t.body.box,t.width):predicted(t,at),gate=Math.max(60,t.width*(carried?2.5:1.6));
@@ -49,12 +49,13 @@ export function createFaceTracks(){
     if(odd&&!t.suspectSince){t.suspectSince=at;t.verifiedAt=-Infinity;}
     if(!t.suspectSince)t.safe={cx:t.cx,cy:t.cy,rawX:t.rawX,rawY:t.rawY,vx:t.vx,vy:t.vy,width:t.width,height:t.height,seenAt:t.seenAt};
    }
-   // A face coming back after a gap is judged on fresh frames only, not on votes from before it left.
-   if(returning){t.vx=0;t.vy=0;t.cx=cx;t.cy=cy;t.verifiedAt=-Infinity;t.voter.reset();}
+   // Reset votes after an actual missed pass, not just slow inference on an older phone.
+   // Three consecutive matches still count even when each frame takes over 450 ms.
+   if(returning){t.vx=0;t.vy=0;t.cx=cx;t.cy=cy;t.verifiedAt=-Infinity;if(t.lastPass!==pass-1)t.voter.reset();}
    else{const alpha=.65;t.vx=t.vx*.5+(cx-t.rawX)/dt*.5;t.vy=t.vy*.5+(cy-t.rawY)/dt*.5;const p=predicted(t,at);t.cx=p.x+(cx-p.x)*alpha;t.cy=p.y+(cy-p.y)*alpha;}
-   t.rawX=cx;t.rawY=cy;t.width=t.width*.3+f.box.width*.7;t.height=t.height*.3+f.box.height*.7;t.seenAt=at;t.hits++;identify(t,f,at,gallery);
+   t.rawX=cx;t.rawY=cy;t.width=t.width*.3+f.box.width*.7;t.height=t.height*.3+f.box.height*.7;t.seenAt=at;t.lastPass=pass;t.hits++;identify(t,f,at,gallery);
   }
-  for(const i of unused){const f=faces[i],cx=f.box.x+f.box.width/2,cy=f.box.y+f.box.height/2,t={key:nextKey++,cx,cy,rawX:cx,rawY:cy,vx:0,vy:0,width:f.box.width,height:f.box.height,seenAt:at,firstAt:at,hits:1,id:null,verifiedAt:-Infinity,voter:createIdentityVoter(),body:null};tracks.push(t);identify(t,f,at,gallery);}
+  for(const i of unused){const f=faces[i],cx=f.box.x+f.box.width/2,cy=f.box.y+f.box.height/2,t={key:nextKey++,cx,cy,rawX:cx,rawY:cy,vx:0,vy:0,width:f.box.width,height:f.box.height,seenAt:at,firstAt:at,lastPass:pass,hits:1,id:null,verifiedAt:-Infinity,voter:createIdentityVoter(),body:null};tracks.push(t);identify(t,f,at,gallery);}
  }
  // The head this track is following turned out not to be its named player. If the mix-up began with a
  // suspicious hand-over, give the intruder a track of their own and put the named track back where the
@@ -62,7 +63,7 @@ export function createFaceTracks(){
  function reject(t,at,match){
   const safe=t.suspectSince&&t.safe&&at-t.safe.seenAt<=LOCK.coastMs?t.safe:null;
   if(!safe){t.id=null;t.body=null;t.strikes=0;t.suspectSince=null;return;}
-  const intruder={key:nextKey++,cx:t.cx,cy:t.cy,rawX:t.rawX,rawY:t.rawY,vx:t.vx,vy:t.vy,width:t.width,height:t.height,seenAt:t.seenAt,firstAt:at,hits:1,id:null,verifiedAt:-Infinity,voter:createIdentityVoter(),body:null,lastMatch:match};
+  const intruder={key:nextKey++,cx:t.cx,cy:t.cy,rawX:t.rawX,rawY:t.rawY,vx:t.vx,vy:t.vy,width:t.width,height:t.height,seenAt:t.seenAt,firstAt:at,lastPass:pass,hits:1,id:null,verifiedAt:-Infinity,voter:createIdentityVoter(),body:null,lastMatch:match};
   intruder.voter.push(match);tracks.push(intruder);Object.assign(t,safe);t.suspectSince=null;t.strikes=0;t.voter.reset();
   // The player's own face is, by definition, not what we were looking at, so it counts as hidden from now on:
   // the body bound before the mix-up carries the lock, and it must not be re-bound to whoever is in front.
