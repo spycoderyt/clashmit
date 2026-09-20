@@ -49,6 +49,17 @@ export function createGameServer({maxPlayers=null,maxBufferedBytes=256*1024,coun
  }
  // The moment each player is knocked out is what the end-of-round leaderboard ranks by.
  function finish(room){if(room.phase!=='playing')return;const moment=Date.now();for(const p of room.players)if(p.health<=0&&!p.diedAt)p.diedAt=moment;const alive=room.players.filter(p=>p.health>0);if(alive.length<=1||Date.now()>=room.endsAt){room.phase='finished';const best=Math.max(...alive.map(p=>p.health),0);room.winners=alive.filter(p=>p.health===best).map(p=>p.id);}}
+ // The firing phone reports an impact once, timed by its estimate of this clock. If that estimate runs
+ // ahead, the report arrives before the spell could have; dropping it would turn a true hit into a miss
+ // when the shot later expires. Hold it until the spell arrives. The claim of tracking is trusted either way.
+ const heldImpacts=new Set();
+ function resolveImpact(room,player,shotId,tracked){
+  const event=impactProjectile(room,player.id,shotId,tracked);
+  if(!event.error){heldImpacts.delete(shotId);finish(room);broadcast(room,event);return;}
+  const shot=(room.shots||[]).find(s=>s.shotId===shotId&&s.actorId===player.id);
+  if(!shot||closing||heldImpacts.has(shotId)||Date.now()>=shot.impactAt){heldImpacts.delete(shotId);return;}
+  heldImpacts.add(shotId);setTimeout(()=>{heldImpacts.delete(shotId);resolveImpact(room,player,shotId,tracked);},shot.impactAt-Date.now()).unref();
+ }
  wss.on('connection',ws=>{
   ws.on('error',()=>ws.terminate());
   ws.isAlive=true;ws.on('pong',()=>ws.isAlive=true);let count=0,windowStart=Date.now();
@@ -95,7 +106,7 @@ export function createGameServer({maxPlayers=null,maxBufferedBytes=256*1024,coun
      const event=(m.spell==='fireball'||m.spell==='lightning')?launchProjectile(room,player.id,m.spell,m.targetId,randomUUID()):castSpell(room,player.id,m.spell,m.targetId);
      if(event.error)send(ws,{type:'error',message:event.error});else{finish(room);broadcast(room,event);}
     }else if(m.type==='impact'){
-     const event=impactProjectile(room,player.id,m.shotId,m.tracked===true);if(!event.error){finish(room);broadcast(room,event);}
+     resolveImpact(room,player,m.shotId,m.tracked===true);
     }else if(m.type==='shirt'){
      if(room.phase==='playing')return send(ws,{type:'error',message:'Scan headbands before the round starts.'});
      // The id is re-derived here; a client cannot claim a pair it did not sample.
